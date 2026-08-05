@@ -38,15 +38,19 @@ export const getPermissionFn = async (id: string | undefined) => {
   }
 };
 export const getMenuFn = async (
-  filters: GetParams = {}
+  filters: GetParams = {},
+  signal?: AbortSignal
 ): Promise<IAllMenus> => {
   try {
     const queryParams = buildQueryParams(filters);
 
-    const response = await api2.get('/menu', { params: queryParams });
+    const response = await api2.get('/menu', { params: queryParams, signal });
 
     return response.data;
   } catch (error) {
+    if (signal?.aborted) {
+      throw new Error('Request was cancelled');
+    }
     console.error('Error fetching menus:', error);
     throw new Error('Failed to fetch menus');
   }

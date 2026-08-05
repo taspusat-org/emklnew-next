@@ -10,6 +10,8 @@ export const useGetAllAcos = (
     page?: number; // Halaman untuk pagination
     sortColumn?: string;
     sortOrder?: string;
+    sortBy?: string;
+    sortDirection?: 'asc' | 'desc';
     filters?: {
       class?: string; // Filter berdasarkan class
       method?: string; // Filter berdasarkan method

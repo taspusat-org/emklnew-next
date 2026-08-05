@@ -14,7 +14,12 @@ export type RoleInput = z.infer<typeof roleSchema>;
 
 export const roleAclSchema = z.object({
   roleId: z.string().min(1, 'Role ID harus diisi'), // roleId adalah varchar UUID, bukan angka
-  data: z.array(z.number().min(1, 'ACO ID must be a positive number')) // acoIds must be an array of positive numbers
+  // aco id juga varchar (uuid v7), sama seperti acl.aco_id & menus.aco_id —
+  // BUKAN angka. Dulu field ini z.array(z.number()): setiap id dikonversi
+  // Number() menjadi NaN, sehingga simpan ACL diam-diam gagal (NaN ditolak
+  // z.number()) atau — bila NaN disaring — terkirim sebagai array kosong yang
+  // oleh backend diartikan "hapus semua ACL role ini".
+  data: z.array(z.string().min(1, 'ACO ID tidak boleh kosong'))
 });
 
 // Type derived from the schema for type-checking

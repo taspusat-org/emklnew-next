@@ -2,7 +2,7 @@
 
 import PageContainer from '@/components/layout/page-container';
 import { Tabs, TabsContent } from '@/components/ui/tabs';
-import GridMenu from './components/GridMenu';
+import GridBank from './components/GridAsuransi';
 import { fieldLength } from '@/lib/apis/field-length.api';
 
 import React, { useEffect } from 'react';
@@ -22,12 +22,9 @@ const Page = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const result = await fieldLength('menus');
-        dispatch(setFieldLength(result.data));
+        const fieldLengthResult = await fieldLength('asuransi');
+        dispatch(setFieldLength(fieldLengthResult.data));
 
-        // Prefetch parameter STATUS AKTIF ke lookup store — sama seperti
-        // halaman alat bayar — supaya LookUp/FilterOptions status aktif punya
-        // data + nilai default sejak awal.
         const [getStatusAktifLookup] = await Promise.all([
           getParameterFn({ isLookUp: 'true' })
         ]);
@@ -47,6 +44,9 @@ const Page = () => {
               dispatch(setData({ key: grp, data: filteredData }));
               dispatch(setType({ key: grp, type: getStatusAktifLookup.type }));
 
+              // Set default value jika ada. Baris non-default menyimpan default
+              // sebagai string kosong (bukan null), jadi `!== null` salah memilih
+              // baris pertama. Pilih baris yang benar-benar bertanda default 'YA'.
               const defaultItem = filteredData.find(
                 (item: IParameter) => item.default === 'YA'
               );
@@ -60,18 +60,18 @@ const Page = () => {
           });
         }
       } catch (err) {
-        console.error('Error fetching data:', err);
-      } finally {
+        console.error('Error fetching lookup data:', err);
       }
     };
 
     fetchData();
   }, [dispatch]);
+
   return (
     <PageContainer scrollable>
       <div className="grid h-fit grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-7">
-        <div className="col-span-10 h-[500px]">
-          <GridMenu />
+        <div className="col-span-7 h-[500px]">
+          <GridBank />
         </div>
       </div>
     </PageContainer>

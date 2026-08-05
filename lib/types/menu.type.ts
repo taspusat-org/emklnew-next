@@ -4,14 +4,18 @@ export interface IMenu {
   id: string;
   title: string;
   url: string;
-  aco_id: number;
+  // aco_id & parentId = id varchar (uuid v7), bukan angka.
+  aco_id: string;
   icon: string;
   items: string;
   text: string;
-  acos_nama: string;
-  parent_nama: string;
-  parentId: number;
+  memo: string | null;
+  acos_nama: string | null;
+  parent_nama: string | null;
+  parentId: string;
+  isActive: boolean | number | null;
   statusaktif: string;
+  modifiedby: string;
   order: number;
   created_at: string;
   updated_at: string;

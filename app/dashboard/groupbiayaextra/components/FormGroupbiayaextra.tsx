@@ -83,7 +83,14 @@ const FormGroupbiayaextra = ({
             <Form {...forms}>
               <form
                 ref={formRef}
-                onSubmit={onSubmit}
+                // `onSubmit` dari grid menerima (keepOpenModal), bukan event —
+                // pembungkusan forms.handleSubmit dilakukan di grid. Tanpa
+                // preventDefault + argumen boolean, submit native mengirim
+                // objek EVENT sebagai `keepOpenModal`.
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  onSubmit(false);
+                }}
                 className="flex h-full flex-col gap-6"
               >
                 <div className="flex h-[100%] flex-col gap-2 lg:gap-3">
@@ -127,10 +134,13 @@ const FormGroupbiayaextra = ({
                           key={index}
                           {...props}
                           lookupValue={(id) =>
-                            forms.setValue('statusaktif', id)
+                            forms.setValue('statusaktif', String(id ?? ''))
                           }
-                          inputLookupValue={forms.getValues('statusaktif')}
-                          lookupNama={forms.getValues('statusaktif_nama')}
+                          // Grid mengisi teks status aktif ke field `text`
+                          // (lihat resetAddForm & effect pengisi form), bukan
+                          // `statusaktif_nama` yang tidak ada di schema —
+                          // itu sebabnya lookup ini sebelumnya tampil kosong.
+                          lookupNama={forms.getValues('text')}
                           disabled={mode === 'view' || mode === 'delete'}
                         />
                       ))}

@@ -1,96 +1,67 @@
 'use client';
-import React, { ReactElement, useEffect, useState, useRef } from 'react';
+
+import React, { useEffect, useState } from 'react';
 import { Worker, Viewer } from '@react-pdf-viewer/core';
+// @ts-expect-error CSS side-effect import
 import '@react-pdf-viewer/core/lib/styles/index.css';
-import { pdfjs } from 'react-pdf';
-
-import {
-  defaultLayoutPlugin,
-  ToolbarProps,
-  ToolbarSlot
-} from '@react-pdf-viewer/default-layout';
+// @ts-expect-error CSS side-effect import
 import '@react-pdf-viewer/default-layout/lib/styles/index.css';
-
-import { printPlugin, RenderPrintProps } from '@react-pdf-viewer/print';
+import { printPlugin } from '@react-pdf-viewer/print';
+// @ts-expect-error CSS side-effect import
 import '@react-pdf-viewer/print/lib/styles/index.css';
-
-import { zoomPlugin, RenderZoomOutProps } from '@react-pdf-viewer/zoom';
+import { zoomPlugin } from '@react-pdf-viewer/zoom';
+// @ts-expect-error CSS side-effect import
 import '@react-pdf-viewer/zoom/lib/styles/index.css';
-import { MdOutlineZoomOut } from 'react-icons/md';
-import { FaDownload, FaFileExport, FaPrint } from 'react-icons/fa';
-import { exportMenuFn } from '@/lib/apis/menu.api';
+
+import { pdfjs } from 'react-pdf';
+import { IoMdClose } from 'react-icons/io';
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import CustomPrintModal from '@/components/custom-ui/CustomPrint';
-import {
-  getPrintersFn,
-  getPaperSizesFn,
-  printFileFn,
-  PrinterInfo
-} from '@/lib/apis/print.api';
 import { HeaderPdfViewer } from '@/components/custom-ui/HeaderPdfViewer';
 
-interface PaperSize {
-  id: number;
-  name: string;
+interface ReportPdfViewerProps {
+  isOpen: boolean;
+  onClose: () => void;
+  url: string;
+  title?: string;
+  /** Callback tombol Export di toolbar; dipasok pemanggil (grid) beserta filternya. */
+  onExport?: () => void | Promise<void>;
 }
 
-const ReportMenuPage: React.FC = () => {
-  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
-  const [savedFilters, setSavedFilters] = useState<any>({});
+/**
+ * Isi viewer. Sengaja dipisah dari komponen luar dan HANYA di-mount saat modal
+ * terbuka, karena HeaderPdfViewer memasang listener global (menonaktifkan
+ * klik kanan, F12, dan membajak Ctrl+P). Kalau ikut ter-mount permanen di
+ * layout dashboard, listener itu akan aktif di seluruh aplikasi.
+ */
+function ReportPdfViewerContent({
+  url,
+  onExport,
+  onClose,
+  title
+}: {
+  url: string;
+  onExport?: () => void | Promise<void>;
+  onClose: () => void;
+  title: string;
+}) {
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
 
   const printPluginInstance = printPlugin();
-  const { Print } = printPluginInstance;
-
   const zoomPluginInstance = zoomPlugin();
-  const { ZoomPopover } = zoomPluginInstance;
 
-  useEffect(() => {
-    const storedPdf = sessionStorage.getItem('pdfUrl');
-    if (storedPdf) setPdfUrl(storedPdf);
-
-    const storedFilters = sessionStorage.getItem('filtersWithoutLimit');
-    if (storedFilters) {
-      try {
-        setSavedFilters(JSON.parse(storedFilters));
-      } catch {
-        setSavedFilters({});
-      }
-    }
-  }, []);
-
-  const handleExport = async () => {
-    try {
-      const exportPayload = { ...savedFilters };
-      const response = await exportMenuFn(exportPayload);
-
-      const url = window.URL.createObjectURL(new Blob([response]));
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `laporan_menu_${Date.now()}.xlsx`;
-      document.body.appendChild(link);
-      link.click();
-
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(link);
-    } catch (error) {
-      console.error('Error exporting menu data:', error);
-    }
-  };
-  const onPrint = () => {
-    setIsPrintModalOpen(true);
-  };
+  // Toolbar yang sama persis dengan halaman /reports/* — navigasi halaman,
+  // zoom popover, Download / Print / Export / Share, fullscreen, dan burger
+  // menu versi mobile.
   const layoutPluginInstance = HeaderPdfViewer(
-    handleExport, // Pass callback export dinamis
-    onPrint,
-    printPluginInstance, // Pass instance print
-    zoomPluginInstance, // Pass instance zoom
-    pdfUrl
+    () => {
+      void onExport?.();
+    },
+    () => setIsPrintModalOpen(true),
+    printPluginInstance,
+    zoomPluginInstance,
+    url
   );
-
-  useEffect(() => {
-    const stored = sessionStorage.getItem('pdfUrl');
-    if (stored) setPdfUrl(stored);
-  }, []);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -203,21 +174,32 @@ const ReportMenuPage: React.FC = () => {
           </div>
         </div>
       </div>
-      <div className="flex h-screen w-screen flex-col">
-        <main className="flex-1 overflow-hidden">
-          {pdfUrl && (
-            <CustomPrintModal
-              isOpen={isPrintModalOpen}
-              onClose={() => setIsPrintModalOpen(false)}
-              docUrl={pdfUrl ?? ''}
-              showPages={true}
-            />
-          )}
 
-          {pdfUrl ? (
+      <div className="flex h-full min-h-0 w-full flex-col">
+        {/* Header modal — satu-satunya beda dengan halaman /reports/*:
+            di sini butuh judul + tombol tutup. */}
+        <div className="flex flex-row items-center justify-between bg-[#e0ecff] px-3 py-2">
+          <p className="text-base font-bold text-gray-800">{title}</p>
+          <div
+            className="cursor-pointer rounded-md border border-zinc-200 bg-red-500 p-0 hover:bg-red-400"
+            onClick={onClose}
+          >
+            <IoMdClose className="h-5 w-5 font-bold text-white" />
+          </div>
+        </div>
+
+        <main className="min-h-0 flex-1 overflow-hidden">
+          <CustomPrintModal
+            isOpen={isPrintModalOpen}
+            onClose={() => setIsPrintModalOpen(false)}
+            docUrl={url}
+            showPages={true}
+          />
+
+          {url ? (
             <Worker workerUrl="/pdf.worker.min.js">
               <Viewer
-                fileUrl={pdfUrl}
+                fileUrl={url}
                 defaultScale={1}
                 plugins={[
                   printPluginInstance,
@@ -236,6 +218,52 @@ const ReportMenuPage: React.FC = () => {
       </div>
     </>
   );
+}
+
+const ReportPdfViewer: React.FC<ReportPdfViewerProps> = ({
+  isOpen,
+  onClose,
+  url,
+  title = 'Laporan PDF',
+  onExport
+}) => {
+  if (!isOpen) return null;
+
+  return (
+    <Dialog
+      open={isOpen}
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
+      <DialogTitle hidden={true}>{title}</DialogTitle>
+      {/* Tinggi dikunci lewat `style`, bukan className: base DialogContent
+          sudah memasang `overflow-y-scroll`, dan pemenang antar utility
+          Tailwind ditentukan urutan di stylesheet — bukan urutan di atribut
+          class — sehingga `overflow-hidden` dari sini akan kalah.
+          `gridTemplateRows: minmax(0, 1fr)` membuat baris grid-nya definit;
+          tanpa itu baris `auto` + anak `h-full` jadi kasus siklik, tinggi
+          runtuh ke `auto`, dan `.rpv-core__inner-pages` (scroller milik
+          react-pdf-viewer) ikut setinggi seluruh dokumen sehingga tidak
+          pernah bisa di-scroll. */}
+      <DialogContent
+        className="min-w-full bg-white p-0"
+        style={{
+          height: '100dvh',
+          maxHeight: '100dvh',
+          gridTemplateRows: 'minmax(0, 1fr)',
+          overflow: 'hidden'
+        }}
+      >
+        <ReportPdfViewerContent
+          url={url}
+          title={title}
+          onExport={onExport}
+          onClose={onClose}
+        />
+      </DialogContent>
+    </Dialog>
+  );
 };
 
-export default ReportMenuPage;
+export default ReportPdfViewer;

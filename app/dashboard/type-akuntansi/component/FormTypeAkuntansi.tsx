@@ -143,6 +143,7 @@ const FormTypeAkuntansi = ({
       document.removeEventListener('keydown', handleKeyDown);
     };
   }, [openName]); // Tambahkan popOverDate sebagai dependensi
+  console.log('forms.formState.errors', forms.formState.errors);
 
   return (
     <Dialog open={popOver} onOpenChange={setPopOver}>
@@ -173,7 +174,14 @@ const FormTypeAkuntansi = ({
             <Form {...forms}>
               <form
                 ref={formRef}
-                onSubmit={onSubmit}
+                // `onSubmit` dari grid menerima (keepOpenModal), bukan event —
+                // pembungkusan forms.handleSubmit dilakukan di grid. Tanpa
+                // preventDefault + argumen boolean, submit native mengirim
+                // objek EVENT sebagai `keepOpenModal`.
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  onSubmit(false);
+                }}
                 className="flex h-full flex-col gap-6"
               >
                 <div className="flex h-[100%] flex-col gap-2 lg:gap-3">

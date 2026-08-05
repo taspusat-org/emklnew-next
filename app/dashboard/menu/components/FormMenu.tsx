@@ -176,7 +176,12 @@ const FormMenu = ({
             <Form {...forms}>
               <form
                 ref={formRef}
-                onSubmit={onSubmit}
+                onSubmit={(e) => {
+                  // onSubmit menerima flag keepOpenModal (Save & Add), jadi
+                  // event submit TIDAK boleh diteruskan sebagai argumen.
+                  e.preventDefault();
+                  onSubmit(false);
+                }}
                 className="flex h-full flex-col gap-6"
               >
                 <div className="flex h-[100%] flex-col gap-2 lg:gap-3">
@@ -207,7 +212,10 @@ const FormMenu = ({
                   />
                   <div className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
                     <div className="w-full lg:w-[15%]">
-                      <FormLabel className="text-sm font-semibold">
+                      <FormLabel
+                        required={true}
+                        className="text-sm font-semibold"
+                      >
                         Acos
                       </FormLabel>
                     </div>
@@ -216,9 +224,7 @@ const FormMenu = ({
                         <LookUp
                           key={index}
                           {...props}
-                          lookupValue={(id) =>
-                            forms.setValue('aco_id', id)
-                          }
+                          lookupValue={(id) => forms.setValue('aco_id', id)}
                           inputLookupValue={forms.getValues('aco_id')}
                           lookupNama={forms.getValues('acos_nama')}
                         />
@@ -250,7 +256,10 @@ const FormMenu = ({
                   />
                   <div className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
                     <div className="w-full lg:w-[15%]">
-                      <FormLabel className="text-sm font-semibold">
+                      <FormLabel
+                        required={true}
+                        className="text-sm font-semibold"
+                      >
                         Menu Parent
                       </FormLabel>
                     </div>
@@ -294,12 +303,12 @@ const FormMenu = ({
         </div>
         <FormFooterButtons
           mode={mode}
-          onSave={onSubmit}
+          onSave={() => onSubmit(false)}
+          onSaveAndAdd={() => onSubmit(true)}
           onCancel={handleClose}
           isLoadingCreate={isLoadingCreate}
           isLoadingUpdate={isLoadingUpdate}
           isLoadingDelete={isLoadingDelete}
-          hideSaveAndAdd
           deleteMode={mode === 'delete'}
         />
       </DialogContent>

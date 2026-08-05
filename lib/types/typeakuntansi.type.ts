@@ -7,7 +7,7 @@ export interface ITypeAkuntansi {
   keterangan: string;
   statusaktif: string;
   statusaktif_text: string | null;
-  akuntansi_id: number;
+  akuntansi_id: string;
   akuntansi_nama: string | null;
   modifiedby: string;
   created_at: string;

@@ -110,6 +110,8 @@ import {
   BiayaExtraHeader,
   filterBiayaExtraHeader
 } from '@/lib/types/biayaextraheader.type';
+import { generateBiayaExtraHeaderExportFn } from '@/lib/apis/report.api';
+import { useReportPdfContext } from '@/hooks/ReportPdfProvider';
 
 interface Filter {
   page: number;
@@ -130,6 +132,7 @@ const GridBiayaExtraHeader = () => {
   const dispatch = useDispatch();
   const searchParams = useSearchParams();
   const { start } = useReportProgress();
+  const { generateExport } = useReportPdfContext();
   const { data: session, status } = useSession();
 
   const [totalPages, setTotalPages] = useState(1);
@@ -261,22 +264,81 @@ const GridBiayaExtraHeader = () => {
   // apakah pergeseran itu dari keyboard, sehingga useLayoutEffect tahu apakah
   // perlu re-anchor selectCell. Mouse scroll TIDAK boleh memindahkan sel aktif.
   const reanchorFromKeyboardRef = useRef(false);
+  // Snapshot: apakah sel aktif grid memegang DOM focus tepat sebelum window
+  // bergeser. Dipakai untuk memulihkan focus setelah baris lama ter-unmount.
+  const gridCellHadFocusRef = useRef(false);
   // Menandai bahwa sedang ada transisi halaman (window-shift) agar Row Combiner
   // tahu harus commit selectedRow bersamaan dengan setRows.
   const isPageTransitionRef = useRef(false);
 
+  // Sel aktif react-data-grid selalu punya tabindex="0" (roving tabindex).
+  // Header memakai role="columnheader", jadi selector ini hanya kena sel data --
+  // input filter di header TIDAK ikut tertangkap.
+  const getSelectedGridCell = (): HTMLElement | null =>
+    gridRef.current?.element?.querySelector<HTMLElement>(
+      ':scope > [role="row"] > [role="gridcell"][tabindex="0"]'
+    ) ?? null;
+
+  const isSelectedGridCellFocused = () => {
+    const cell = getSelectedGridCell();
+    return cell !== null && cell === document.activeElement;
+  };
+
+  // Saat window bergeser, baris yang memegang DOM focus ikut ter-unmount
+  // sehingga focus lompat ke <body>. Akibatnya Arrow/PageUp/PageDown tidak lagi
+  // sampai ke grid dan sel aktif tidak bisa "ditarik" kembali ke viewport.
+  // Kembalikan focus ke sel aktif yang baru TANPA menggeser scroll, supaya
+  // posisi hasil scroll mouse user tidak berubah tetapi tombol navigasi
+  // langsung bekerja lagi (dan RDG yang akan scroll ke sel tsb saat ditekan).
+  //
+  // WAJIB pakai .focus({ preventScroll: true }) -- JANGAN selectCell(). RDG
+  // selalu memanggil scrollIntoView di dalam selectCell (baik lewat cabang
+  // samePosition maupun lewat focusCellOrCellContent), jadi memanggilnya di
+  // jalur pointer akan menyeret viewport balik ke baris terpilih -> scroll
+  // terasa "membal" ke atas setiap kali window bergeser.
+  const restoreGridCellFocus = () => {
+    if (!gridCellHadFocusRef.current) return;
+    gridCellHadFocusRef.current = false;
+    getSelectedGridCell()?.focus({ preventScroll: true });
+  };
+
   // Saat window pagination bergeser (halaman atas/bawah keluar dari window),
   // index setiap baris di array `rows` ikut bergeser sebanyak filters.limit.
-  // Fungsi ini menjaga agar baris DATA yang sama tetap ter-select dengan HANYA
-  // menggeser index (selectedRowRef) -- highlight digambar via getRowClass.
+  //
+  // ATURAN: highlight `selected-row` HARUS selalu menunjuk baris yang sama
+  // dengan selected cell bawaan react-data-grid. RDG menyimpan selection-nya
+  // sebagai index (`selectedPosition.rowIdx`) dan TIDAK menggesernya saat array
+  // rows berubah -- sel aktif tetap di baris ke-N grid walau halaman sebelumnya
+  // dibuang. Jadi:
+  //
+  // - pointer (wheel / drag scrollbar): kita TIDAK menggeser index sama sekali.
+  //   Sel aktif RDG tetap di baris ke-N, highlight juga tetap di baris ke-N ->
+  //   keduanya sinkron (walaupun data di baris tsb otomatis jadi data lain).
+  // - keyboard (Arrow/Page): index digeser mengikuti data, DAN sel aktif RDG
+  //   ikut di-re-anchor ke index baru lewat useLayoutEffect
+  //   (reanchorFromKeyboardRef) -> tetap sinkron, sekaligus menjaga navigasi
+  //   baris-per-baris tidak meloncat sejauh satu halaman.
+  //
   // CATATAN: setSelectedRow TIDAK dipanggil di sini -- ditunda ke Row Combiner
   // agar commit bersamaan dengan setRows. Jika selectedRow di-update sekarang,
   // akan ada 1 frame di mana selectedRow sudah bergeser tapi `rows` belum
   // -> highlight kuning "berkedip".
   const shiftSelectionForWindow = (deltaRows: number) => {
+    // Stempel asal pergeseran window ini (keyboard vs pointer) secara
+    // deterministik dari modalitas input terakhir, dipakai useLayoutEffect.
+    const fromKeyboard = interactionModeRef.current === 'keyboard';
+    reanchorFromKeyboardRef.current = fromKeyboard;
+
+    // Rekam SEKARANG (sebelum React meng-unmount baris halaman yang dibuang)
+    // apakah DOM focus sedang dipegang oleh sel grid. Setelah commit, elemen sel
+    // tsb hilang dan focus jatuh ke <body>, jadi tidak bisa dideteksi lagi.
+    gridCellHadFocusRef.current = isSelectedGridCellFocused();
+
+    // Pointer: biarkan index apa adanya supaya mengikuti sel aktif RDG.
+    if (!fromKeyboard) return;
+
     const next = Math.max(0, selectedRowRef.current + deltaRows);
     selectedRowRef.current = next;
-    reanchorFromKeyboardRef.current = interactionModeRef.current === 'keyboard';
   };
   const forms = useForm<biayaExtraHeaderInput>({
     resolver:
@@ -507,21 +569,12 @@ const GridBiayaExtraHeader = () => {
         renderCell: (props: any) => {
           const columnFilter = filters.filters.nobukti || '';
           const value = props.row.nobukti; // atau dari props.row
-          // Buat component wrapper untuk highlightText
-          const HighlightWrapper = () => {
-            return highlightText(value, filters.search, columnFilter);
-          };
-
           return (
             <div
               title={value}
               className="m-0 flex h-full cursor-pointer items-center p-0 text-sm"
             >
-              <JsxParser
-                components={{ HighlightWrapper }}
-                jsx={props.row.link}
-                renderInWrapper={false}
-              />
+              {highlightText(value, filters.search, columnFilter)}
             </div>
           );
         }
@@ -1244,9 +1297,12 @@ const GridBiayaExtraHeader = () => {
     scrollPositionRef.current = scrollTop;
     scrollContainerRef.current = currentTarget;
 
-    const rowHeight = 27; // Mengikuti rowHeight grid prospek
-    const firstVisibleRow = Math.floor(scrollTop / rowHeight);
-    const lastVisibleRow = Math.floor((scrollTop + clientHeight) / rowHeight);
+    // WAJIB pakai ROW_HEIGHT yang sama dengan prop rowHeight DataGrid dan
+    // dengan pendingScrollAdjustment di bawah. Kalau ketiganya tidak sama,
+    // kompensasi scrollTop tidak persis membatalkan pergeseran window dan
+    // konten akan melompat/"membal" tiap kali window bergeser.
+    const firstVisibleRow = Math.floor(scrollTop / ROW_HEIGHT);
+    const lastVisibleRow = Math.floor((scrollTop + clientHeight) / ROW_HEIGHT);
 
     const THRESHOLD_ROWS = 50;
 
@@ -1864,15 +1920,6 @@ const GridBiayaExtraHeader = () => {
     values: biayaExtraHeaderInput,
     keepOpenModalArg: unknown = false
   ) => {
-    // react-hook-form memanggil callback-nya dengan (values, event). Form di
-    // FormBiayaExtraHeader dipasang `onSubmit={forms.handleSubmit(onSubmit)}`, jadi
-    // pada submit NATIVE (mis. tekan ENTER di sebuah field) argumen kedua yang
-    // masuk ke sini adalah objek EVENT -- truthy, bukan boolean. Tanpa
-    // penyempitan ke `=== true`, Enter diperlakukan seperti "SAVE & ADD":
-    // form di-reset tapi dialog TETAP TERBUKA, Radix FocusScope menjebak fokus
-    // di dalam dialog, dan grid di belakangnya tampak "tidak ter-focus" padahal
-    // barisnya sudah dipilih dengan benar. Hanya tombol SAVE & ADD yang boleh
-    // mengirim true (lihat FormBiayaExtraHeader onSaveAndAdd).
     const keepOpenModal = keepOpenModalArg === true;
     clearError();
     const selectedRowId = rows[selectedRow]?.id;
@@ -1964,17 +2011,6 @@ const GridBiayaExtraHeader = () => {
       }
 
       if (selectedRowId && mode === 'edit') {
-        // JANGAN invalidateQueries('biayaextraheader') setelah ini: refetch-nya
-        // menimpa baris + fokus yang baru di-set onSuccess sehingga grid
-        // balik ke baris 1. onSuccess sudah otoritatif (lihat useAlatbayar).
-        //
-        // `id` WAJIB ikut di BODY, bukan cuma di URL: UpdateBiayaExtraHeaderSchema
-        // di backend mendeklarasikan `id: z.string({ required_error: 'Id wajib
-        // diisi untuk update' })`, dan form ini tidak pernah meng-setValue('id')
-        // (defaultValues juga tanpa id). Tanpa baris ini PUT selalu 400 dengan
-        // path ['id'] -> setError('id') jatuh ke field yang tidak dirender,
-        // sehingga tombol SAVE tampak "diam saja". Beda dengan pengeluaranheader
-        // yang DTO update-nya PartialType(CreateDto) -> id tidak wajib.
         await updateBiayaExtraHeader(
           {
             id: selectedRowId as unknown as string,
@@ -2029,6 +2065,31 @@ const GridBiayaExtraHeader = () => {
       setMode('view');
       setPopOver(true);
     }
+  };
+
+  /**
+   * Export Excel dijalankan di BACKEND (background job + socket), sama seperti
+   * di Alat Bayar. Frontend hanya mengirim filter yang sedang aktif di grid —
+   * filter kolom, search global, rentang tanggal, jenis orderan, dan sort —
+   * lalu progresnya muncul di toast. Setelah selesai, toast menampilkan tombol
+   * Download untuk menyimpan file xlsx-nya.
+   *
+   * Beda dengan Print yang mencetak SATU bukti terpilih, export ini mengambil
+   * seluruh baris yang lolos filter.
+   */
+  const handleExportExcel = async () => {
+    const { page, limit, ...filtersWithoutLimit } = filters;
+
+    await generateExport({
+      label: 'Export Biaya Extra',
+      payload: {
+        search: filtersWithoutLimit.search,
+        filters: filtersWithoutLimit.filters,
+        sortBy: filtersWithoutLimit.sortBy,
+        sortDirection: filtersWithoutLimit.sortDirection
+      },
+      apiFn: generateBiayaExtraHeaderExportFn
+    });
   };
 
   const handleReport = async () => {
@@ -2651,6 +2712,14 @@ const GridBiayaExtraHeader = () => {
         );
         const idx = idxFromKey >= 0 ? idxFromKey : 1;
         gridRef.current?.selectCell?.({ rowIdx: targetRow, idx });
+        // selectCell sudah memindahkan DOM focus ke sel target.
+        gridCellHadFocusRef.current = false;
+      } else {
+        // Jalur pointer: sel aktif RDG tidak dipindah, tapi elemen DOM-nya ikut
+        // ter-unmount bersama halaman yang dibuang. Pasang lagi focus-nya ke sel
+        // aktif yang baru supaya Arrow/PageUp/PageDown langsung menarik pandangan
+        // kembali ke baris yang ter-select.
+        restoreGridCellFocus();
       }
       reanchorFromKeyboardRef.current = false;
     }
@@ -2675,9 +2744,10 @@ const GridBiayaExtraHeader = () => {
       return;
     }
 
-    // ID yang menang, BUKAN index. `selectedRow` digeser sebanyak filters.limit
-    // tiap kali window bergeser, jadi nilainya tidak bisa dipercaya sebagai
-    // penunjuk "baris yang dipilih user". Id dicatat hanya di handleCellClick
+    // ID yang menang, BUKAN index. Index baris bergeser sendiri tiap kali window
+    // pagination bergeser (dan untuk navigasi keyboard `selectedRow` memang ikut
+    // digeser sebanyak filters.limit), jadi nilainya tidak bisa dipercaya
+    // sebagai penunjuk "baris yang dipilih user". Id dicatat hanya di handleCellClick
     // (pemilihan yang disengaja), sehingga dia tetap menunjuk bukti yang sama
     // sepanjang user scroll.
     const idById = selectedHeaderIdRef.current;
@@ -2943,7 +3013,7 @@ const GridBiayaExtraHeader = () => {
             handleCellClick({ row: args.row });
           }}
           headerRowHeight={70}
-          rowHeight={27}
+          rowHeight={ROW_HEIGHT}
           className={`${isDark ? 'rdg-dark' : 'rdg-light'} fill-grid`}
           enableVirtualization={false}
           onColumnResize={onColumnResize}
@@ -2970,6 +3040,12 @@ const GridBiayaExtraHeader = () => {
                 icon: <FaPrint />,
                 onClick: () => handleReport(),
                 className: 'bg-cyan-500 hover:bg-cyan-700'
+              },
+              {
+                label: 'Export',
+                icon: <FaFileExport />,
+                onClick: () => handleExportExcel(),
+                className: 'bg-green-600 hover:bg-green-700'
               }
             ]}
           />

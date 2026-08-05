@@ -34,19 +34,28 @@ export const useGetAllTypeAkuntansi = (
     ['typeakuntansi', filters],
     async () => await getAllTypeAkuntansiFn(filters, signal),
     {
-      enabled: !signal?.aborted
+      // Jangan fetch saat page < 1 (mis. trik setCurrentPage(0) untuk memaksa
+      // refetch halaman yang sama pada windowed pagination). Backend menolak
+      // page=0 (min 1) → 400. cacheTime:0 tetap menjamin refetch saat page
+      // kembali ke nilai valid.
+      enabled: !signal?.aborted && (filters.page ?? 1) >= 1,
+      staleTime: 0,
+      cacheTime: 0
     }
   );
 };
 
 export const useCreateTypeAkuntansi = () => {
   const { setError } = useFormError(); // Mengambil setError dari context
-  const queryClient = useQueryClient();
   const { alert } = useAlert();
+
+  // Sengaja TIDAK invalidateQueries('typeakuntansi') di sini. Alur onSuccess di
+  // GridTypeAkuntansi sudah otoritatif: ia mengambil window baru dari redis lalu
+  // setCurrentPage(pageNumber) yang memicu refetch halaman yang BENAR.
+  // invalidateQueries malah me-refetch `currentPage` yang mungkin masih basi —
+  // hasilnya tiba paling akhir dan menimpa fokus by-id -> baris fokus loncat ke
+  // baris 1.
   return useMutation(storeTypeAkuntansiFn, {
-    onSuccess: () => {
-      void queryClient.invalidateQueries('typeakuntansi');
-    },
     onError: (error: AxiosError) => {
       const errorResponse = error.response?.data as IErrorResponse;
       console.log('errorResponse', errorResponse);
@@ -77,13 +86,12 @@ export const useCreateTypeAkuntansi = () => {
 
 export const useUpdateTypeAkuntansi = () => {
   const { setError } = useFormError(); // Mengambil setError dari context
-  const queryClient = useQueryClient();
   const { alert } = useAlert();
 
+  // Sama seperti create: JANGAN invalidateQueries di sini. onSuccess grid yang
+  // mengatur data + fokus; invalidateQueries me-refetch currentPage basi yang
+  // menimpa fokus -> baris 1.
   return useMutation(updateTypeAkuntansiFn, {
-    onSuccess: () => {
-      void queryClient.invalidateQueries('typeakuntansi');
-    },
     onError: (error: AxiosError) => {
       const errorResponse = error.response?.data as IErrorResponse;
 

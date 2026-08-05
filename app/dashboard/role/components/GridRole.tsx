@@ -78,6 +78,7 @@ import { highlightText } from '@/components/custom-ui/HighlightText';
 import { useTheme } from 'next-themes';
 import { EmptyRowsRenderer } from '@/components/EmptyRows';
 import { LoadRowsRenderer } from '@/components/LoadRows';
+import FilterOptions from '@/components/custom-ui/FilterOptions';
 
 interface Row {
   id: string;
@@ -490,35 +491,14 @@ const GridRole = () => {
               <p className="text-sm font-normal">Status Aktif</p>
             </div>
             <div className="relative h-[50%] w-full px-1">
-              <Select
-                defaultValue="all"
-                onValueChange={(value: any) => {
-                  handleColumnFilterChange('text', value === 'all' ? '' : value);
-                }}
-              >
-                <SelectTrigger className="filter-select z-[999999] mr-1 h-8 w-full cursor-pointer rounded-none border border-gray-300 p-1 text-xs font-thin">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    <SelectItem className="text=xs cursor-pointer" value="all">
-                      <p className="text-sm font-normal">all</p>
-                    </SelectItem>
-                    <SelectItem
-                      className="text=xs cursor-pointer"
-                      value="AKTIF"
-                    >
-                      <p className="text-sm font-normal">AKTIF</p>
-                    </SelectItem>
-                    <SelectItem
-                      className="text=xs cursor-pointer"
-                      value="TIDAK AKTIF"
-                    >
-                      <p className="text-sm font-normal">TIDAK AKTIF</p>
-                    </SelectItem>
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
+              <FilterOptions
+                columnKey={column.column.key}
+                endpoint="parameter"
+                value="id"
+                label="text"
+                filterBy={{ grp: 'STATUS AKTIF', subgrp: 'STATUS AKTIF' }}
+                onChange={(value) => handleColumnFilterChange('text', value)} // Menangani perubahan nilai di parent
+              />
             </div>
           </div>
         ),
