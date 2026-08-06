@@ -1,5 +1,0 @@
-# Example of .prettierignore
-**/node_modules/**
-**/dist/**
-**/build/**
-app/api/auth/[...nextauth]/

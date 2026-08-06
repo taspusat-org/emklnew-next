@@ -1,9 +1,0 @@
-{
-  "scripts": {
-    "test:global": "jest --config=__tests__/global/jest.config.js",
-    "test:global:watch": "jest --config=__tests__/global/jest.config.js --watch",
-    "test:global:coverage": "jest --config=__tests__/global/jest.config.js --coverage",
-    "test:global:verbose": "jest --config=__tests__/global/jest.config.js --verbose"
-  },
-  "description": "Scripts untuk menjalankan global dashboard tests"
-}
