@@ -74,7 +74,16 @@ export const useGetHutangHeader = (
           dispatch(setProcessed());
         }
       },
-      enabled: !signal?.aborted
+      // Jangan fetch saat page < 1 (trik setCurrentPage(0) di grid untuk memaksa
+      // refetch). Backend meng-clamp page<1 ke 1 (lihat FindAllSchema), jadi
+      // tanpa guard ini halaman 0 akan memulangkan halaman 1 dan mengotori
+      // window cache. Sama seperti useGetPengeluaranHeader.
+      enabled: !signal?.aborted && (filters.page ?? 1) >= 1,
+      // staleTime/cacheTime 0: window pagination dikelola sendiri oleh grid
+      // (pageDataCache + streamBuffer). Cache react-query di atasnya hanya
+      // membuat data lama sempat terpakai saat filter/sort berubah.
+      staleTime: 0,
+      cacheTime: 0
     }
   );
 };
@@ -100,13 +109,29 @@ export const useGetHutangDetail = (
       created_at?: string;
       updated_at?: string;
     };
-  } = {}
+  } = {},
+  signal?: AbortSignal
 ) => {
+  // Key 'hutangdetail', BUKAN 'hutang'. Dulu detail memakai key yang sama
+  // persis dengan useGetHutangHeader, sehingga invalidateQueries('hutang')
+  // (useDeleteHutang, useCreateHutang) ikut membatalkan cache detail — dan
+  // sebaliknya, cache detail ikut di-refetch tiap kali header berubah walau
+  // isinya tidak terkait.
   return useQuery(
-    ['hutang', filters],
-    async () => await getHutangDetailFn(filters),
+    ['hutangdetail', filters],
+    async () => await getHutangDetailFn(filters, signal),
     {
-      enabled: !!filters.filters?.nobukti
+      // Jangan fetch saat page < 1 (trik setCurrentPage(0) di grid untuk memaksa
+      // refetch). Backend meng-clamp page<1 ke 1, jadi tanpa guard ini halaman 0
+      // akan memulangkan halaman 1 dan mengotori window cache.
+      enabled:
+        !!filters.filters?.nobukti &&
+        !signal?.aborted &&
+        (filters.page ?? 1) >= 1,
+      // staleTime/cacheTime 0: window pagination dikelola sendiri oleh grid
+      // (pageDataCache + streamBuffer).
+      staleTime: 0,
+      cacheTime: 0
     }
   );
 };

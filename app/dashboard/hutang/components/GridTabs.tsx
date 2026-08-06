@@ -22,18 +22,19 @@ export function GridTabs() {
         <TabsTrigger value="jurnalumumdetail">Jurnal Umum Detail</TabsTrigger>
       </TabsList>
 
+      {/*
+        `nobukti` sengaja TIDAK dioper: sebelumnya di-set dari
+        headerData?.pengeluaran_nobukti — sisa salin-tempel dari modul
+        pengeluaran yang selalu undefined di hutang. Kedua grid detail sudah
+        jatuh ke headerData?.nobukti sendiri, jadi membiarkannya kosong justru
+        memakai sumber yang benar (baris header hutang yang sedang dipilih).
+      */}
       <TabsContent value="hutangdetail" className="h-full">
-        <GridHutangDetail
-          activeTab={activeTab}
-          nobukti={headerData?.pengeluaran_nobukti}
-        />
+        <GridHutangDetail activeTab={activeTab} hyperlink={false} />
       </TabsContent>
 
       <TabsContent value="jurnalumumdetail" className="h-full">
-        <GridJurnalUmumDetail
-          activeTab={activeTab}
-          nobukti={headerData?.pengeluaran_nobukti}
-        />
+        <GridJurnalUmumDetail activeTab={activeTab} />
       </TabsContent>
     </Tabs>
   );

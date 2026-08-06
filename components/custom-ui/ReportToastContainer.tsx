@@ -39,8 +39,15 @@ export default function ReportToastContainer({
   if (visibleToasts.length === 0) return null;
 
   return (
+    // `pointer-events-none` di wadah + `pointer-events-auto` di tiap kartu:
+    // saat modal viewer terbuka, Radix Dialog memasang `pointer-events: none`
+    // di <body>, jadi kartu toast harus mengaktifkan ulang pointer-nya sendiri
+    // supaya tombol Download tetap bisa diklik. `data-report-toast` dipakai
+    // viewer untuk mengenali klik ini sebagai klik "di dalam" (lihat
+    // ReportPdfViewer) agar modal tidak ikut tertutup.
     <div
-      className="fixed bottom-4 right-4 z-[9999] flex flex-col-reverse gap-2"
+      data-report-toast=""
+      className="pointer-events-none fixed bottom-4 right-4 z-[9999] flex flex-col-reverse gap-2"
       aria-live="polite"
     >
       {visibleToasts.map((toast) => (
@@ -120,7 +127,7 @@ function ReportToastItem({
   return (
     <div
       className={cn(
-        'w-[320px] rounded-lg border bg-white shadow-lg transition-all duration-300 dark:bg-gray-900 dark:shadow-black/40',
+        'pointer-events-auto w-[320px] rounded-lg border bg-white shadow-lg transition-all duration-300 dark:bg-gray-900 dark:shadow-black/40',
         borderColor
       )}
     >

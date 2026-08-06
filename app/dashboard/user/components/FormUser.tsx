@@ -1,11 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { Input } from '@/components/ui/input';
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogTitle
-} from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import {
   Form,
   FormControl,
@@ -15,21 +10,12 @@ import {
   FormMessage
 } from '@/components/ui/form';
 import FormFooterButtons from '@/components/custom-ui/FormFooterButtons';
-import { useEffect, useRef, useState } from 'react';
-import { api } from '@/lib/utils/AxiosInstance';
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue
-} from '@/components/ui/select';
-import { CalendarCheck } from '@/components/custom-ui/calendar-check';
+import { useEffect, useRef } from 'react';
 import LookUp from '@/components/custom-ui/LookUp';
 import { RootState } from '@/lib/store/store';
-import { useSelector } from 'react-redux';
+import { useSelector, useDispatch } from 'react-redux';
 import { IoMdClose } from 'react-icons/io';
+import { setSubmitClicked } from '@/lib/store/lookupSlice/lookupSlice';
 
 const FormUser = ({
   popOver,
@@ -42,79 +28,61 @@ const FormUser = ({
   isLoadingDelete,
   isLoadingUpdate
 }: any) => {
-  interface FieldLengthDetails {
-    column: string;
-    length: number;
-  }
-
-  interface FieldLengths {
-    data: {
-      [key: string]: FieldLengthDetails;
-    };
-  }
-  const [submitClick, setSubmitClick] = useState(false);
-
   const formRef = useRef<HTMLFormElement | null>(null); // Ref untuk form
-  const lookUpProps = [
+  const openName = useSelector((state: RootState) => state.lookup.openName);
+  const dispatch = useDispatch();
+
+  const lookUpPropsUserAsal = [
     {
       columns: [
         { key: 'username', name: 'USERNAME' },
         { key: 'name', name: 'NAME' }
       ],
-      // filterby: { class: 'system', method: 'get' },
       selectedRequired: false,
       endpoint: 'user',
+      labelLookup: 'USER ASAL LOOKUP',
       label: 'USER ASAL',
       singleColumn: false,
       pageSize: 20,
       showOnButton: true,
+      dataToPost: 'id',
       postData: 'username'
     }
   ];
   const lookUpPropsStatusAktif = [
     {
       columns: [{ key: 'text', name: 'NAMA' }],
-      // filterby: { class: 'system', method: 'get' },
       labelLookup: 'STATUS AKTIF LOOKUP',
+      required: true,
       selectedRequired: false,
-      label: 'Status Aktif',
+      endpoint: 'parameter?grp=status+aktif',
+      label: 'STATUS AKTIF',
       singleColumn: true,
       pageSize: 20,
+      dataToPost: 'id',
       showOnButton: true,
-      postData: 'text',
-      dataToPost: 'id'
+      postData: 'text'
     }
   ];
   const lookUpPropsKaryawan = [
     {
       columns: [{ key: 'namakaryawan', name: 'NAMA KARYAWAN' }],
-      // filterby: { class: 'system', method: 'get' },
       selectedRequired: false,
       endpoint: 'karyawan',
-      required: true,
-      isSubmitClicked: submitClick,
+      labelLookup: 'KARYAWAN LOOKUP',
       label: 'NAMA KARYAWAN',
       singleColumn: true,
       pageSize: 20,
       showOnButton: true,
-      postData: 'namakaryawan',
-      dataToPost: 'id'
+      dataToPost: 'id',
+      postData: 'namakaryawan'
     }
   ];
-  const [dataMaxLength, setDataMaxLength] = useState<{ [key: string]: number }>(
-    {}
-  );
-  const openName = useSelector((state: RootState) => state.lookup.openName);
 
-  useEffect(() => {
-    if (popOver) {
-      fetchFieldLengths('users');
-    }
-  }, [popOver]);
   useEffect(() => {
     // Fungsi untuk menangani pergerakan fokus berdasarkan tombol
     const handleKeyDown = (event: KeyboardEvent) => {
-      // Jika popOverDate ada nilainya, jangan lakukan apa-apa
+      // Jika lookup sedang terbuka, biarkan lookup yang menangani navigasinya.
       if (openName) {
         return;
       }
@@ -134,20 +102,12 @@ const FormUser = ({
 
       const focusedElement = document.activeElement as HTMLElement;
 
-      // Cek apakah elemen yang difokuskan adalah dropzone
-      const isImageDropzone =
-        document.querySelector('input#image-dropzone') === focusedElement;
-      const isFileInput =
-        document.querySelector('input#file-input') === focusedElement;
-
-      if (isImageDropzone || isFileInput) return; // Jangan pindah fokus jika elemen fokus adalah dropzone atau input file
-
       let nextElement: HTMLElement | null = null;
 
       if (event.key === 'ArrowDown' || event.key === 'Tab') {
         nextElement = getNextFocusableElement(inputs, focusedElement, 'down');
         if (event.key === 'Tab') {
-          event.preventDefault(); // Cegah default tab behavior jika ingin mengontrol pergerakan fokus
+          event.preventDefault(); // Cegah default tab behavior agar urutannya terkontrol
         }
       } else if (
         event.key === 'ArrowUp' ||
@@ -175,67 +135,33 @@ const FormUser = ({
           return null; // Tidak ada elemen selanjutnya
         }
         return inputs[index + 1]; // Fokus pindah ke input setelahnya
-      } else {
-        return inputs[index - 1]; // Fokus pindah ke input sebelumnya
       }
+      return inputs[index - 1]; // Fokus pindah ke input sebelumnya
     };
 
-    // Menambahkan event listener untuk keydown
     document.addEventListener('keydown', handleKeyDown);
 
-    // Membersihkan event listener ketika komponen tidak lagi digunakan
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [openName]); // Tambahkan popOverDate sebagai dependensi
-  const fetchFieldLengths = async (mytable: any) => {
-    try {
-      const formData = new FormData();
-      formData.append('table', mytable);
+  }, [openName]);
 
-      const response = await api.post<{ data: FieldLengths }>(
-        '/api/fieldlength',
-        formData
-      );
-
-      if (response.status !== 200) {
-        throw new Error('Network response was not ok');
-      }
-
-      const result = response.data.data;
-
-      const maxLengthMap: { [key: string]: number } = {};
-      Object.entries(result).forEach(([key, value]) => {
-        maxLengthMap[key] = value.length;
-      });
-
-      setDataMaxLength(maxLengthMap);
-
-      Object.entries(result).forEach(([index, value]) => {
-        if (
-          typeof index === 'string' &&
-          value !== null &&
-          value !== 0 &&
-          value !== undefined
-        ) {
-          const field = document.querySelector(
-            `input[name=${value.column}]`
-          ) as HTMLInputElement | null;
-
-          if (field) {
-            field.setAttribute('maxlength', value.length.toString());
-          }
-        }
-      });
-    } catch (error) {}
-  };
+  const isReadOnly = mode === 'view' || mode === 'delete';
 
   return (
     <Dialog open={popOver} onOpenChange={setPopOver}>
-      <DialogTitle hidden={true}>User Form</DialogTitle>
+      <DialogTitle hidden={true}>Title</DialogTitle>
       <DialogContent className="flex h-full min-w-full flex-col overflow-hidden border border-border bg-background">
         <div className="flex items-center justify-between bg-background-form-header px-2 py-2">
-          <h2 className="text-sm font-semibold">User Form</h2>
+          <h2 className="text-sm font-semibold">
+            {mode === 'add'
+              ? 'Add User'
+              : mode === 'edit'
+              ? 'Edit User'
+              : mode === 'delete'
+              ? 'Delete User'
+              : 'View User'}
+          </h2>
           <div
             className="cursor-pointer rounded-md border border-zinc-200 bg-red-500 p-0 hover:bg-red-400"
             onClick={() => {
@@ -251,121 +177,152 @@ const FormUser = ({
             <Form {...forms}>
               <form
                 ref={formRef}
-                onSubmit={onSubmit}
+                // `onSubmit` dari grid menerima (keepOpenModal), bukan event —
+                // pembungkusan forms.handleSubmit dilakukan di grid. Tanpa
+                // preventDefault + argumen boolean, submit native mengirim
+                // objek EVENT sebagai `keepOpenModal`.
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  onSubmit(false);
+                }}
                 className="flex h-full flex-col gap-6"
               >
-                <div className="flex-grow">
-                  <div className="grid grid-cols-1 gap-2 gap-y-4">
-                    <FormField
-                      name="username"
-                      control={forms.control}
-                      render={({ field }) => (
-                        <FormItem className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
-                          <FormLabel
-                            required={true}
-                            className="font-semibold lg:w-[15%]"
-                          >
-                            Username
-                          </FormLabel>
-                          <div className="flex flex-col lg:w-[85%]">
-                            <FormControl>
-                              <Input
-                                {...field}
-                                value={(field.value as string) ?? ''}
-                                type="text"
-                                readOnly={mode === 'delete' || mode === 'view'}
-                              />
-                            </FormControl>
-                            <FormMessage />
-                          </div>
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      name="name"
-                      control={forms.control}
-                      render={({ field }) => (
-                        <FormItem className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
-                          <FormLabel
-                            required={true}
-                            className="font-semibold lg:w-[15%]"
-                          >
-                            Name
-                          </FormLabel>
-                          <div className="flex flex-col lg:w-[85%]">
-                            <FormControl>
-                              <Input
-                                {...field}
-                                value={(field.value as string) ?? ''}
-                                type="text"
-                                readOnly={mode === 'delete' || mode === 'view'}
-                              />
-                            </FormControl>
-                            <FormMessage />
-                          </div>
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      name="email"
-                      control={forms.control}
-                      render={({ field }) => (
-                        <FormItem className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
-                          <FormLabel className="font-semibold lg:w-[15%]">
-                            Email
-                          </FormLabel>
-                          <div className="flex flex-col lg:w-[85%]">
-                            <FormControl>
-                              <Input
-                                {...field}
-                                value={(field.value as string) ?? ''}
-                                type="email"
-                                readOnly={mode === 'delete' || mode === 'view'}
-                              />
-                            </FormControl>
-                            <FormMessage />
-                          </div>
-                        </FormItem>
-                      )}
-                    />
-                    <div className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
-                      <div className="w-full lg:w-[15%]">
-                        <FormLabel className="text-sm font-semibold">
-                          Status Aktif
+                <div className="flex h-[100%] flex-col gap-2 lg:gap-3">
+                  <FormField
+                    name="username"
+                    control={forms.control}
+                    render={({ field }) => (
+                      <FormItem className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
+                        <FormLabel
+                          required={true}
+                          className="font-semibold lg:w-[15%]"
+                        >
+                          Username
                         </FormLabel>
-                      </div>
-                      <div className="w-full lg:w-[85%]">
-                        {lookUpPropsStatusAktif.map((props, index) => (
-                          <LookUp
-                            key={index}
-                            {...props}
-                            disabled={mode === 'delete' || mode === 'view'}
-                            lookupValue={(id) =>
-                              forms.setValue('statusaktif', id)
-                            }
-                            inputLookupValue={forms.getValues('statusaktif')}
-                            lookupNama={forms.getValues('statusaktif_text')}
-                          />
-                        ))}
-                      </div>
+                        <div className="flex flex-col lg:w-[85%]">
+                          <FormControl>
+                            <Input
+                              {...field}
+                              value={(field.value as string) ?? ''}
+                              type="text"
+                              readOnly={isReadOnly}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </div>
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    name="name"
+                    control={forms.control}
+                    render={({ field }) => (
+                      <FormItem className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
+                        <FormLabel
+                          required={true}
+                          className="font-semibold lg:w-[15%]"
+                        >
+                          Nama
+                        </FormLabel>
+                        <div className="flex flex-col lg:w-[85%]">
+                          <FormControl>
+                            <Input
+                              {...field}
+                              value={(field.value as string) ?? ''}
+                              type="text"
+                              readOnly={isReadOnly}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </div>
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    name="email"
+                    control={forms.control}
+                    render={({ field }) => (
+                      <FormItem className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
+                        <FormLabel className="font-semibold lg:w-[15%]">
+                          Email
+                        </FormLabel>
+                        <div className="flex flex-col lg:w-[85%]">
+                          <FormControl>
+                            <Input
+                              {...field}
+                              value={(field.value as string) ?? ''}
+                              type="email"
+                              readOnly={isReadOnly}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </div>
+                      </FormItem>
+                    )}
+                  />
+                  <div className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
+                    <div className="w-full lg:w-[15%]">
+                      <FormLabel className="text-sm font-semibold">
+                        Nama Karyawan
+                      </FormLabel>
                     </div>
-                    <div className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
-                      <div className="w-full lg:w-[15%]">
-                        <FormLabel className="text-sm font-semibold">
-                          Hak Akses User Asal
-                        </FormLabel>
-                      </div>
-                      <div className="w-full lg:w-[85%]">
-                        {lookUpProps.map((props, index) => (
-                          <LookUp
-                            key={index}
-                            {...props}
-                            disabled={mode === 'delete' || mode === 'view'}
-                            lookupValue={(id) => forms.setValue('userId', id)}
-                            inputLookupValue={forms.getValues('userId')}
-                          />
-                        ))}
-                      </div>
+                    <div className="w-full lg:w-[85%]">
+                      {lookUpPropsKaryawan.map((props, index) => (
+                        <LookUp
+                          key={index}
+                          {...props}
+                          lookupValue={(id) =>
+                            forms.setValue('karyawan_id', String(id ?? ''))
+                          }
+                          lookupNama={forms.getValues('namakaryawan')}
+                          disabled={isReadOnly}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                  <div className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
+                    <div className="w-full lg:w-[15%]">
+                      <FormLabel
+                        required={true}
+                        className="text-sm font-semibold"
+                      >
+                        Status Aktif
+                      </FormLabel>
+                    </div>
+                    <div className="w-full lg:w-[85%]">
+                      {lookUpPropsStatusAktif.map((props, index) => (
+                        <LookUp
+                          key={index}
+                          {...props}
+                          lookupValue={(id) =>
+                            forms.setValue('statusaktif', String(id ?? ''))
+                          }
+                          // Grid mengisi teks status aktif ke field `text`
+                          // (lihat resetAddForm & effect pengisi form), bukan
+                          // `statusaktif_text` yang sudah tidak ada di schema.
+                          lookupNama={forms.getValues('text')}
+                          disabled={isReadOnly}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                  <div className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
+                    <div className="w-full lg:w-[15%]">
+                      <FormLabel className="text-sm font-semibold">
+                        Hak Akses User Asal
+                      </FormLabel>
+                    </div>
+                    <div className="w-full lg:w-[85%]">
+                      {lookUpPropsUserAsal.map((props, index) => (
+                        <LookUp
+                          key={index}
+                          {...props}
+                          lookupValue={(id) =>
+                            forms.setValue('userId', String(id ?? ''))
+                          }
+                          disabled={isReadOnly}
+                        />
+                      ))}
                     </div>
                   </div>
                 </div>
@@ -375,9 +332,18 @@ const FormUser = ({
         </div>
         <FormFooterButtons
           mode={mode}
-          onSave={onSubmit}
+          onSave={() => {
+            onSubmit(false);
+            dispatch(setSubmitClicked(true));
+          }}
+          onSaveAndAdd={() => {
+            onSubmit(true);
+            dispatch(setSubmitClicked(true));
+          }}
           onCancel={handleClose}
-          hideSaveAndAdd
+          isLoadingCreate={isLoadingCreate}
+          isLoadingUpdate={isLoadingUpdate}
+          isLoadingDelete={isLoadingDelete}
           deleteMode={mode === 'delete'}
         />
       </DialogContent>

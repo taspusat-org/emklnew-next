@@ -6,8 +6,18 @@ export interface HutangHeader {
   tglbukti: string;
   tgljatuhtempo: string;
   keterangan: string;
-  relasi_id: number;
+  // relasi_id bertipe text (UUID v7) di DB, bukan angka — hutangHeaderSchema
+  // pun sudah mendeklarasikannya z.string(). Sebelumnya tertulis `number`
+  // sehingga mengisi form dari baris grid tidak type-safe.
+  relasi_id: string;
   relasi_text: string;
+  // coa & coa_text dikembalikan view vhutangheader dan dipakai grid (kolom COA)
+  // serta saat mengisi form untuk edit. Sebelumnya absen dari tipe sehingga
+  // pembacaannya hanya lolos karena kode lama mengaksesnya lewat `any`.
+  coa: string | null;
+  coa_text: string | null;
+  statusformat: string | null;
+  link?: string | null;
   info: string | null;
   modifiedby: string | null;
   created_at: string;

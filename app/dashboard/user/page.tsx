@@ -1,61 +1,69 @@
 'use client';
 
 import PageContainer from '@/components/layout/page-container';
-import { Tabs, TabsContent } from '@/components/ui/tabs';
 import React, { useEffect } from 'react';
 import GridUser from './components/GridUser';
 import { GridTabs } from './components/GridTabs';
+import { fieldLength } from '@/lib/apis/field-length.api';
 import { getParameterFn } from '@/lib/apis/parameter.api';
 import { useDispatch } from 'react-redux';
-import { setData, setType } from '@/lib/store/lookupSlice/lookupSlice';
+import { setFieldLength } from '@/lib/store/field-length/fieldLengthSlice';
+import {
+  setData,
+  setDefault,
+  setType
+} from '@/lib/store/lookupSlice/lookupSlice';
+
 const Page = () => {
   const dispatch = useDispatch();
+
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // Fetching data with isLookUp flag and filters
-        const result = await getParameterFn({
-          isLookUp: 'true', // Pass isLookUp inside filters
-          filters: {
-            grp: 'STATUS AKTIF' // Example filter
-          }
-        });
+        const result = await fieldLength('users');
+        dispatch(setFieldLength(result.data));
 
-        // Handle the result based on its type
-        if (result.type === 'local') {
-          // Save local data to Redux with a unique key (e.g., 'Status Aktif')
-          dispatch(setData({ key: 'Status Aktif', data: result.data }));
+        const [getStatusAktifLookup] = await Promise.all([
+          getParameterFn({ isLookUp: 'true' })
+        ]);
 
-          // Ensure the type is set to 'local' in Redux
-          dispatch(setType({ key: 'Status Aktif', type: result.type }));
-        } else {
-          // If the type is not local, just store the type (this can be expanded for JSON data handling)
-          dispatch(setType({ key: 'Status Aktif', type: result.type }));
+        if (getStatusAktifLookup.type === 'local') {
+          const grpsToFilter = ['STATUS AKTIF'];
+
+          grpsToFilter.forEach((grp) => {
+            const filteredData = getStatusAktifLookup.data.filter(
+              (item: any) => item.grp === grp
+            );
+
+            dispatch(setData({ key: grp, data: filteredData }));
+            dispatch(setType({ key: grp, type: getStatusAktifLookup.type }));
+
+            const defaultValue = filteredData
+              .map((item: any) => item.default)
+              .find((val: any) => val !== null || '');
+
+            dispatch(setDefault({ key: grp, isdefault: String(defaultValue) }));
+          });
         }
       } catch (err) {
         console.error('Error fetching data:', err);
       }
     };
 
-    // Call the fetchData function to fetch and store data
     fetchData();
   }, [dispatch]);
 
   return (
     <PageContainer scrollable>
-      <Tabs defaultValue="overview" className="space-y-4">
-        <TabsContent value="overview" className="space-y-4">
-          <div className="grid h-fit grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-7">
-            <div className="col-span-10 h-[500px]">
-              <GridUser />
-            </div>
+      <div className="grid h-fit grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-7">
+        <div className="col-span-10 h-[500px]">
+          <GridUser />
+        </div>
 
-            <div className="col-span-10 h-[500px]">
-              <GridTabs />
-            </div>
-          </div>
-        </TabsContent>
-      </Tabs>
+        <div className="col-span-10 h-[500px]">
+          <GridTabs />
+        </div>
+      </div>
     </PageContainer>
   );
 };

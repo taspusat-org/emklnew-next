@@ -47,11 +47,16 @@ export const getHutangHeaderByIdFn = async (
 };
 
 export const getHutangDetailFn = async (
-  filters: GetParams = {}
+  filters: GetParams = {},
+  signal?: AbortSignal
 ): Promise<IAllHutangDetail> => {
   const queryParams = buildQueryParams(filters);
   const response = await api2.get(`/hutangdetail`, {
-    params: queryParams
+    params: queryParams,
+    // signal diteruskan agar request halaman lama bisa dibatalkan saat window
+    // lazy-load bergeser cepat; tanpa ini respons basi bisa mendarat belakangan
+    // dan menimpa isi window yang sudah benar.
+    signal
   });
   return response.data;
 };

@@ -4,6 +4,7 @@ import { REQUIRED_FIELD } from '@/constants/validation';
 import { dynamicRequiredMessage } from '../utils';
 
 export const userSchema = z.object({
+  id: z.string().nullable().optional(),
   username: z
     .string()
     .nonempty({ message: dynamicRequiredMessage('USERNAME') })
@@ -23,10 +24,17 @@ export const userSchema = z.object({
   email: z.string().nullable().optional(),
 
   statusaktif: z.string().min(1, `${REQUIRED_FIELD}`),
-  karyawan_id: z.number().nullable().optional(),
+  // karyawan.id kini uuid v7 (varchar) — z.number() membuat payload lookup
+  // karyawan selalu gagal validasi.
+  karyawan_id: z.string().nullable().optional(),
   namakaryawan: z.string().nullable().optional(),
   userId: z.string().nullable().optional(),
-  statusaktif_text: z.string().nullable().optional()
+  /**
+   * Teks status aktif untuk tampilan LookUp. Namanya `text` (bukan
+   * `statusaktif_text`) supaya sama dengan kolom hasil join backend dan
+   * dengan modul lain seperti groupbiayaextra.
+   */
+  text: z.string().nullable().optional()
 });
 
 export type UserInput = z.infer<typeof userSchema>;

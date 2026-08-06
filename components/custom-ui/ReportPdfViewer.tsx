@@ -12,8 +12,8 @@ import '@react-pdf-viewer/print/lib/styles/index.css';
 import { zoomPlugin } from '@react-pdf-viewer/zoom';
 // @ts-expect-error CSS side-effect import
 import '@react-pdf-viewer/zoom/lib/styles/index.css';
+import * as pdfjs from 'pdfjs-dist/package.json';
 
-import { pdfjs } from 'react-pdf';
 import { IoMdClose } from 'react-icons/io';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import CustomPrintModal from '@/components/custom-ui/CustomPrint';
@@ -62,12 +62,6 @@ function ReportPdfViewerContent({
     zoomPluginInstance,
     url
   );
-
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.js';
-    }
-  }, []);
 
   return (
     <>
@@ -197,7 +191,9 @@ function ReportPdfViewerContent({
           />
 
           {url ? (
-            <Worker workerUrl="/pdf.worker.min.js">
+            <Worker
+              workerUrl={`https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.js`}
+            >
               <Viewer
                 fileUrl={url}
                 defaultScale={1}
@@ -237,17 +233,16 @@ const ReportPdfViewer: React.FC<ReportPdfViewerProps> = ({
       }}
     >
       <DialogTitle hidden={true}>{title}</DialogTitle>
-      {/* Tinggi dikunci lewat `style`, bukan className: base DialogContent
-          sudah memasang `overflow-y-scroll`, dan pemenang antar utility
-          Tailwind ditentukan urutan di stylesheet — bukan urutan di atribut
-          class — sehingga `overflow-hidden` dari sini akan kalah.
-          `gridTemplateRows: minmax(0, 1fr)` membuat baris grid-nya definit;
-          tanpa itu baris `auto` + anak `h-full` jadi kasus siklik, tinggi
-          runtuh ke `auto`, dan `.rpv-core__inner-pages` (scroller milik
-          react-pdf-viewer) ikut setinggi seluruh dokumen sehingga tidak
-          pernah bisa di-scroll. */}
       <DialogContent
         className="min-w-full bg-white p-0"
+        // Toast export dirender di luar dialog (level provider). Tanpa ini,
+        // klik tombol Download-nya dianggap klik di luar modal dan ikut
+        // menutup viewer.
+        onInteractOutside={(event) => {
+          const target = (event.detail?.originalEvent?.target ??
+            event.target) as HTMLElement | null;
+          if (target?.closest?.('[data-report-toast]')) event.preventDefault();
+        }}
         style={{
           height: '100dvh',
           maxHeight: '100dvh',

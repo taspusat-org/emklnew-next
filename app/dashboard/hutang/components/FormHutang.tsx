@@ -511,7 +511,6 @@ const FormHutang = ({
                                 e.target.value
                               );
                             }}
-                            className="h-2 min-h-9 w-full rounded border border-gray-300"
                           />
                         </FormControl>
                         <FormMessage />
@@ -695,7 +694,6 @@ const FormHutang = ({
                       e.target.value
                     )
                   }
-                  className="h-2 min-h-9 w-full rounded border border-gray-300"
                 />
               )}
             </div>
@@ -785,7 +783,6 @@ const FormHutang = ({
                       e.target.value
                     )
                   }
-                  className="h-2 min-h-9 w-full rounded border border-gray-300"
                 />
               )}
             </div>
@@ -1033,7 +1030,18 @@ const FormHutang = ({
             <Form {...forms}>
               <form
                 ref={formRef}
-                onSubmit={onSubmit}
+                // `onSubmit` kini handler MENTAH dari grid, jadi pembungkusan
+                // handleSubmit dilakukan di sini. Submit native (mis. ENTER di
+                // sebuah field) diperlakukan sama dengan tombol SAVE:
+                // keepOpenModal = false, dialog menutup. Sebelumnya grid
+                // mengirim handler yang SUDAH dibungkus dan tombol memanggil
+                // onSubmit(false)/onSubmit(true); boolean itu mendarat di slot
+                // `event` milik handleSubmit sehingga ENTER ikut terbaca
+                // sebagai "SAVE & ADD" — dialog tetap terbuka dan fokus
+                // terjebak di dalamnya.
+                onSubmit={forms.handleSubmit((values: any) =>
+                  onSubmit(values, false)
+                )}
                 className="flex h-full flex-col gap-6"
               >
                 <div className="flex h-[100%] flex-col gap-2 lg:gap-3">
@@ -1182,9 +1190,7 @@ const FormHutang = ({
                           }
                           key={index}
                           {...props}
-                          lookupValue={(id) =>
-                            forms.setValue('relasi_id', id)
-                          }
+                          lookupValue={(id) => forms.setValue('relasi_id', id)}
                           lookupNama={forms.getValues('relasi_text')}
                         />
                       ))}
@@ -1234,12 +1240,16 @@ const FormHutang = ({
         <FormFooterButtons
           mode={mode}
           onSave={() => {
-            onSubmit(false);
-            dispatch(setSubmitClicked(true));
+            forms.handleSubmit((values: any) => {
+              onSubmit(values, false);
+              dispatch(setSubmitClicked(true));
+            })();
           }}
           onSaveAndAdd={() => {
-            onSubmit(true);
-            dispatch(setSubmitClicked(true));
+            forms.handleSubmit((values: any) => {
+              onSubmit(values, true);
+              dispatch(setSubmitClicked(true));
+            })();
           }}
           onCancel={handleClose}
           isLoadingCreate={isLoadingCreate}
