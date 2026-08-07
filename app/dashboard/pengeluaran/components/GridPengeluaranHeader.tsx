@@ -204,26 +204,10 @@ const GridPengeluaranHeader = () => {
   const ROW_HEIGHT = 27;
   const jumpToFirstRef = useRef(false);
   const jumpToLastRef = useRef(false);
-  // Id baris yang harus difokuskan Row Combiner setelah window settle pasca
-  // simpan. Fokus by-id lebih andal daripada selectCell by-index: index bisa
-  // meleset karena window pagination ikut bergeser saat re-render. Selama ref
-  // ini ter-set, Combiner TIDAK menjalankan cabang else (scroll ke row 0).
   const pendingFocusIdRef = useRef<string | null>(null);
-  // Diset true selama window settle pasca-mutasi (add/edit) untuk memblokir
-  // kedua data-effect memproses ulang hasil refetch — yang kalau tidak diblokir
-  // menimpa fokus ke baris 1. Ref (bukan state) supaya resetnya tidak memicu
-  // effect lagi. Pola ini disalin dari GridAlatbayar.
   const suppressRefetchRef = useRef(false);
-  // react-data-grid menandai sel yang sedang terpilih dengan tabindex=0 (sel lain
-  // -1). `selectCell()` sudah menetapkan sel terpilih -- highlight baris benar --
-  // tapi fokus DOM-nya belum tentu ikut: saat form ditutup pasca-simpan, Radix
-  // Dialog mengembalikan fokus ke tombol pemicu dan menimpa fokus sel. Karena
-  // onCloseAutoFocus di FormPengeluaran kini mematikan pengembalian itu, fokus
-  // tertinggal di <body>, jadi grid harus mengklaimnya sendiri di sini.
   const focusSelectedCell = () => {
     const active = document.activeElement as HTMLElement | null;
-    // Jangan rebut fokus kalau user sudah sengaja pindah ke input (mis. kolom
-    // filter atau search) selama jendela settle pasca-simpan.
     if (
       active &&
       (active.tagName === 'INPUT' ||
@@ -237,46 +221,18 @@ const GridPengeluaranHeader = () => {
     );
     cell?.focus({ preventScroll: true });
   };
-  // ⚠️ DIAGNOSTIK SEMENTARA — hapus setelah bug fokus pasca-save selesai.
-  // Filter console dengan "[FOKUS]" untuk melihat seluruh rantainya.
   const dbg = (...a: any[]) => console.log('[FOKUS]', ...a);
   const dbgActive = (tag: string) =>
     setTimeout(() => {
       const el = document.activeElement as HTMLElement | null;
       dbg(`activeElement@${tag}:`, el?.tagName, el?.className?.slice?.(0, 60));
     }, 0);
-  // Index display kolom yang akan di-focus setelah re-fetch (sort/filter).
-  // Default 1 = lewati kolom 'nomor' (idx 0).
   const pendingSelectIdxRef = useRef<number>(1);
-  // Filter input yang sedang fokus -- agar focus tetap di sana setelah re-fetch
-  // (Row Combiner mengembalikan focus + caret).
   const activeFilterInputRef = useRef<HTMLElement | null>(null);
-  // Versi ref dari isScrolling: di-set sinkron agar pengecekan di dalam
-  // handleScroll yang sama langsung melihat nilai terbaru. State `isScrolling`
-  // bersifat async, sehingga pada navigasi keyboard (hanya 1 event scroll per
-  // tekan PageUp/PageDown) closure-nya masih `false` dan pemicu fetch halaman
-  // berikutnya tidak pernah jalan. Ref ini mencegah masalah tsb.
   const isScrollingRef = useRef(false);
-  // Modalitas input terakhir: 'keyboard' (Arrow/Page) atau 'pointer' (wheel/drag
-  // scrollbar). Dipakai utk menentukan apakah selectCell harus di-re-anchor
-  // ke baris data yg sama setelah window-shift.
   const interactionModeRef = useRef<'keyboard' | 'pointer'>('pointer');
-  // Diset saat window benar-benar bergeser (shiftSelectionForWindow). Menandai
-  // apakah pergeseran itu dari keyboard, sehingga useLayoutEffect tahu apakah
-  // perlu re-anchor selectCell. Mouse scroll TIDAK boleh memindahkan sel aktif.
   const reanchorFromKeyboardRef = useRef(false);
-  // Menandai bahwa sedang ada transisi halaman (window-shift) agar Row Combiner
-  // tahu harus commit selectedRow bersamaan dengan setRows.
   const isPageTransitionRef = useRef(false);
-
-  // Saat window pagination bergeser (halaman atas/bawah keluar dari window),
-  // index setiap baris di array `rows` ikut bergeser sebanyak filters.limit.
-  // Fungsi ini menjaga agar baris DATA yang sama tetap ter-select dengan HANYA
-  // menggeser index (selectedRowRef) -- highlight digambar via getRowClass.
-  // CATATAN: setSelectedRow TIDAK dipanggil di sini -- ditunda ke Row Combiner
-  // agar commit bersamaan dengan setRows. Jika selectedRow di-update sekarang,
-  // akan ada 1 frame di mana selectedRow sudah bergeser tapi `rows` belum
-  // -> highlight kuning "berkedip".
   const shiftSelectionForWindow = (deltaRows: number) => {
     const next = Math.max(0, selectedRowRef.current + deltaRows);
     selectedRowRef.current = next;

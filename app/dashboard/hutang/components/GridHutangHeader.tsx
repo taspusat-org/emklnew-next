@@ -112,6 +112,7 @@ import { LoadRowsRenderer } from '@/components/LoadRows';
 import { EmptyRowsRenderer } from '@/components/EmptyRows';
 import { useSession } from 'next-auth/react';
 import { clearOnReload } from '@/lib/store/filterSlice/filterSlice';
+import { HEADER_ROW_HEIGHT, LIMIT, ROW_HEIGHT } from '@/constants/constant';
 
 interface Filter {
   page: number;
@@ -199,7 +200,6 @@ const GridHutangHeader = () => {
 
   const STREAM_BUFFER_SIZE = 5;
   const WINDOW_SIZE = 5;
-  const ROW_HEIGHT = 27;
   const jumpToFirstRef = useRef(false);
   const jumpToLastRef = useRef(false);
   // Id baris yang harus difokuskan Row Combiner setelah window settle pasca
@@ -308,7 +308,7 @@ const GridHutangHeader = () => {
 
   const [filters, setFilters] = useState<Filter>({
     page: 1,
-    limit: 50,
+    limit: LIMIT,
     filters: {
       ...filterHutang,
       tglDari: committed.tglDari,
@@ -2941,8 +2941,8 @@ const GridHutangHeader = () => {
             setSelectedCellKey(args.column.key);
             handleCellClick({ row: args.row });
           }}
-          headerRowHeight={70}
-          rowHeight={27}
+          headerRowHeight={HEADER_ROW_HEIGHT}
+          rowHeight={ROW_HEIGHT}
           className={`${isDark ? 'rdg-dark' : 'rdg-light'} fill-grid`}
           enableVirtualization={false}
           onColumnResize={onColumnResize}

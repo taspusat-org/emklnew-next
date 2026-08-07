@@ -11,7 +11,7 @@ export const jurnalumumDetailSchema = z.object({
 export type JurnalUmumDetailInput = z.infer<typeof jurnalumumDetailSchema>;
 
 export const jurnalumumHeaderSchema = z.object({
-  nobukti: z.string().nullable(),
+  nobukti: z.string().nullable().optional(),
   tglbukti: z.string().nullable(),
   keterangan: z.string().nullable(),
   details: z.array(jurnalumumDetailSchema).min(1)

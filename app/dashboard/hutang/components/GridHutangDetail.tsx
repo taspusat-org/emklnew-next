@@ -45,6 +45,7 @@ import { useTheme } from 'next-themes';
 import { EmptyRowsRenderer } from '@/components/EmptyRows';
 import { LoadRowsRenderer } from '@/components/LoadRows';
 import { useSession } from 'next-auth/react';
+import { HEADER_ROW_HEIGHT, LIMIT, ROW_HEIGHT } from '@/constants/constant';
 
 interface Filter {
   page: number;
@@ -79,7 +80,7 @@ const GridHutangDetail = ({
 
   const [filters, setFilters] = useState<Filter>({
     page: 1,
-    limit: 50,
+    limit: LIMIT,
     filters: {
       ...filterHutangDetail,
       nobukti: nobukti ?? headerData?.nobukti ?? ''
@@ -95,7 +96,6 @@ const GridHutangDetail = ({
   // ambang batas, data sudah ada dan window bergeser tanpa spinner.
   const WINDOW_SIZE = 5;
   const STREAM_BUFFER_SIZE = 5;
-  const ROW_HEIGHT = 30; // harus sama dengan prop rowHeight DataGrid di bawah
 
   const [shouldBulkFetch, setShouldBulkFetch] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
@@ -1765,7 +1765,7 @@ const GridHutangDetail = ({
             handleCellClick({ row: args.row });
           }}
           rowKeyGetter={rowKeyGetter}
-          headerRowHeight={70}
+          headerRowHeight={HEADER_ROW_HEIGHT}
           onCellKeyDown={handleKeyDown}
           rowHeight={ROW_HEIGHT}
           onScroll={handleScroll}

@@ -3,6 +3,7 @@ import React, {
   memo,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState
@@ -37,9 +38,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { api, api2 } from '@/lib/utils/AxiosInstance';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { reportMenuBySelectFn } from '@/lib/apis/menu.api';
 import { HiDocument } from 'react-icons/hi2';
-import { setReportData } from '@/lib/store/reportSlice/reportSlice';
 import { useDispatch } from 'react-redux';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useAlert } from '@/lib/store/client/useAlert';
@@ -53,7 +52,11 @@ import {
 import { setHeaderData } from '@/lib/store/headerSlice/headerSlice';
 import { debounce } from 'lodash';
 import FormKasGantung from './FormJurnalUmum';
-import { clearOpenName } from '@/lib/store/lookupSlice/lookupSlice';
+import {
+  clearOpenName,
+  setClearLookup
+} from '@/lib/store/lookupSlice/lookupSlice';
+import { clearOnReload } from '@/lib/store/filterSlice/filterSlice';
 import { checkBeforeDeleteFn } from '@/lib/apis/global.api';
 import { checkValidationKasGantungFn } from '@/lib/apis/kasgantungheader.api';
 import {
@@ -79,10 +82,10 @@ import {
   resetGridConfig,
   saveGridConfig
 } from '@/lib/utils';
-import { numberToTerbilang } from '@/lib/utils/terbilang';
 import {
-  getJurnalUmumDetailFn,
-  getJurnalUmumHeaderByIdFn
+  generateJurnalUmumHeaderExportFn,
+  generateJurnalUmumHeaderReportFn,
+  getJurnalUmumHeaderFn
 } from '@/lib/apis/jurnalumumheader.api';
 import FilterOptions from '@/components/custom-ui/FilterOptions';
 import { useApprovalDialog } from '@/lib/store/client/useDialogApproval';
@@ -108,6 +111,9 @@ import {
 } from '@/components/ui/select';
 import { LoadRowsRenderer } from '@/components/LoadRows';
 import { EmptyRowsRenderer } from '@/components/EmptyRows';
+import { useReportPdfContext } from '@/hooks/ReportPdfProvider';
+import { useFormError } from '@/lib/hooks/formErrorContext';
+import { HEADER_ROW_HEIGHT, LIMIT, ROW_HEIGHT } from '@/constants/constant';
 interface Filter {
   page: number;
   limit: number;
@@ -121,32 +127,65 @@ interface Filter {
 const GridJurnalUmumHeader = () => {
   const { theme, resolvedTheme } = useTheme();
   const isDark = theme === 'dark' || resolvedTheme === 'dark';
-  const [isFilteringRows, setIsFilteringRows] = useState(false);
   const [selectedRow, setSelectedRow] = useState<number>(0);
-  const [selectedCol, setSelectedCol] = useState<number>(0);
   const [isFirstLoad, setIsFirstLoad] = useState(true);
-  const searchParams = useSearchParams();
-  const [nobukti, setNobukti] = useState('');
+
   const [totalPages, setTotalPages] = useState(1);
   const [popOver, setPopOver] = useState<boolean>(false);
+  // Dinaikkan setiap "Save & Add" untuk me-remount form (Dialog) agar semu
+  const [addFormKey, setAddFormKey] = useState<number>(0);
+
+  const [isTransitioning, setIsTransitioning] = useState(false);
+  const [isAfterMutation, setIsAfterMutation] = useState(false);
+  const [shouldBulkFetch, setShouldBulkFetch] = useState(true);
+  const scrollPositionRef = useRef<number>(0);
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const prevRowsLengthRef = useRef<number>(0);
+  const prevMinPageRef = useRef<number>(1);
+  const hasAdjustedScrollRef = useRef<boolean>(false);
+  const [isFetching, setIsFetching] = useState(false);
+  const [isScrolling, setIsScrolling] = useState(false);
+  // Versi ref dari isScrolling: di-set sinkron agar pengecekan di dalam
+  // handleScroll yang sama langsung melihat nilai terbaru. State `isScrolling`
+  // bersifat async, sehingga pada navigasi keyboard (hanya 1 event scroll per
+  // tekan PageUp/PageDown) closure-nya masih `false` dan pemicu fetch halaman
+  // berikutnya tidak pernah jalan. Ref ini mencegah masalah tsb.
+  const isScrollingRef = useRef(false);
+  // Tambah ref baru di dekat ref lainnya
+  const pendingSelectIdxRef = useRef<number>(1); // default ke idx 1 (skip nomor/select)
+  const suppressScrollRef = useRef(false);
+  const isPageTransitionRef = useRef(false);
+  const { generateReport, generateExport } = useReportPdfContext();
+
+  const lastScrollTopRef = useRef<number>(0);
+  const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const pendingScrollAdjustment = useRef<number>(0);
+  const [visiblePages, setVisiblePages] = useState<number[]>([1, 2, 3, 4, 5]);
+  const minVisiblePage = useMemo(
+    () => Math.min(...visiblePages),
+    [visiblePages]
+  );
+  const [pageDataCache, setPageDataCache] = useState<
+    Map<number, JurnalUmumHeader[]>
+  >(new Map());
+
   const { mutateAsync: createJurnalUmum, isLoading: isLoadingCreate } =
     useCreateJurnalUmum();
   const { mutateAsync: updateJurnalUmum, isLoading: isLoadingUpdate } =
     useUpdateJurnalUmum();
-  const { successApproved } = useApprovalDialog();
   const [currentPage, setCurrentPage] = useState(1);
   const [inputValue, setInputValue] = useState<string>('');
   const [hasMore, setHasMore] = useState(true);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const lastDispatchedId = useRef<string | null>(null);
   const { mutateAsync: deleteJurnalUmum, isLoading: isLoadingDelete } =
     useDeleteJurnalUmum();
   const [columnsOrder, setColumnsOrder] = useState<readonly number[]>([]);
   const [columnsWidth, setColumnsWidth] = useState<{ [key: string]: number }>(
     {}
   );
-
   const [mode, setMode] = useState<string>('');
-
+  const [isFilteringRows, setIsFilteringRows] = useState(false);
   const [dataGridKey, setDataGridKey] = useState(0);
 
   const contextMenuRef = useRef<HTMLDivElement | null>(null);
@@ -155,21 +194,69 @@ const GridJurnalUmumHeader = () => {
     y: number;
   } | null>(null);
   const [fetchedPages, setFetchedPages] = useState<Set<number>>(new Set([1]));
-  const queryClient = useQueryClient();
+  const [bulkStartPage, setBulkStartPage] = useState(1);
+
   const [isFetchingManually, setIsFetchingManually] = useState(false);
   const [rows, setRows] = useState<JurnalUmumHeader[]>([]);
   const [isDataUpdated, setIsDataUpdated] = useState(false);
   const resizeDebounceTimeout = useRef<NodeJS.Timeout | null>(null); // Timer debounce untuk resize
-  const prevPageRef = useRef(currentPage);
   const dispatch = useDispatch();
   const [checkedRows, setCheckedRows] = useState<Set<string>>(new Set());
   const [isAllSelected, setIsAllSelected] = useState(false);
   const { alert } = useAlert();
-  const { user, cabang_id, token } = useSelector(
-    (state: RootState) => state.auth
+  const { user } = useSelector((state: RootState) => state.auth);
+  const selectedRowRef = useRef<number>(0);
+  useEffect(() => {
+    selectedRowRef.current = selectedRow;
+  }, [selectedRow]);
+  const pendingFocusIdRef = useRef<string | null>(null);
+  const suppressRefetchRef = useRef(false);
+  const activeFilterInputRef = useRef<HTMLElement | null>(null);
+  const [selectedCellKey, setSelectedCellKey] = useState<string>('nomor');
+  const streamBufferRef = useRef<Map<number, JurnalUmumHeader[]>>(new Map());
+  const prefetchingPagesRef = useRef<Set<number>>(new Set());
+  const STREAM_BUFFER_SIZE = 5;
+  const WINDOW_SIZE = 5;
+  const jumpToLastRef = useRef(false);
+  const jumpToFirstRef = useRef(false);
+  const { committed, onReload } = useSelector(
+    (state: RootState) => state.filter
   );
+  const interactionModeRef = useRef<'keyboard' | 'pointer'>('pointer');
+  const reanchorFromKeyboardRef = useRef(false);
+  const gridCellHadFocusRef = useRef(false);
+  const getSelectedGridCell = (): HTMLElement | null =>
+    gridRef.current?.element?.querySelector<HTMLElement>(
+      ':scope > [role="row"] > [role="gridcell"][tabindex="0"]'
+    ) ?? null;
+  useEffect(() => {
+    selectedRowRef.current = selectedRow;
+  }, [selectedRow]);
+  const isSelectedGridCellFocused = () => {
+    const cell = getSelectedGridCell();
+    return cell !== null && cell === document.activeElement;
+  };
+
+  const restoreGridCellFocus = () => {
+    if (!gridCellHadFocusRef.current) return;
+    gridCellHadFocusRef.current = false;
+    getSelectedGridCell()?.focus({ preventScroll: true });
+  };
+
+  const shiftSelectionForWindow = (deltaRows: number) => {
+    const fromKeyboard = interactionModeRef.current === 'keyboard';
+    reanchorFromKeyboardRef.current = fromKeyboard;
+
+    gridCellHadFocusRef.current = isSelectedGridCellFocused();
+    if (!fromKeyboard) return;
+
+    const next = Math.max(0, selectedRowRef.current + deltaRows);
+    selectedRowRef.current = next;
+  };
+
   const forms = useForm<JurnalUmumHeaderInput>({
-    resolver: zodResolver(jurnalumumHeaderSchema),
+    resolver:
+      mode === 'delete' ? undefined : zodResolver(jurnalumumHeaderSchema),
     mode: 'onSubmit',
     defaultValues: {
       nobukti: '',
@@ -178,206 +265,51 @@ const GridJurnalUmumHeader = () => {
       details: []
     }
   });
-  const gridRef = useRef<DataGridHandle>(null);
-  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const {
+    setFocus,
+    reset,
+    formState: { isSubmitSuccessful }
+  } = forms;
   const router = useRouter();
-  const { selectedDate, selectedDate2, onReload } = useSelector(
-    (state: RootState) => state.filter
-  );
   const [filters, setFilters] = useState<Filter>({
     page: 1,
-    limit: 30,
+    limit: LIMIT,
     filters: {
       ...filterJurnalUmum,
-      tglDari: selectedDate,
-      tglSampai: selectedDate2
+      tglDari: committed.tglDari,
+      tglSampai: committed.tglSampai
     },
     isreload: true, // Set true untuk first load
     search: '',
     sortBy: 'nobukti',
     sortDirection: 'asc'
   });
-  const abortControllerRef = useRef<AbortController | null>(null);
-
+  const gridRef = useRef<DataGridHandle>(null);
   const [prevFilters, setPrevFilters] = useState<Filter>(filters);
-
-  const queryParams = useMemo(
-    () => ({
-      page: currentPage,
-      limit: filters.limit,
-      search: filters.search,
-      filters: filters.filters,
-      sortBy: filters.sortBy,
-      sortDirection: filters.sortDirection,
-      isreload: filters.isreload
-    }),
-    [currentPage, filters]
-  );
-
-  const {
-    data: allData,
-    isLoading: isLoadingData,
-    refetch
-  } = useGetJurnalUmumHeader(queryParams, abortControllerRef.current?.signal);
-
-  // Debug log
-  useEffect(() => {
-    console.log('Query params:', queryParams);
-  }, [queryParams]);
+  const effectiveLimit = shouldBulkFetch ? filters.limit * 5 : filters.limit;
   const inputColRefs = useRef<{ [key: string]: HTMLInputElement | null }>({});
-
-  const debouncedFilterUpdate = useRef(
-    debounce((colKey: string, value: string) => {
-      setFilters((prev) => ({
-        ...prev,
-        filters: { ...prev.filters, [colKey]: value },
-        page: 1,
-        isreload: false
-      }));
-      setCheckedRows(new Set());
-      setIsAllSelected(false);
-      setRows([]);
-      setCurrentPage(1);
-      setSelectedRow(0);
-    }, 300) // Bisa dikurangi jadi 250-300ms
-  ).current;
-
-  const handleFilterInputChange = useCallback(
-    (colKey: string, value: string) => {
-      cancelPreviousRequest(abortControllerRef);
-      debouncedFilterUpdate(colKey, value);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const { data: allData, isLoading: isLoadingData } = useGetJurnalUmumHeader(
+    {
+      ...filters,
+      page: shouldBulkFetch ? bulkStartPage : currentPage,
+      limit: effectiveLimit
     },
-    []
+    abortControllerRef.current?.signal
   );
-  const handleClearFilter = useCallback((colKey: string) => {
-    cancelPreviousRequest(abortControllerRef);
-    debouncedFilterUpdate.cancel(); // Cancel pending updates
 
-    setFilters((prev) => ({
-      ...prev,
-      filters: { ...prev.filters, [colKey]: '' },
-      page: 1
-    }));
-    setCheckedRows(new Set());
-    setIsAllSelected(false);
-    setRows([]);
-    setCurrentPage(1);
-  }, []);
+  const currentMinPage =
+    visiblePages.length > 0 ? Math.min(...visiblePages) : 1;
+  const startRow = (currentMinPage - 1) * filters.limit + 1;
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const searchValue = e.target.value;
-    setInputValue(searchValue);
-
-    cancelPreviousRequest(abortControllerRef);
-    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
-
-    debounceTimerRef.current = setTimeout(() => {
-      setCurrentPage(1);
-      setFilters((prev) => ({
-        ...prev,
-        filters: {
-          ...filterJurnalUmum,
-          tglDari: prev.filters.tglDari,
-          tglSampai: prev.filters.tglSampai
-        },
-        search: searchValue,
-        page: 1,
-        isreload: false // Tambahkan ini
-      }));
-
-      setCheckedRows(new Set());
-      setIsAllSelected(false);
-      setTimeout(() => {
-        gridRef?.current?.selectCell({ rowIdx: 0, idx: 1 });
-      }, 100);
-
-      setTimeout(() => {
-        if (inputRef.current) {
-          inputRef.current.focus();
-        }
-      }, 200);
-      setSelectedRow(0);
-      setCurrentPage(1);
-      setRows([]);
-    }, 300);
-  };
-
-  useEffect(() => {
-    return () => {
-      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
-    };
-  }, []);
-  const handleSort = (column: string) => {
-    const newSortOrder =
-      filters.sortBy === column && filters.sortDirection === 'asc'
-        ? 'desc'
-        : 'asc';
-
-    setFilters((prevFilters) => ({
-      ...prevFilters,
-      sortBy: column,
-      sortDirection: newSortOrder,
-      page: 1,
-      isreload: false // Ubah ke false saat sorting
-    }));
-    setTimeout(() => {
-      gridRef?.current?.selectCell({ rowIdx: 0, idx: 1 });
-    }, 200);
-    setSelectedRow(0);
-
-    setCurrentPage(1);
-    setFetchedPages(new Set([1]));
-    setRows([]);
-  };
-
-  const handleRowSelect = (rowId: number) => {
-    setCheckedRows((prev) => {
-      const updated = new Set(prev);
-      if (updated.has(rowId)) {
-        updated.delete(rowId);
-      } else {
-        updated.add(rowId);
-      }
-
-      setIsAllSelected(updated.size === rows.length);
-      return updated;
-    });
-  };
-  const handleSelectAll = () => {
-    if (isAllSelected) {
-      setCheckedRows(new Set());
-    } else {
-      const allIds = rows.map((row) => row.id);
-      setCheckedRows(new Set(allIds));
-    }
-    setIsAllSelected(!isAllSelected);
-  };
-
-  const handleFilterRows = (val: string) => {
-    setIsFilteringRows(true);
-    // setLocalSelectedValue(val);
-    // onChange?.(val);
-    setTimeout(() => {
-      setIsFilteringRows(false);
-    }, 1000);
-  };
-
-  const handleClearInput = () => {
-    cancelPreviousRequest(abortControllerRef);
-    setFilters((prev) => ({
-      ...prev,
-      filters: {
-        ...filterJurnalUmum,
-        tglDari: prev.filters.tglDari,
-        tglSampai: prev.filters.tglSampai
-      },
-      search: '',
-      page: 1,
-      isreload: false // Tambahkan ini
-    }));
-    setInputValue('');
-    setCurrentPage(1);
-    setRows([]);
+  const resetBufferingCache = () => {
+    setShouldBulkFetch(true);
+    setBulkStartPage(1);
+    setPageDataCache(new Map());
+    setVisiblePages([1, 2, 3, 4, 5]);
+    setIsFetching(false);
+    streamBufferRef.current = new Map();
+    prefetchingPagesRef.current = new Set();
   };
 
   const columns = useMemo((): Column<JurnalUmumHeader>[] => {
@@ -387,7 +319,7 @@ const GridJurnalUmumHeader = () => {
         name: 'NO',
         width: 50,
         headerCellClass: 'column-headers',
-        renderHeaderCell: (column: any) => (
+        renderHeaderCell: () => (
           <div className="flex h-full flex-col items-center gap-1">
             <div className="headers-cell h-[50%] items-center justify-center text-center">
               <p className="text-sm font-normal">No.</p>
@@ -412,10 +344,14 @@ const GridJurnalUmumHeader = () => {
           </div>
         ),
         renderCell: (props: any) => {
-          const rowIndex = rows.findIndex((row) => row.id === props.row.id);
+          const localIndex = rows.findIndex((row) => row.id === props.row.id);
+          const absoluteNumber =
+            localIndex === -1
+              ? '—'
+              : (minVisiblePage - 1) * filters.limit + localIndex + 1;
           return (
             <div className="flex h-full w-full cursor-pointer items-center justify-center text-sm">
-              {rowIndex + 1}
+              {absoluteNumber}
             </div>
           );
         }
@@ -425,7 +361,7 @@ const GridJurnalUmumHeader = () => {
         name: '',
         width: 50,
         headerCellClass: 'column-headers',
-        renderHeaderCell: (column: any) => (
+        renderHeaderCell: () => (
           <div className="flex h-full cursor-pointer flex-col items-center gap-1">
             <div
               className="headers-cell h-[50%]"
@@ -453,16 +389,18 @@ const GridJurnalUmumHeader = () => {
           </div>
         )
       },
-
       {
         key: 'nobukti',
-        name: 'Nomor Bukti',
+        name: 'No. Bukti',
         resizable: true,
         draggable: true,
-        width: 300,
+        width: 250,
         headerCellClass: 'column-headers',
-        renderHeaderCell: (column: any) => (
-          <div className="flex h-full cursor-pointer flex-col items-center gap-1">
+        renderHeaderCell: () => (
+          <div
+            title="NO. BUKTI"
+            className="flex h-full cursor-pointer flex-col items-center gap-1"
+          >
             <div
               className="headers-cell h-[50%] px-8"
               onClick={() => handleSort('nobukti')}
@@ -489,6 +427,7 @@ const GridJurnalUmumHeader = () => {
                 )}
               </div>
             </div>
+
             <div className="relative h-[50%] w-full px-1">
               <FilterInput
                 colKey="nobukti"
@@ -506,35 +445,29 @@ const GridJurnalUmumHeader = () => {
           const columnFilter = filters.filters.nobukti || '';
           const cellValue = props.row.nobukti || '';
           return (
-            <TooltipProvider delayDuration={0}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="m-0 flex h-full cursor-pointer items-center p-0 text-sm">
-                    {highlightText(cellValue, filters.search, columnFilter)}
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent
-                  side="right"
-                  className="rounded-none border border-zinc-400 bg-white text-sm text-zinc-900"
-                >
-                  <p>{cellValue}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <div
+              title={cellValue}
+              className="m-0 flex h-full cursor-pointer items-center p-0 text-sm"
+            >
+              {highlightText(cellValue, filters.search, columnFilter)}
+            </div>
           );
         }
       },
       {
         key: 'tglbukti',
-        name: 'Tanggal Bukti',
+        name: ' Tanggal Bukti',
         resizable: true,
         draggable: true,
-        headerCellClass: 'column-headers',
         width: 250,
-        renderHeaderCell: (column: any) => (
-          <div className="flex h-full cursor-pointer flex-col items-center gap-1">
+        headerCellClass: 'column-headers',
+        renderHeaderCell: () => (
+          <div
+            title="Tanggal Bukti"
+            className="flex h-full cursor-pointer flex-col items-center gap-1"
+          >
             <div
-              className="headers-cell h-[50%]"
+              className="headers-cell h-[50%] px-8"
               onClick={() => handleSort('tglbukti')}
               onContextMenu={(event) =>
                 setContextMenu(handleContextMenu(event))
@@ -577,21 +510,12 @@ const GridJurnalUmumHeader = () => {
           const columnFilter = filters.filters.tglbukti || '';
           const cellValue = props.row.tglbukti || '';
           return (
-            <TooltipProvider delayDuration={0}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="m-0 flex h-full cursor-pointer items-center p-0 text-sm">
-                    {highlightText(cellValue, filters.search, columnFilter)}
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent
-                  side="right"
-                  className="rounded-none border border-zinc-400 bg-white text-sm text-zinc-900"
-                >
-                  <p>{cellValue}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <div
+              title={cellValue}
+              className="m-0 flex h-full cursor-pointer items-center p-0 text-sm"
+            >
+              {highlightText(cellValue, filters.search, columnFilter)}
+            </div>
           );
         }
       },
@@ -600,12 +524,15 @@ const GridJurnalUmumHeader = () => {
         name: 'Keterangan',
         resizable: true,
         draggable: true,
-        headerCellClass: 'column-headers',
         width: 250,
-        renderHeaderCell: (column: any) => (
-          <div className="flex h-full cursor-pointer flex-col items-center gap-1">
+        headerCellClass: 'column-headers',
+        renderHeaderCell: () => (
+          <div
+            title="KETERANGAN"
+            className="flex h-full cursor-pointer flex-col items-center gap-1"
+          >
             <div
-              className="headers-cell h-[50%]"
+              className="headers-cell h-[50%] px-8"
               onClick={() => handleSort('keterangan')}
               onContextMenu={(event) =>
                 setContextMenu(handleContextMenu(event))
@@ -650,21 +577,12 @@ const GridJurnalUmumHeader = () => {
           const columnFilter = filters.filters.keterangan || '';
           const cellValue = props.row.keterangan || '';
           return (
-            <TooltipProvider delayDuration={0}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="m-0 flex h-full cursor-pointer items-center p-0 text-sm">
-                    {highlightText(cellValue, filters.search, columnFilter)}
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent
-                  side="right"
-                  className="rounded-none border border-zinc-400 bg-white text-sm text-zinc-900"
-                >
-                  <p>{cellValue}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <div
+              title={cellValue}
+              className="m-0 flex h-full cursor-pointer items-center p-0 text-sm"
+            >
+              {highlightText(cellValue, filters.search, columnFilter)}
+            </div>
           );
         }
       },
@@ -673,12 +591,15 @@ const GridJurnalUmumHeader = () => {
         name: 'Posting Dari',
         resizable: true,
         draggable: true,
-        headerCellClass: 'column-headers',
         width: 250,
-        renderHeaderCell: (column: any) => (
-          <div className="flex h-full cursor-pointer flex-col items-center gap-1">
+        headerCellClass: 'column-headers',
+        renderHeaderCell: () => (
+          <div
+            title="Posting Dari"
+            className="flex h-full cursor-pointer flex-col items-center gap-1"
+          >
             <div
-              className="headers-cell h-[50%]"
+              className="headers-cell h-[50%] px-8"
               onClick={() => handleSort('postingdari')}
               onContextMenu={(event) =>
                 setContextMenu(handleContextMenu(event))
@@ -723,21 +644,12 @@ const GridJurnalUmumHeader = () => {
           const columnFilter = filters.filters.postingdari || '';
           const cellValue = props.row.postingdari || '';
           return (
-            <TooltipProvider delayDuration={0}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="m-0 flex h-full cursor-pointer items-center p-0 text-sm">
-                    {highlightText(cellValue, filters.search, columnFilter)}
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent
-                  side="right"
-                  className="rounded-none border border-zinc-400 bg-white text-sm text-zinc-900"
-                >
-                  <p>{cellValue}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <div
+              title={cellValue}
+              className="m-0 flex h-full cursor-pointer items-center p-0 text-sm"
+            >
+              {highlightText(cellValue, filters.search, columnFilter)}
+            </div>
           );
         }
       },
@@ -746,12 +658,15 @@ const GridJurnalUmumHeader = () => {
         name: 'STATUS APPROVAL TRANSAKSI',
         resizable: true,
         draggable: true,
+        width: 250,
         headerCellClass: 'column-headers',
-        width: 50,
         renderHeaderCell: (column: any) => (
-          <div className="flex h-full cursor-pointer flex-col items-center gap-1">
+          <div
+            title="STATUS APPROVAL TRANSAKSI"
+            className="flex h-full cursor-pointer flex-col items-center gap-1"
+          >
             <div
-              className="headers-cell h-[50%]"
+              className="headers-cell h-[50%] px-8"
               onClick={() => handleSort('statusapproval')}
               onContextMenu={(event) =>
                 setContextMenu(handleContextMenu(event))
@@ -797,40 +712,30 @@ const GridJurnalUmumHeader = () => {
           const memoData = props.row.statusapproval
             ? JSON.parse(props.row.statusapproval)
             : null;
-
           if (memoData) {
             return (
-              <TooltipProvider delayDuration={0}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <div className="flex h-full w-full items-center justify-center py-1">
-                      <div
-                        className="m-0 flex h-full w-fit cursor-pointer items-center justify-center p-0"
-                        style={{
-                          backgroundColor: memoData.WARNA,
-                          color: memoData.WARNATULISAN,
-                          padding: '2px 6px',
-                          borderRadius: '2px',
-                          textAlign: 'left',
-                          fontWeight: '600'
-                        }}
-                      >
-                        <p style={{ fontSize: '13px' }}>{memoData.SINGKATAN}</p>
-                      </div>
-                    </div>
-                  </TooltipTrigger>
-                  <TooltipContent
-                    side="right"
-                    className="rounded-none border border-zinc-400 bg-white text-sm text-zinc-900"
-                  >
-                    <p>{memoData.MEMO}</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
+              <div
+                title={memoData.MEMO}
+                className="flex h-full w-full items-center justify-center py-1"
+              >
+                <div
+                  className="m-0 flex h-full w-fit cursor-pointer items-center justify-center p-0"
+                  style={{
+                    backgroundColor: memoData.WARNA,
+                    color: memoData.WARNATULISAN,
+                    padding: '2px 6px',
+                    borderRadius: '2px',
+                    textAlign: 'left',
+                    fontWeight: '600'
+                  }}
+                >
+                  <p style={{ fontSize: '13px', color: memoData.WARNATULISAN }}>
+                    {memoData.SINGKATAN}
+                  </p>
+                </div>
+              </div>
             );
           }
-
-          return <div className="text-xs text-gray-500">N/A</div>; // Tampilkan 'N/A' jika memo tidak tersedia
         }
       },
       {
@@ -838,12 +743,15 @@ const GridJurnalUmumHeader = () => {
         name: 'STATUS CETAK',
         resizable: true,
         draggable: true,
+        width: 250,
         headerCellClass: 'column-headers',
-        width: 50,
         renderHeaderCell: (column: any) => (
-          <div className="flex h-full cursor-pointer flex-col items-center gap-1">
+          <div
+            title="STATUS CETAK"
+            className="flex h-full cursor-pointer flex-col items-center gap-1"
+          >
             <div
-              className="headers-cell h-[50%]"
+              className="headers-cell h-[50%] px-8"
               onClick={() => handleSort('statuscetak')}
               onContextMenu={(event) =>
                 setContextMenu(handleContextMenu(event))
@@ -875,7 +783,7 @@ const GridJurnalUmumHeader = () => {
                 endpoint="parameter"
                 value="id"
                 label="text"
-                filterBy={{ grp: 'STATUS NILAI', subgrp: 'STATUS NILAI' }}
+                filterBy={{ grp: 'STATUS APPROVAL', subgrp: 'STATUS APPROVAL' }}
                 onChange={(value) =>
                   handleFilterInputChange('statuscetak', value)
                 } // Menangani perubahan nilai di parent
@@ -889,62 +797,55 @@ const GridJurnalUmumHeader = () => {
             : null;
           if (memoData) {
             return (
-              <TooltipProvider delayDuration={0}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <div className="flex h-full w-full items-center justify-center py-1">
-                      <div
-                        className="m-0 flex h-full w-fit cursor-pointer items-center justify-center p-0"
-                        style={{
-                          backgroundColor: memoData.WARNA,
-                          color: memoData.WARNATULISAN,
-                          padding: '2px 6px',
-                          borderRadius: '2px',
-                          textAlign: 'left',
-                          fontWeight: '600'
-                        }}
-                      >
-                        <p style={{ fontSize: '13px' }}>{memoData.SINGKATAN}</p>
-                      </div>
-                    </div>
-                  </TooltipTrigger>
-                  <TooltipContent
-                    side="right"
-                    className="rounded-none border border-zinc-400 bg-white text-sm text-zinc-900"
-                  >
-                    <p>{memoData.MEMO}</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
+              <div
+                title={memoData.MEMO}
+                className="flex h-full w-full items-center justify-center py-1"
+              >
+                <div
+                  className="m-0 flex h-full w-fit cursor-pointer items-center justify-center p-0"
+                  style={{
+                    backgroundColor: memoData.WARNA,
+                    color: memoData.WARNATULISAN,
+                    padding: '2px 6px',
+                    borderRadius: '2px',
+                    textAlign: 'left',
+                    fontWeight: '600'
+                  }}
+                >
+                  <p style={{ fontSize: '13px', color: memoData.WARNATULISAN }}>
+                    {memoData.SINGKATAN}
+                  </p>
+                </div>
+              </div>
             );
           }
-
-          return <div className="text-xs text-gray-500">N/A</div>; // Tampilkan 'N/A' jika memo tidak tersedia
         }
       },
-
       {
         key: 'modifiedby',
         name: 'Modified By',
         resizable: true,
         draggable: true,
-        width: 150,
         headerCellClass: 'column-headers',
-        renderHeaderCell: (column: any) => (
-          <div className="flex h-full cursor-pointer flex-col items-center gap-1">
+        width: 150,
+        renderHeaderCell: () => (
+          <div
+            title="MODIFIED BY"
+            className="flex h-full cursor-pointer flex-col items-center gap-1"
+          >
             <div
               className="headers-cell h-[50%]"
+              onClick={() => handleSort('modifiedby')}
               onContextMenu={(event) =>
                 setContextMenu(handleContextMenu(event))
               }
-              onClick={() => handleSort('modifiedby')}
             >
               <p
                 className={`text-sm ${
                   filters.sortBy === 'modifiedby' ? 'font-bold' : 'font-normal'
                 }`}
               >
-                Modified By
+                MODIFIED BY
               </p>
               <div className="ml-2">
                 {filters.sortBy === 'modifiedby' &&
@@ -978,21 +879,12 @@ const GridJurnalUmumHeader = () => {
           const columnFilter = filters.filters.modifiedby || '';
           const cellValue = props.row.modifiedby || '';
           return (
-            <TooltipProvider delayDuration={0}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="m-0 flex h-full cursor-pointer items-center p-0 text-sm">
-                    {highlightText(cellValue, filters.search, columnFilter)}
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent
-                  side="right"
-                  className="rounded-none border border-zinc-400 bg-white text-sm text-zinc-900"
-                >
-                  <p>{cellValue}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <div
+              title={cellValue}
+              className="m-0 flex h-full cursor-pointer items-center p-0 text-sm"
+            >
+              {highlightText(cellValue, filters.search, columnFilter)}
+            </div>
           );
         }
       },
@@ -1003,8 +895,11 @@ const GridJurnalUmumHeader = () => {
         draggable: true,
         headerCellClass: 'column-headers',
         width: 250,
-        renderHeaderCell: (column: any) => (
-          <div className="flex h-full cursor-pointer flex-col items-center gap-1">
+        renderHeaderCell: () => (
+          <div
+            title="CREATED AT"
+            className="flex h-full cursor-pointer flex-col items-center gap-1"
+          >
             <div
               className="headers-cell h-[50%]"
               onClick={() => handleSort('created_at')}
@@ -1051,21 +946,12 @@ const GridJurnalUmumHeader = () => {
           const columnFilter = filters.filters.created_at || '';
           const cellValue = props.row.created_at || '';
           return (
-            <TooltipProvider delayDuration={0}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="m-0 flex h-full cursor-pointer items-center p-0 text-sm">
-                    {highlightText(cellValue, filters.search, columnFilter)}
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent
-                  side="right"
-                  className="rounded-none border border-zinc-400 bg-white text-sm text-zinc-900"
-                >
-                  <p>{cellValue}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <div
+              title={cellValue}
+              className="m-0 flex h-full cursor-pointer items-center p-0 text-sm"
+            >
+              {highlightText(cellValue, filters.search, columnFilter)}
+            </div>
           );
         }
       },
@@ -1074,12 +960,13 @@ const GridJurnalUmumHeader = () => {
         name: 'Updated At',
         resizable: true,
         draggable: true,
-
         headerCellClass: 'column-headers',
-
         width: 250,
-        renderHeaderCell: (column: any) => (
-          <div className="flex h-full cursor-pointer flex-col items-center gap-1">
+        renderHeaderCell: () => (
+          <div
+            title="UPDATED AT"
+            className="flex h-full cursor-pointer flex-col items-center gap-1"
+          >
             <div
               className="headers-cell h-[50%]"
               onClick={() => handleSort('updated_at')}
@@ -1126,32 +1013,208 @@ const GridJurnalUmumHeader = () => {
           const columnFilter = filters.filters.updated_at || '';
           const cellValue = props.row.updated_at || '';
           return (
-            <TooltipProvider delayDuration={0}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="m-0 flex h-full cursor-pointer items-center p-0 text-sm">
-                    {highlightText(cellValue, filters.search, columnFilter)}
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent
-                  side="right"
-                  className="rounded-none border border-zinc-400 bg-white text-sm text-zinc-900"
-                >
-                  <p>{cellValue}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <div
+              title={cellValue}
+              className="m-0 flex h-full cursor-pointer items-center p-0 text-sm"
+            >
+              {highlightText(cellValue, filters.search, columnFilter)}
+            </div>
           );
         }
       }
     ];
-  }, [
-    rows,
-    checkedRows,
-    filters.sortBy,
-    filters.sortDirection,
-    filters.filters
-  ]);
+  }, [filters, checkedRows, isAllSelected, rows, minVisiblePage]);
+
+  const debouncedFilterUpdate = useRef(
+    debounce((updates: Record<string, string>) => {
+      setFilters((prev) => ({
+        ...prev,
+        filters: { ...prev.filters, ...updates },
+        page: 1
+      }));
+      setCheckedRows(new Set());
+      setIsAllSelected(false);
+      setRows([]);
+      setCurrentPage(1);
+      setSelectedRow(0);
+      resetBufferingCache();
+    }, 300)
+  ).current;
+
+  const pendingUpdates = useRef<Record<string, string>>({});
+
+  const handleFilterInputChange = useCallback(
+    (colKey: string, value: string) => {
+      cancelPreviousRequest(abortControllerRef);
+      pendingUpdates.current[colKey] = value;
+
+      // ✅ Hanya track jika activeElement memang filter input kolom ini
+      const active = document.activeElement as HTMLElement | null;
+      if (
+        active &&
+        (active.classList.contains('filter-input') ||
+          active.tagName === 'INPUT') &&
+        active !== inputRef.current // bukan global search
+      ) {
+        activeFilterInputRef.current = active;
+      }
+
+      const originalIndex = columns.findIndex((col) => col.key === colKey);
+      const displayIndex =
+        columnsOrder.length > 0
+          ? columnsOrder.findIndex((idx) => idx === originalIndex)
+          : originalIndex;
+      pendingSelectIdxRef.current = displayIndex >= 0 ? displayIndex : 1;
+
+      debouncedFilterUpdate(pendingUpdates.current);
+    },
+    [columns, columnsOrder]
+  );
+
+  const handleClearFilter = useCallback(
+    (colKey: string) => {
+      cancelPreviousRequest(abortControllerRef);
+      debouncedFilterUpdate.cancel();
+      pendingUpdates.current[colKey] = '';
+
+      // ✅ Arahkan ke kolom yang di-clear
+      const originalIndex = columns.findIndex((col) => col.key === colKey);
+      const displayIndex =
+        columnsOrder.length > 0
+          ? columnsOrder.findIndex((idx) => idx === originalIndex)
+          : originalIndex;
+      pendingSelectIdxRef.current = displayIndex >= 0 ? displayIndex : 1;
+
+      setFilters((prev) => ({
+        ...prev,
+        filters: { ...prev.filters, [colKey]: '' },
+        page: 1
+      }));
+      setCheckedRows(new Set());
+      setIsAllSelected(false);
+      setRows([]);
+      setCurrentPage(1);
+      resetBufferingCache();
+    },
+    [columns, columnsOrder]
+  );
+
+  const { clearError } = useFormError();
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    cancelPreviousRequest(abortControllerRef);
+    const searchValue = e.target.value;
+
+    // ✅ Track global search input agar focus bisa di-restore
+    activeFilterInputRef.current = inputRef.current;
+    pendingSelectIdxRef.current = 1;
+
+    setInputValue(searchValue);
+    setCurrentPage(1);
+    setFilters((prev) => ({
+      ...prev,
+      filters: {
+        ...filterJurnalUmum,
+        tglDari: prev.filters.tglDari,
+        tglSampai: prev.filters.tglSampai
+      },
+      search: searchValue,
+      page: 1,
+      isreload: false // Tambahkan ini
+    }));
+
+    setCheckedRows(new Set());
+    setIsAllSelected(false);
+    resetBufferingCache();
+    setSelectedRow(0);
+    setCurrentPage(1);
+    setRows([]);
+  };
+
+  const handleSort = (column: string) => {
+    const originalIndex = columns.findIndex((col) => col.key === column);
+
+    const displayIndex =
+      columnsOrder.length > 0
+        ? columnsOrder.findIndex((idx) => idx === originalIndex)
+        : originalIndex;
+
+    activeFilterInputRef.current = null; // ✅ Sort bukan dari input, tidak perlu restore focus
+    pendingSelectIdxRef.current = displayIndex >= 0 ? displayIndex : 1;
+
+    const newSortOrder =
+      filters.sortBy === column && filters.sortDirection === 'asc'
+        ? 'desc'
+        : 'asc';
+
+    setFilters((prevFilters) => ({
+      ...prevFilters,
+      sortBy: column,
+      sortDirection: newSortOrder,
+      page: 1
+    }));
+    resetBufferingCache();
+    setTimeout(() => {
+      gridRef?.current?.scrollToCell({ rowIdx: 0, idx: displayIndex });
+    }, 200);
+    setSelectedRow(0);
+    setCurrentPage(1);
+    setFetchedPages(new Set([1]));
+    setRows([]);
+  };
+
+  const handleRowSelect = (rowId: string) => {
+    setCheckedRows((prev) => {
+      const updated = new Set(prev);
+      if (updated.has(rowId)) {
+        updated.delete(rowId);
+      } else {
+        updated.add(rowId);
+      }
+
+      setIsAllSelected(updated.size === rows.length);
+      return updated;
+    });
+  };
+
+  const handleSelectAll = () => {
+    if (isAllSelected) {
+      setCheckedRows(new Set());
+    } else {
+      const allIds = rows.map((row) => row.id);
+      setCheckedRows(new Set(allIds));
+    }
+    setIsAllSelected(!isAllSelected);
+  };
+
+  const handleFilterRows = (val: string) => {
+    setIsFilteringRows(true);
+    setTimeout(() => {
+      setIsFilteringRows(false);
+    }, 1000);
+  };
+
+  const handleClearInput = () => {
+    cancelPreviousRequest(abortControllerRef);
+    debouncedFilterUpdate.cancel();
+    activeFilterInputRef.current = null;
+    pendingSelectIdxRef.current = 1; // ✅ Reset ke default idx 1
+    setFilters((prev) => ({
+      ...prev,
+      filters: {
+        ...prev.filters
+      },
+      search: '',
+      page: 1
+    }));
+    setCheckedRows(new Set());
+    setIsAllSelected(false);
+    setRows([]);
+    setCurrentPage(1);
+    resetBufferingCache();
+    gridRef?.current?.scrollToCell?.({ rowIdx: 0, idx: 0 });
+    setInputValue('');
+  };
 
   const onColumnResize = (index: number, width: number) => {
     // 1) Dapatkan key kolom yang di-resize
@@ -1170,13 +1233,14 @@ const GridJurnalUmumHeader = () => {
     //    saveGridConfig akan dipanggil
     resizeDebounceTimeout.current = setTimeout(() => {
       saveGridConfig(
-        user.id,
-        'GridJurnalUmumHeader',
+        String(user?.id),
+        'GridGroupbiayaextra',
         [...columnsOrder],
         newWidthMap
       );
     }, 300);
   };
+
   const onColumnsReorder = (sourceKey: string, targetKey: string) => {
     setColumnsOrder((prevOrder) => {
       const sourceIndex = prevOrder.findIndex(
@@ -1190,89 +1254,635 @@ const GridJurnalUmumHeader = () => {
       newOrder.splice(targetIndex, 0, newOrder.splice(sourceIndex, 1)[0]);
 
       saveGridConfig(
-        user.id,
-        'GridJurnalUmumHeader',
+        String(user?.id),
+        'GridGroupbiayaextra',
         [...newOrder],
         columnsWidth
       );
       return newOrder;
     });
   };
-  function isAtTop({ currentTarget }: React.UIEvent<HTMLDivElement>): boolean {
-    return currentTarget.scrollTop <= 10;
-  }
-  function isAtBottom(event: React.UIEvent<HTMLDivElement>): boolean {
-    const { currentTarget } = event;
-    if (!currentTarget) return false;
 
-    return (
-      currentTarget.scrollTop + currentTarget.clientHeight >=
-      currentTarget.scrollHeight - 2
-    );
-  }
   async function handleScroll(event: React.UIEvent<HTMLDivElement>) {
-    if (isLoadingData || !hasMore || rows.length === 0) return;
+    if (isLoadingData || rows.length === 0 || isTransitioning || isFetching)
+      return;
 
-    const findUnfetchedPage = (pageOffset: number) => {
-      let page = currentPage + pageOffset;
-      while (page > 0 && fetchedPages.has(page)) {
-        page += pageOffset;
-      }
-      return page > 0 ? page : null;
-    };
+    const { currentTarget } = event;
+    const scrollTop = currentTarget.scrollTop;
+    const clientHeight = currentTarget.clientHeight;
 
-    if (isAtBottom(event)) {
-      const nextPage = findUnfetchedPage(1);
+    const hasScrolled = Math.abs(scrollTop - lastScrollTopRef.current) > 5;
+    if (!hasScrolled) {
+      return;
+    }
 
-      if (nextPage && nextPage <= totalPages && !fetchedPages.has(nextPage)) {
-        setCurrentPage(nextPage);
-        setIsAllSelected(false);
+    lastScrollTopRef.current = scrollTop;
+    isScrollingRef.current = true;
+    setIsScrolling(true);
+
+    if (scrollTimeoutRef.current) {
+      clearTimeout(scrollTimeoutRef.current);
+    }
+
+    scrollTimeoutRef.current = setTimeout(() => {
+      isScrollingRef.current = false;
+      setIsScrolling(false);
+    }, 150);
+
+    scrollPositionRef.current = scrollTop;
+    scrollContainerRef.current = currentTarget;
+
+    const firstVisibleRow = Math.floor(scrollTop / ROW_HEIGHT);
+    const lastVisibleRow = Math.floor((scrollTop + clientHeight) / ROW_HEIGHT);
+
+    const THRESHOLD_ROWS = 50;
+
+    // SCROLL KE BAWAH
+    const rowsRemainingBelow = rows.length - lastVisibleRow;
+
+    if (rowsRemainingBelow <= THRESHOLD_ROWS) {
+      const maxPage = Math.max(...visiblePages);
+      const nextPage = maxPage + 1;
+
+      if (nextPage <= totalPages && !isFetching && isScrollingRef.current) {
+        if (streamBufferRef.current.has(nextPage)) {
+          // ✅ DATA ADA DI BUFFER — langsung masuk tanpa loading!
+          setIsFetching(true);
+          setIsTransitioning(true);
+          hasAdjustedScrollRef.current = false;
+
+          const bufferedData = streamBufferRef.current.get(nextPage)!;
+
+          // Pindahkan dari buffer ke pageDataCache
+          setPageDataCache((prev) => {
+            const updated = new Map(prev);
+            updated.set(nextPage, bufferedData);
+            return updated;
+          });
+
+          // Hapus dari buffer (sudah masuk ke visible cache)
+          streamBufferRef.current = new Map(streamBufferRef.current);
+          streamBufferRef.current.delete(nextPage);
+
+          // Update visiblePages (geser window)
+          isPageTransitionRef.current = true;
+          pendingScrollAdjustment.current = -(filters.limit * ROW_HEIGHT);
+          shiftSelectionForWindow(-filters.limit);
+          setVisiblePages((prevVisible) => {
+            const removedPage = prevVisible[0];
+            const newPages = [...prevVisible.slice(1), nextPage];
+
+            setPageDataCache((prev) => {
+              const updated = new Map(prev);
+              updated.delete(removedPage); // Langsung hapus total dari memori
+              return updated;
+            });
+
+            return newPages;
+          });
+
+          setTimeout(() => {
+            setIsTransitioning(false);
+            setIsFetching(false);
+          }, 50); // Lebih cepat karena tidak ada network latency
+
+          // Prefetch page berikutnya di background
+          const pagesToPrefetch = Array.from(
+            { length: STREAM_BUFFER_SIZE },
+            (_, i) => nextPage + 1 + i
+          );
+          prefetchPages(pagesToPrefetch);
+        } else if (!pageDataCache.has(nextPage)) {
+          // ⚠️ Buffer miss — fallback ke fetch normal
+          setIsFetching(true);
+          setIsTransitioning(true);
+          hasAdjustedScrollRef.current = false;
+          setCurrentPage(nextPage);
+        }
       }
     }
 
-    if (isAtTop(event)) {
-      const prevPage = findUnfetchedPage(-1);
-      if (prevPage && !fetchedPages.has(prevPage)) {
-        setCurrentPage(prevPage);
+    // SCROLL KE ATAS
+    if (firstVisibleRow <= THRESHOLD_ROWS) {
+      const minPage = Math.min(...visiblePages);
+      const prevPage = minPage - 1;
+
+      if (prevPage >= 1 && !isFetching && isScrollingRef.current) {
+        if (streamBufferRef.current.has(prevPage)) {
+          // ✅ DATA ADA DI BUFFER — langsung masuk tanpa loading!
+          setIsFetching(true);
+          setIsTransitioning(true);
+          hasAdjustedScrollRef.current = false;
+
+          const bufferedData = streamBufferRef.current.get(prevPage)!;
+
+          setPageDataCache((prev) => {
+            const updated = new Map(prev);
+            updated.set(prevPage, bufferedData);
+            return updated;
+          });
+
+          streamBufferRef.current = new Map(streamBufferRef.current);
+          streamBufferRef.current.delete(prevPage);
+
+          isPageTransitionRef.current = true;
+          pendingScrollAdjustment.current = filters.limit * ROW_HEIGHT;
+          shiftSelectionForWindow(filters.limit);
+          setVisiblePages((prevVisible) => {
+            const removedPage = prevVisible[4];
+            const newPages = [prevPage, ...prevVisible.slice(0, 4)];
+
+            setPageDataCache((prev) => {
+              const updated = new Map(prev);
+              updated.delete(removedPage); // Langsung hapus total dari memori
+              return updated;
+            });
+
+            return newPages;
+          });
+
+          setTimeout(() => {
+            setIsTransitioning(false);
+            setIsFetching(false);
+          }, 50);
+
+          // Prefetch page sebelumnya di background
+          const pagesToPrefetch = Array.from(
+            { length: STREAM_BUFFER_SIZE },
+            (_, i) => prevPage - 1 - i
+          ).filter((p) => p >= 1);
+          prefetchPages(pagesToPrefetch);
+        } else if (!pageDataCache.has(prevPage)) {
+          // ⚠️ Buffer miss — fallback ke fetch normal
+          setIsFetching(true);
+          setIsTransitioning(true);
+          hasAdjustedScrollRef.current = false;
+          // Reset ke 0 dulu agar setCurrentPage(prevPage) pasti trigger re-fetch
+          // even jika prevPage == currentPage (stale value)
+          setCurrentPage(0);
+          setTimeout(() => setCurrentPage(prevPage), 0);
+        }
       }
     }
   }
 
   function handleCellClick(args: { row: JurnalUmumHeader }) {
     const clickedRow = args.row;
+    if (!clickedRow) return;
     const rowIndex = rows.findIndex((r) => r.id === clickedRow.id);
-    const foundRow = rows.find((r) => r.id === clickedRow?.id);
-    if (rowIndex !== -1 && foundRow) {
+    if (rowIndex !== -1) {
       setSelectedRow(rowIndex);
-      dispatch(setHeaderData(foundRow));
     }
   }
-  const onSuccess = async (indexOnPage: any, pageNumber: any) => {
-    try {
-      forms.reset();
-      setPopOver(false);
-      setIsFetchingManually(true);
-      setRows([]);
 
-      if (mode !== 'delete') {
-        const response = await api2.get(`/redis/get/jurnalumumheader-allItems`);
-        // Set the rows only if the data has changed
-        if (JSON.stringify(response.data) !== JSON.stringify(rows)) {
-          setRows(response.data);
-          setIsDataUpdated(true);
-          setCurrentPage(pageNumber);
-          setFetchedPages(new Set([pageNumber]));
-          setSelectedRow(indexOnPage);
-          setTimeout(() => {
-            gridRef?.current?.selectCell({
-              rowIdx: indexOnPage,
-              idx: 1
-            });
-          }, 200);
+  const orderedColumns = useMemo(() => {
+    if (Array.isArray(columnsOrder) && columnsOrder.length > 0) {
+      return columnsOrder
+        .map((orderIndex) => columns[orderIndex])
+        .filter((col) => col !== undefined);
+    }
+    return columns;
+  }, [columns, columnsOrder]);
+
+  const finalColumns = useMemo(() => {
+    return orderedColumns.map((col) => ({
+      ...col,
+      width: columnsWidth[col.key] ?? col.width
+    }));
+  }, [orderedColumns, columnsWidth]);
+
+  const moveSelectionBy = useCallback(
+    (delta: number, focusBackTo?: HTMLElement | null) => {
+      if (rows.length === 0) return;
+
+      // Navigasi via input filter/search = modalitas keyboard.
+      interactionModeRef.current = 'keyboard';
+
+      const nextRow = Math.min(
+        Math.max(selectedRowRef.current + delta, 0),
+        rows.length - 1
+      );
+      selectedRowRef.current = nextRow;
+
+      const idxFromKey = finalColumns.findIndex(
+        (c) => c.key === selectedCellKey
+      );
+      const idx = idxFromKey >= 0 ? idxFromKey : 0;
+
+      // Pindahkan selected cell bawaan grid (untuk ArrowLeft/ArrowRight) + tetap jaga input tetap fokus
+      gridRef.current?.scrollToCell?.({ rowIdx: nextRow, idx });
+      gridRef.current?.selectCell?.({ rowIdx: nextRow, idx });
+
+      if (focusBackTo && typeof window !== 'undefined') {
+        const start =
+          focusBackTo instanceof HTMLInputElement
+            ? focusBackTo.selectionStart
+            : null;
+        const end =
+          focusBackTo instanceof HTMLInputElement
+            ? focusBackTo.selectionEnd
+            : null;
+
+        window.requestAnimationFrame(() => {
+          if (!document.contains(focusBackTo)) return;
+          focusBackTo.focus({ preventScroll: true });
+          if (
+            focusBackTo instanceof HTMLInputElement &&
+            start !== null &&
+            end !== null
+          ) {
+            focusBackTo.setSelectionRange(start, end);
+          }
+        });
+      }
+    },
+    [rows.length, finalColumns, selectedCellKey]
+  );
+
+  const moveSelectionColumnBy = useCallback(
+    (delta: number, focusBackTo?: HTMLElement | null) => {
+      if (rows.length === 0) return;
+      if (finalColumns.length === 0) return;
+
+      const currentIdxFromKey = finalColumns.findIndex(
+        (c) => c.key === selectedCellKey
+      );
+      const currentIdx = currentIdxFromKey >= 0 ? currentIdxFromKey : 0;
+
+      const nextIdx = Math.min(
+        Math.max(currentIdx + delta, 0),
+        finalColumns.length - 1
+      );
+
+      const nextKey = finalColumns[nextIdx]?.key;
+      if (nextKey) setSelectedCellKey(String(nextKey));
+
+      const rowIdx = Math.min(
+        Math.max(selectedRowRef.current, 0),
+        rows.length - 1
+      );
+
+      gridRef.current?.scrollToCell?.({ rowIdx, idx: nextIdx });
+      gridRef.current?.selectCell?.({ rowIdx, idx: nextIdx });
+
+      if (focusBackTo && typeof window !== 'undefined') {
+        const start =
+          focusBackTo instanceof HTMLInputElement
+            ? focusBackTo.selectionStart
+            : null;
+        const end =
+          focusBackTo instanceof HTMLInputElement
+            ? focusBackTo.selectionEnd
+            : null;
+
+        window.requestAnimationFrame(() => {
+          if (!document.contains(focusBackTo)) return;
+          focusBackTo.focus({ preventScroll: true });
+          if (
+            focusBackTo instanceof HTMLInputElement &&
+            start !== null &&
+            end !== null
+          ) {
+            focusBackTo.setSelectionRange(start, end);
+          }
+        });
+      }
+    },
+    [rows.length, finalColumns, selectedCellKey]
+  );
+
+  const selectColumnEdge = useCallback(
+    (edge: 'first' | 'last', focusBackTo?: HTMLElement | null) => {
+      if (rows.length === 0) return;
+      if (finalColumns.length === 0) return;
+
+      const nextIdx = edge === 'first' ? 0 : finalColumns.length - 1;
+      const nextKey = finalColumns[nextIdx]?.key;
+      if (nextKey) setSelectedCellKey(String(nextKey));
+
+      const rowIdx = Math.min(
+        Math.max(selectedRowRef.current, 0),
+        rows.length - 1
+      );
+
+      gridRef.current?.scrollToCell?.({ rowIdx, idx: nextIdx });
+      gridRef.current?.selectCell?.({ rowIdx, idx: nextIdx });
+
+      if (focusBackTo && typeof window !== 'undefined') {
+        const start =
+          focusBackTo instanceof HTMLInputElement
+            ? focusBackTo.selectionStart
+            : null;
+        const end =
+          focusBackTo instanceof HTMLInputElement
+            ? focusBackTo.selectionEnd
+            : null;
+
+        window.requestAnimationFrame(() => {
+          if (!document.contains(focusBackTo)) return;
+          focusBackTo.focus({ preventScroll: true });
+          if (
+            focusBackTo instanceof HTMLInputElement &&
+            start !== null &&
+            end !== null
+          ) {
+            focusBackTo.setSelectionRange(start, end);
+          }
+        });
+      }
+    },
+    [rows.length, finalColumns]
+  );
+
+  const handleGoToFirstPage = useCallback(() => {
+    jumpToFirstRef.current = true;
+    setRows([]);
+    setCurrentPage(1);
+    resetBufferingCache();
+  }, []);
+
+  const handleGoToLastPage = useCallback(async () => {
+    if (totalPages < 1) return;
+
+    jumpToLastRef.current = true;
+    setRows([]);
+
+    // Jika total halaman <= WINDOW_SIZE, semua halaman muat di satu bulk window
+    // pertama — pakai bulk-fetch normal (lebih efisien: 1 request).
+    if (totalPages <= WINDOW_SIZE) {
+      resetBufferingCache();
+      return;
+    }
+
+    // Kasus umum: WINDOW_SIZE halaman terakhir TIDAK selalu sejajar dengan
+    // batas bulk block (mis. totalPages=23, WINDOW_SIZE=5 -> butuh halaman
+    // 19..23, sementara bulk block hanya {1-5,6-10,11-15,16-20,21-25}). Jadi
+    // fetch tiap halaman terakhir secara langsung lalu rakit cache & window.
+    setIsFetching(true);
+    setShouldBulkFetch(false);
+    setBulkStartPage(1);
+    setPageDataCache(new Map());
+    streamBufferRef.current = new Map();
+    prefetchingPagesRef.current = new Set();
+
+    const startPage = totalPages - WINDOW_SIZE + 1;
+    const pagesToFetch = Array.from(
+      { length: WINDOW_SIZE },
+      (_, i) => startPage + i
+    );
+
+    try {
+      const results = await Promise.all(
+        pagesToFetch.map((p) =>
+          getJurnalUmumHeaderFn({ ...filters, page: p, limit: filters.limit })
+        )
+      );
+
+      const newCache = new Map<number, JurnalUmumHeader[]>();
+      results.forEach((res, i) => {
+        if (res?.data && res.data.length > 0) {
+          newCache.set(pagesToFetch[i], res.data);
         }
+      });
+
+      setPageDataCache(newCache);
+      setVisiblePages(pagesToFetch);
+      setCurrentPage(totalPages);
+    } catch (err) {
+      console.error('Failed to load last pages:', err);
+    } finally {
+      setIsFetching(false);
+    }
+  }, [totalPages, filters]);
+
+  const handleGridInputNavigationKeyDownCapture = useCallback(
+    (event: React.KeyboardEvent<HTMLElement>) => {
+      const target = event.target as HTMLElement | null;
+
+      if (
+        event.key === 'ArrowDown' ||
+        event.key === 'ArrowUp' ||
+        event.key === 'PageDown' ||
+        event.key === 'PageUp'
+      ) {
+        interactionModeRef.current = 'keyboard';
       }
 
-      setIsFetchingManually(false);
+      if (event.ctrlKey && event.key === 'Home') {
+        event.preventDefault();
+        event.stopPropagation();
+        handleGoToFirstPage();
+        return;
+      }
+
+      if (event.ctrlKey && event.key === 'End') {
+        event.preventDefault();
+        event.stopPropagation();
+        handleGoToLastPage();
+        return;
+      }
+
+      const isFilterInput =
+        target instanceof HTMLElement &&
+        target.classList.contains('filter-input');
+      const isGlobalSearchInput =
+        !!inputRef.current && target === inputRef.current;
+
+      // Hanya handle key navigation dari input filter column & input search global
+      if (!isFilterInput && !isGlobalSearchInput) return;
+
+      const visibleRowCount = 8;
+
+      if (event.key === 'ArrowDown') {
+        event.preventDefault();
+        event.stopPropagation();
+        moveSelectionBy(1, target);
+      } else if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        event.stopPropagation();
+        moveSelectionBy(-1, target);
+      } else if (event.key === 'PageDown') {
+        event.preventDefault();
+        event.stopPropagation();
+        moveSelectionBy(visibleRowCount, target);
+      } else if (event.key === 'PageUp') {
+        event.preventDefault();
+        event.stopPropagation();
+        moveSelectionBy(-visibleRowCount, target);
+      } else if (event.key === 'ArrowRight') {
+        event.preventDefault();
+        event.stopPropagation();
+        moveSelectionColumnBy(1, target);
+      } else if (event.key === 'ArrowLeft') {
+        event.preventDefault();
+        event.stopPropagation();
+        moveSelectionColumnBy(-1, target);
+      } else if (event.key === 'Home') {
+        event.preventDefault();
+        event.stopPropagation();
+        selectColumnEdge('first', target);
+      } else if (event.key === 'End') {
+        event.preventDefault();
+        event.stopPropagation();
+        selectColumnEdge('last', target);
+      }
+    },
+    [
+      moveSelectionBy,
+      moveSelectionColumnBy,
+      selectColumnEdge,
+      handleGoToFirstPage,
+      handleGoToLastPage
+    ]
+  );
+
+  // Cache default STATUS AKTIF ("AKTIF") supaya tidak fetch berulang.
+  const statusAktifDefaultRef = useRef<{ id: string; text: string } | null>(
+    null
+  );
+
+  const resetAddForm = async () => {
+    const currentDate = new Date(); // Dapatkan tanggal sekarang
+    let aktif = statusAktifDefaultRef.current;
+    if (!aktif) {
+      try {
+        const res = await api2.get('/parameter', {
+          params: { grp: 'status aktif' }
+        });
+        const params: any[] = res?.data?.data ?? res?.data ?? [];
+        const row =
+          params.find((p) => p?.default === 'YA') ??
+          params.find((p) => String(p?.text).toUpperCase() === 'AKTIF');
+        aktif = row
+          ? { id: String(row.id), text: row.text ?? 'AKTIF' }
+          : { id: '', text: '' };
+        statusAktifDefaultRef.current = aktif;
+      } catch (e) {
+        console.error('Gagal mengambil default STATUS AKTIF:', e);
+        aktif = { id: '', text: '' };
+      }
+    }
+    forms.reset({
+      keterangan: '',
+      tglbukti: formatDateToDDMMYYYY(currentDate)
+    });
+  };
+
+  const onSuccess = async (
+    indexOnPage: number,
+    fetchedPages: number[],
+    pagedData: Record<string, JurnalUmumHeader[]>,
+    pageNumber: number,
+    keepOpenModal = false,
+    focusId: string | null = null
+  ) => {
+    clearError();
+    setIsFetchingManually(true);
+    // Tandai baris baru agar Row Combiner memfokuskannya by-id setelah data
+    // window settle (lihat pendingFocusIdRef). Lebih andal daripada selectCell
+    // by-index yang bisa meleset saat window bergeser.
+    pendingFocusIdRef.current = focusId ?? null;
+    try {
+      if (keepOpenModal) {
+        // SAVE & ADD: reset form (set default STATUS AKTIF = "AKTIF") lalu
+        // remount modal via addFormKey agar semua LookUp re-init dari nilai
+        // form. JANGAN dispatch setClearLookup di sini: pada mount, effect
+        // clearLookup berjalan SETELAH init sehingga malah mengosongkan
+        // tampilan status aktif yang baru di-set.
+        await resetAddForm();
+        setAddFormKey((k) => k + 1);
+        setPopOver(true);
+      } else {
+        dispatch(setClearLookup(true));
+        forms.reset();
+        setPopOver(false);
+      }
+
+      if (mode !== 'delete') {
+        // Blokir data-effect memproses ulang hasil refetch pasca-mutasi selama
+        // window settle, agar fokus by-id tidak tertimpa (fokus "lompat ke
+        // baris 1"). Dibuka lagi via setTimeout di bawah.
+        suppressRefetchRef.current = true;
+
+        // KONTRAK BACKEND (sama seperti alatbayar): endpoint mengembalikan
+        // { itemIndex (index DALAM window), fetchedPages, pagedData, pageNumber }
+        // dan menyimpan window-nya di redis per halaman
+        // (`groupbiayaextra-page-<n>`), jadi window tidak perlu dirakit ulang
+        // di sini.
+        const response = await api2.get(
+          `/redis/get/jurnalumumheader-page-${pageNumber}`
+        );
+        const loadedRows: JurnalUmumHeader[] = Array.isArray(response.data)
+          ? response.data
+          : [];
+
+        // Fokus BERDASARKAN ID baris, bukan indexOnPage dari backend. Setelah
+        // edit, posisi baris di window yang dimuat bisa berbeda dari hitungan
+        // index backend (mis. tie-break urutan keterangan) sehingga fokus
+        // meleset. Fallback ke indexOnPage bila id tak ketemu.
+        const focusIdx =
+          focusId != null
+            ? loadedRows.findIndex((r) => String(r.id) === String(focusId))
+            : -1;
+        const targetIndex = focusIdx >= 0 ? focusIdx : indexOnPage;
+
+        setIsDataUpdated(true);
+        setShouldBulkFetch(false);
+        setRows([]);
+        setRows(loadedRows);
+        setVisiblePages(fetchedPages);
+        setSelectedRow(targetIndex);
+        selectedRowRef.current = targetIndex;
+        setPageDataCache(
+          new Map(
+            Object.entries(pagedData).map(([key, value]) => [
+              Number(key),
+              value as JurnalUmumHeader[]
+            ])
+          )
+        );
+        setCurrentPage(pageNumber);
+
+        const updatedBuffer = new Map(streamBufferRef.current);
+        Object.entries(pagedData).forEach(([key, value]) => {
+          updatedBuffer.set(Number(key), value as JurnalUmumHeader[]);
+        });
+        streamBufferRef.current = updatedBuffer;
+
+        setTimeout(() => {
+          gridRef?.current?.selectCell({
+            rowIdx: targetIndex,
+            idx: 1
+          });
+        }, 200);
+
+        // Penahan fokus pasca-mutasi. setCurrentPage(pageNumber) memicu refetch
+        // yang menjalankan Row Combiner lagi; karena pendingFocusIdRef sudah
+        // dikonsumsi pada run pertama, cabang else-nya men-scroll ke baris 0
+        // (gejala "edit selalu ke baris 1"). Re-assert id fokus beberapa kali
+        // selama window settle agar SETIAP run Row Combiner (termasuk akibat
+        // refetch) memfokuskan ulang baris yang benar by-id, lalu bersihkan
+        // supaya tidak mengganggu navigasi berikutnya.
+        if (focusId != null) {
+          [120, 320, 620].forEach((d) =>
+            setTimeout(() => {
+              pendingFocusIdRef.current = String(focusId);
+            }, d)
+          );
+          setTimeout(() => {
+            if (String(pendingFocusIdRef.current) === String(focusId)) {
+              pendingFocusIdRef.current = null;
+            }
+          }, 950);
+        }
+
+        // Buka blokir refetch setelah window settle. Karena ref, reset ini TIDAK
+        // memicu ulang data-effect -> tidak ada clobber saat dibuka.
+        setTimeout(() => {
+          suppressRefetchRef.current = false;
+        }, 1000);
+      }
+
       setIsDataUpdated(false);
     } catch (error) {
       console.error('Error during onSuccess:', error);
@@ -1280,38 +1890,85 @@ const GridJurnalUmumHeader = () => {
       setIsDataUpdated(false);
     }
   };
-  const onSubmit = async (values: JurnalUmumHeaderInput) => {
-    dispatch(setProcessing());
+
+  const onSubmit = async (
+    values: JurnalUmumHeaderInput,
+    keepOpenModalArg: unknown = false
+  ) => {
+    // react-hook-form memanggil callback-nya dengan (values, event). Sebelumnya
+    // grid mengoper `forms.handleSubmit(onSubmit)` ke form, jadi tombol SAVE dan
+    // submit NATIVE (ENTER di sebuah field) mengirim objek EVENT sebagai argumen
+    // kedua -- truthy, bukan boolean. Akibatnya update diperlakukan seperti
+    // "SAVE & ADD": form di-reset tapi dialog TETAP TERBUKA. Kini form yang
+    // membungkus handleSubmit dan selalu mengirim boolean eksplisit; penyempitan
+    // ke `=== true` di sini jadi penahan terakhir. Sama seperti onSubmit di
+    // GridPengeluaranHeader.
+    const keepOpenModal = keepOpenModalArg === true;
+    clearError();
     const selectedRowId = rows[selectedRow]?.id;
     try {
+      dispatch(setProcessing());
       if (mode === 'delete') {
         if (selectedRowId) {
           await deleteJurnalUmum(selectedRowId as unknown as string, {
             onSuccess: () => {
               setPopOver(false);
+
+              // 1. Remove from visible rows
               setRows((prevRows) =>
                 prevRows.filter((row) => row.id !== selectedRowId)
               );
-              if (selectedRow === 0) {
-                setSelectedRow(selectedRow);
-                gridRef?.current?.selectCell({ rowIdx: selectedRow, idx: 1 });
-              } else if (selectedRow === rows.length - 1) {
-                setSelectedRow(selectedRow - 1);
-                gridRef?.current?.selectCell({
-                  rowIdx: selectedRow - 1,
-                  idx: 1
+
+              // 2. Remove from pageDataCache (all pages)
+              setPageDataCache((prevCache) => {
+                const updated = new Map(prevCache);
+                updated.forEach((pageRows, pageNum) => {
+                  const filtered = pageRows.filter(
+                    (row) => row.id !== selectedRowId
+                  );
+                  if (filtered.length !== pageRows.length) {
+                    updated.set(pageNum, filtered);
+                  }
                 });
+                return updated;
+              });
+
+              // 3. Remove from streamBuffer
+              const newBuffer = new Map(streamBufferRef.current);
+              newBuffer.forEach((pageRows, pageNum) => {
+                const filtered = pageRows.filter(
+                  (row) => row.id !== selectedRowId
+                );
+                if (filtered.length !== pageRows.length) {
+                  newBuffer.set(pageNum, filtered);
+                }
+              });
+              streamBufferRef.current = newBuffer;
+
+              // 4. Fokus baris BERIKUTNYA (by-id). Setelah baris dihapus,
+              // baris tepat di bawahnya naik mengisi slot yang sama -> itulah
+              // yang difokuskan. Jika yang dihapus baris paling bawah window,
+              // jatuh ke baris di atasnya. Pemfokusan dilakukan via
+              // pendingFocusIdRef (BY-ID), bukan selectCell by-index: Row
+              // Combiner jalan ulang setelah cache di-update, dan tanpa
+              // pendingFocusIdRef cabang else-nya men-scroll & men-select balik
+              // ke row 0.
+              const nextFocusRow =
+                rows[selectedRow + 1] ?? rows[selectedRow - 1];
+              if (nextFocusRow) {
+                pendingFocusIdRef.current = String(nextFocusRow.id);
               } else {
-                setSelectedRow(selectedRow);
-                gridRef?.current?.selectCell({ rowIdx: selectedRow, idx: 1 });
+                // Tidak ada baris tersisa pada window ini.
+                setSelectedRow(0);
+                selectedRowRef.current = 0;
               }
             }
           });
         }
         return;
       }
+
       if (mode === 'add') {
-        setFilters((prev) => ({ ...prev, isreload: false }));
         const newOrder = await createJurnalUmum(
           {
             ...values,
@@ -1322,7 +1979,15 @@ const GridJurnalUmumHeader = () => {
             ...filters // Kirim filter ke body/payload
           },
           {
-            onSuccess: (data) => onSuccess(data.itemIndex, data.pageNumber)
+            onSuccess: (data: any) =>
+              onSuccess(
+                data.itemIndex,
+                data.fetchedPages,
+                data.pagedData,
+                data.pageNumber,
+                keepOpenModal,
+                data.newItem?.id ?? null
+              )
           }
         );
 
@@ -1337,64 +2002,39 @@ const GridJurnalUmumHeader = () => {
             id: selectedRowId as unknown as string,
             fields: { ...values, ...filters }
           },
-          { onSuccess: (data) => onSuccess(data.itemIndex, data.pageNumber) }
+          {
+            onSuccess: (data: any) =>
+              onSuccess(
+                data.itemIndex,
+                data.fetchedPages,
+                data.pagedData,
+                data.pageNumber,
+                false,
+                data.updatedItem?.id ?? selectedRowId ?? null
+              )
+          }
         );
-        queryClient.invalidateQueries('jurnalumum');
       }
-    } catch (error) {
-      console.error('Error during onSubmit:', error);
-      setIsFetchingManually(false);
-      setIsDataUpdated(false);
+    } catch (error: any) {
+      if (error?.response?.status !== 400) {
+        console.error(error);
+      }
     } finally {
       dispatch(setProcessed());
     }
   };
 
-  const handleEdit = async () => {
+  const handleEdit = () => {
     if (selectedRow !== null) {
-      const rowData = rows[selectedRow];
-      const result = await checkValidationKasGantungFn({
-        aksi: 'EDIT',
-        value: rowData.id
-      });
-      if (result.status == 'failed') {
-        alert({
-          title: result.message,
-          variant: 'danger',
-          submitText: 'OK'
-        });
-      } else {
-        setPopOver(true);
-        setMode('edit');
-      }
+      setPopOver(true);
+      setMode('edit');
     }
   };
-  const handleDelete = async () => {
+
+  const handleDelete = () => {
     if (selectedRow !== null) {
-      const rowData = rows[selectedRow];
-
-      try {
-        // Mengirim request untuk validasi beberapa kombinasi
-        const result = await checkValidationKasGantungFn({
-          aksi: 'DELETE',
-          value: rowData.nobukti
-        });
-
-        if (result.status == 'failed') {
-          // Menampilkan alert jika ada yang gagal
-          alert({
-            title: result.message,
-            variant: 'danger',
-            submitText: 'OK'
-          });
-        } else {
-          // Jika semua validasi berhasil, lanjutkan proses penghapusan atau operasi lain
-          setMode('delete');
-          setPopOver(true);
-        }
-      } catch (error) {
-        console.error('Error during delete validation:', error);
-      }
+      setMode('delete');
+      setPopOver(true);
     }
   };
 
@@ -1404,6 +2044,11 @@ const GridJurnalUmumHeader = () => {
       setPopOver(true);
     }
   };
+
+  // Cetak bukti dijalankan di BACKEND (background job + socket). Frontend
+  // hanya mengirim id baris yang dicentang plus nama template .mrt-nya —
+  // LaporanJurnalUmum.mrt adalah bukti per transaksi, bukan laporan daftar.
+  // Progres render muncul di toast; PDF diambil setelah selesai.
   const handleReport = async () => {
     if (checkedRows.size === 0) {
       alert({
@@ -1411,7 +2056,7 @@ const GridJurnalUmumHeader = () => {
         variant: 'danger',
         submitText: 'OK'
       });
-      return; // Stop execution if no rows are selected
+      return;
     }
     if (checkedRows.size > 1) {
       alert({
@@ -1419,104 +2064,43 @@ const GridJurnalUmumHeader = () => {
         variant: 'danger',
         submitText: 'OK'
       });
-      return; // Stop execution if no rows are selected
+      return;
     }
+    const rowId = Array.from(checkedRows)[0];
 
-    try {
-      dispatch(setProcessing());
-      const rowId = Array.from(checkedRows)[0];
-      const selectedRowNobukti = rows.find((r) => r.id === rowId)?.nobukti;
+    await generateReport({
+      label: 'Jurnal Umum',
+      payload: {
+        mrtName: 'LaporanJurnalUmum.mrt',
+        id: String(rowId),
+        judullaporan: 'Laporan Jurnal Umum'
+      },
+      apiFn: generateJurnalUmumHeaderReportFn,
+      // Tombol Export di toolbar viewer — memakai filter grid yang sedang
+      // aktif, sama seperti tombol Export di toolbar bawah.
+      onExport: () => handleExportExcel()
+    });
+  };
 
-      const response = await getJurnalUmumHeaderByIdFn(rowId);
-      const responseDetail = await getJurnalUmumDetailFn({
-        filters: { nobukti: selectedRowNobukti }
-      });
-      const totalNominal = responseDetail.data.reduce(
-        (sum: number, i: any) => sum + Number(i.nominal || 0),
-        0
-      );
+  const handleExportExcel = async () => {
+    const { page, limit, ...filtersWithoutLimit } = filters;
 
-      if (response.data === null || response.data.length === 0) {
-        alert({
-          title: 'TERJADI KESALAHAN SAAT MEMBUAT LAPORAN!',
-          variant: 'danger',
-          submitText: 'OK'
-        });
-        return;
-      }
-      const reportRows = response.data.map((row: any) => ({
-        ...row,
-        judullaporan: 'Laporan Jurnal Umum',
-        usercetak: user.username,
-        tglcetak: new Date().toLocaleDateString(),
-        terbilang: numberToTerbilang(totalNominal),
-        judul: 'PT.TRANSPORINDO AGUNG SEJAHTERA'
-      }));
-      sessionStorage.setItem('dataId', rowId as unknown as string);
-      import('stimulsoft-reports-js/Scripts/stimulsoft.blockly.editor')
-        .then((module) => {
-          const { Stimulsoft } = module;
-          Stimulsoft.Base.StiFontCollection.addOpentypeFontFile(
-            '/fonts/tahomabd.ttf',
-            'TahomaBD'
-          );
-          Stimulsoft.Base.StiFontCollection.addOpentypeFontFile(
-            '/fonts/tahoma.ttf',
-            'Tahoma'
-          );
-          Stimulsoft.Base.StiLicense.Key =
-            '6vJhGtLLLz2GNviWmUTrhSqnOItdDwjBylQzQcAOiHksEid1Z5nN/hHQewjPL/4/AvyNDbkXgG4Am2U6dyA8Ksinqp' +
-            '6agGqoHp+1KM7oJE6CKQoPaV4cFbxKeYmKyyqjF1F1hZPDg4RXFcnEaYAPj/QLdRHR5ScQUcgxpDkBVw8XpueaSFBs' +
-            'JVQs/daqfpFiipF1qfM9mtX96dlxid+K/2bKp+e5f5hJ8s2CZvvZYXJAGoeRd6iZfota7blbsgoLTeY/sMtPR2yutv' +
-            'gE9TafuTEhj0aszGipI9PgH+A/i5GfSPAQel9kPQaIQiLw4fNblFZTXvcrTUjxsx0oyGYhXslAAogi3PILS/DpymQQ' +
-            '0XskLbikFsk1hxoN5w9X+tq8WR6+T9giI03Wiqey+h8LNz6K35P2NJQ3WLn71mqOEb9YEUoKDReTzMLCA1yJoKia6Y' +
-            'JuDgUf1qamN7rRICPVd0wQpinqLYjPpgNPiVqrkGW0CQPZ2SE2tN4uFRIWw45/IITQl0v9ClCkO/gwUtwtuugegrqs' +
-            'e0EZ5j2V4a1XDmVuJaS33pAVLoUgK0M8RG72';
-
-          const report = new Stimulsoft.Report.StiReport();
-          const dataSet = new Stimulsoft.System.Data.DataSet('Data');
-
-          // Load the report template (MRT file)
-          report.loadFile('/reports/LaporanJurnalUmum.mrt');
-          report.dictionary.dataSources.clear();
-          dataSet.readJson({ data: reportRows });
-          dataSet.readJson({ detail: responseDetail.data });
-          report.regData(dataSet.dataSetName, '', dataSet);
-          report.dictionary.synchronize();
-
-          // Render the report asynchronously
-
-          report.renderAsync(() => {
-            // Export the report to PDF asynchronously
-            report.exportDocumentAsync((pdfData: any) => {
-              const pdfBlob = new Blob([new Uint8Array(pdfData)], {
-                type: 'application/pdf'
-              });
-              const pdfUrl = URL.createObjectURL(pdfBlob);
-
-              // Store the Blob URL in sessionStorage
-              sessionStorage.setItem('pdfUrl', pdfUrl);
-
-              // Navigate to the report page
-              window.open('/reports/jurnalumum', '_blank');
-            }, Stimulsoft.Report.StiExportFormat.Pdf);
-          });
-        })
-        .catch((error) => {
-          console.error('Failed to load Stimulsoft:', error);
-        });
-    } catch (error) {
-      console.error('Error generating report:', error);
-    } finally {
-      dispatch(setProcessed());
-    }
-
-    // Dynamically import Stimulsoft and generate the PDF report
+    await generateExport({
+      label: 'Export Jurnal Umum',
+      payload: {
+        search: filtersWithoutLimit.search,
+        filters: filtersWithoutLimit.filters,
+        sortBy: filtersWithoutLimit.sortBy,
+        sortDirection: filtersWithoutLimit.sortDirection
+      },
+      apiFn: generateJurnalUmumHeaderExportFn
+    });
   };
 
   document.querySelectorAll('.column-headers').forEach((element) => {
     element.classList.remove('c1kqdw7y7-0-0-beta-47');
   });
+
   function getRowClass(row: JurnalUmumHeader) {
     const rowIndex = rows.findIndex((r) => r.id === row.id);
     return rowIndex === selectedRow ? 'selected-row' : '';
@@ -1526,138 +2110,522 @@ const GridJurnalUmumHeader = () => {
     return row.id;
   }
 
+  function EmptyRowsRenderer() {
+    return (
+      <div
+        className="flex h-full w-full items-center justify-center"
+        style={{ textAlign: 'center', gridColumn: '1/-1' }}
+      >
+        NO ROWS DATA FOUND
+      </div>
+    );
+  }
+
+  function LoadRowsRenderer() {
+    return (
+      <div>
+        <ImSpinner2 className="animate-spin text-3xl text-primary" />
+      </div>
+    );
+  }
+
   const handleClose = () => {
     setPopOver(false);
     setMode('');
-
+    clearError();
     forms.reset();
   };
+
   const handleAdd = async () => {
     try {
-      // Jalankan API sinkronisasi
       setMode('add');
-
+      // Fetch default AKTIF lalu reset SEBELUM buka modal, supaya lookupNama
+      // (non-reaktif) sudah terisi saat LookUp pertama kali mount.
+      await resetAddForm();
       setPopOver(true);
-
-      forms.reset();
     } catch (error) {
-      console.error('Error syncing ACOS:', error);
+      console.error('Error add group biaya extra:', error);
     }
   };
 
-  const handleClickOutside = (event: MouseEvent) => {
-    if (
-      contextMenuRef.current &&
-      !contextMenuRef.current.contains(event.target as Node)
-    ) {
-      setContextMenu(null);
-    }
-  };
+  const prefetchPages = useCallback(
+    async (
+      pagesToFetch: number[],
+      existingCache?: Map<number, JurnalUmumHeader[]>,
+      knownTotalPages?: number
+    ) => {
+      const cacheToCheck = existingCache ?? pageDataCache;
+      const effectiveTotalPages = knownTotalPages ?? totalPages; // ← pakai nilai fresh jika dikirim
 
-  const orderedColumns = useMemo(() => {
-    if (Array.isArray(columnsOrder) && columnsOrder.length > 0) {
-      // filter key columns dengan key yg ada di columnsWidth
-      const filteredColumns = columns.filter((col) =>
-        Object.prototype.hasOwnProperty.call(columnsWidth, col.key)
+      const validPages = pagesToFetch.filter(
+        (p) =>
+          p >= 1 &&
+          p <= effectiveTotalPages &&
+          !streamBufferRef.current.has(p) &&
+          !cacheToCheck.has(p) &&
+          !prefetchingPagesRef.current.has(p)
       );
-      // Mapping dan filter untuk menghindari undefined
-      return columnsOrder
-        .map((orderIndex) => filteredColumns[orderIndex])
-        .filter((col) => col !== undefined);
-    }
-    return columns;
-  }, [columns, columnsOrder]);
 
-  // Update properti width pada setiap kolom berdasarkan state columnsWidth
-  const finalColumns = useMemo(() => {
-    return orderedColumns.map((col) => ({
-      ...col,
-      width: columnsWidth[col.key] ?? col.width
-    }));
-  }, [orderedColumns, columnsWidth]);
+      if (validPages.length === 0) return;
 
-  useEffect(() => {
-    loadGridConfig(
-      user.id,
-      'GridJurnalUmumHeader',
-      columns,
-      setColumnsOrder,
-      setColumnsWidth
-    );
-  }, []);
+      // Tandai semua sebagai sedang di-fetch agar tidak dobel
+      validPages.forEach((p) => prefetchingPagesRef.current.add(p));
+
+      // Fetch semua secara paralel
+      await Promise.allSettled(
+        validPages.map(async (pageNum) => {
+          try {
+            const data = await getJurnalUmumHeaderFn({
+              ...filters,
+              page: pageNum,
+              limit: filters.limit
+            });
+
+            if (data?.data && data.data.length > 0) {
+              streamBufferRef.current = new Map(streamBufferRef.current);
+              streamBufferRef.current.set(pageNum, data.data);
+            }
+          } catch (err) {
+            // Silent fail — user tidak perlu tahu jika prefetch gagal
+            console.warn(
+              `[StreamBuffer] Prefetch page ${pageNum} failed:`,
+              err
+            );
+          } finally {
+            prefetchingPagesRef.current.delete(pageNum);
+          }
+        })
+      );
+    },
+    [filters, totalPages, pageDataCache]
+  );
+
   useEffect(() => {
     setIsFirstLoad(true);
   }, []);
+
   useEffect(() => {
     if (isFirstLoad && gridRef.current && rows.length > 0) {
       setSelectedRow(0);
       gridRef.current.selectCell({ rowIdx: 0, idx: 1 });
-      dispatch(setHeaderData(rows[0]));
       setIsFirstLoad(false);
     }
   }, [rows, isFirstLoad]);
+
   useEffect(() => {
-    // Cek jika ini pertama kali load dan update filter dengan tanggal yang dipilih
-    if (isFirstLoad) {
+    setFilters((prev) => ({
+      ...prev,
+      page: 1,
+      filters: {
+        ...prev.filters,
+        tglDari: committed.tglDari,
+        tglSampai: committed.tglSampai
+      }
+    }));
+  }, []);
+
+  useEffect(() => {
+    if (!onReload) return;
+
+    suppressScrollRef.current = true;
+
+    setFilters((prev) => ({
+      ...prev,
+      page: 1,
+      filters: {
+        ...filterJurnalUmum,
+        tglDari: committed.tglDari,
+        tglSampai: committed.tglSampai
+      }
+    }));
+
+    setSelectedRow(0);
+    setCurrentPage(1);
+    setCheckedRows(new Set());
+    setIsAllSelected(false);
+    setRows([]);
+    resetBufferingCache();
+
+    setTimeout(() => {
+      gridRef?.current?.selectCell({ rowIdx: 0, idx: 1 });
+    }, 100);
+
+    setTimeout(() => {
+      suppressScrollRef.current = false;
+    }, 500);
+
+    dispatch(clearOnReload());
+  }, [onReload]);
+
+  useEffect(() => {
+    if (user?.id) {
+      loadGridConfig(
+        String(user?.id),
+        'GridGroupbiayaextra',
+        columns,
+        setColumnsOrder,
+        setColumnsWidth
+      );
+    }
+  }, [user]);
+
+  useEffect(() => {
+    if (isSubmitSuccessful) {
+      // Pastikan fokus terjadi setelah repaint
+      requestAnimationFrame(() => setFocus('keterangan'));
+    }
+  }, [isSubmitSuccessful, setFocus]);
+
+  // 1. Bulk Fetch Initialization
+  useEffect(() => {
+    const handleBulkFetch = async () => {
       if (
-        selectedDate !== filters.filters.tglDari ||
-        selectedDate2 !== filters.filters.tglSampai
+        !shouldBulkFetch ||
+        !allData ||
+        isDataUpdated ||
+        isAfterMutation ||
+        // Selama settle pasca-mutasi (add/edit), jangan biarkan hasil refetch
+        // membangun ulang cache — kalau tidak, Row Combiner jalan lagi setelah
+        // pendingFocusIdRef dikonsumsi & fokus loncat ke baris 1. Effect #2
+        // (Pagination Fetch) sudah punya guard yang sama.
+        suppressRefetchRef.current
       ) {
-        setFilters((prevFilters) => ({
-          ...prevFilters,
-          filters: {
-            ...prevFilters.filters,
-            tglDari: selectedDate,
-            tglSampai: selectedDate2
-          },
-          isreload: true // True hanya untuk first load
-        }));
+        return;
+      }
+
+      const bulkData = allData.data || [];
+      if (bulkData.length === 0) return;
+
+      const pageSize = filters.limit;
+      const newCache = new Map<number, JurnalUmumHeader[]>();
+      const wasJumpingToLast = jumpToLastRef.current;
+
+      const logicalStartPage = (bulkStartPage - 1) * WINDOW_SIZE + 1;
+      for (let i = 0; i < WINDOW_SIZE; i++) {
+        const pageNum = logicalStartPage + i;
+        const startIdx = i * pageSize;
+        const endIdx = startIdx + pageSize;
+        const pageData = bulkData.slice(startIdx, endIdx);
+
+        if (pageData.length > 0) {
+          newCache.set(pageNum, pageData);
+        }
+      }
+
+      setPageDataCache(newCache);
+      setVisiblePages(
+        Array.from({ length: WINDOW_SIZE }, (_, i) => logicalStartPage + i)
+      );
+
+      const totalItems = allData.pagination?.totalItems || 0;
+      const totalPgs = Math.ceil(totalItems / filters.limit) || 1;
+
+      setTotalPages(totalPgs);
+      setHasMore(bulkData.length === filters.limit * WINDOW_SIZE);
+      setShouldBulkFetch(false);
+      setIsFirstLoad(false);
+      setIsFetching(false);
+
+      const lastLogicalPage = Math.min(
+        logicalStartPage + WINDOW_SIZE - 1,
+        totalPgs
+      );
+      const initialPrefetch = Array.from(
+        { length: STREAM_BUFFER_SIZE },
+        (_, i) => lastLogicalPage + 1 + i
+      ).filter((p) => p <= totalPgs);
+
+      if (initialPrefetch.length > 0) {
+        prefetchPages(initialPrefetch, newCache, totalPgs);
+      }
+
+      if (wasJumpingToLast) {
+        setCurrentPage(lastLogicalPage);
+      }
+    };
+    handleBulkFetch();
+  }, [
+    allData,
+    shouldBulkFetch,
+    isDataUpdated,
+    isAfterMutation,
+    filters.limit,
+    bulkStartPage
+  ]);
+
+  // 2. Pagination Fetch & Scroll Adjustment
+  useEffect(() => {
+    if (
+      shouldBulkFetch ||
+      isDataUpdated ||
+      isAfterMutation ||
+      suppressRefetchRef.current
+    ) {
+      return;
+    }
+
+    if (!allData) return;
+
+    const newRows = allData.data || [];
+
+    setPageDataCache((prevCache) => {
+      const newCache = new Map(prevCache);
+      newCache.set(currentPage, newRows);
+      return newCache;
+    });
+
+    isPageTransitionRef.current = true;
+    const maxVisible = Math.max(...visiblePages);
+    const minVisible = Math.min(...visiblePages);
+
+    // --- SCROLL KE BAWAH ---
+    if (currentPage > maxVisible && currentPage <= maxVisible + 1) {
+      const removedPage = visiblePages[0];
+      pendingScrollAdjustment.current = -(filters.limit * ROW_HEIGHT);
+      // --- Geser index selected ke atas agar data tetap menunjuk ke item yg sama ---
+      shiftSelectionForWindow(-filters.limit);
+
+      setPageDataCache((prev) => {
+        const updated = new Map(prev);
+        updated.delete(removedPage);
+        return updated;
+      });
+      setVisiblePages((prevVisible) => [...prevVisible.slice(1), currentPage]);
+    } else if (currentPage < minVisible && currentPage >= minVisible - 1) {
+      // --- SCROLL KE ATAS ---
+      const removedPage = visiblePages[visiblePages.length - 1];
+      pendingScrollAdjustment.current = filters.limit * ROW_HEIGHT;
+      // --- Geser index selected ke bawah ---
+      shiftSelectionForWindow(filters.limit);
+
+      setPageDataCache((prev) => {
+        const updated = new Map(prev);
+        updated.delete(removedPage);
+        return updated;
+      });
+      setVisiblePages((prevVisible) => [
+        currentPage,
+        ...prevVisible.slice(0, WINDOW_SIZE - 1)
+      ]);
+    }
+
+    if (allData.pagination?.totalPages) {
+      setTotalPages(allData.pagination.totalPages);
+    }
+
+    setHasMore(newRows.length === filters.limit);
+    setPrevFilters(filters);
+
+    setTimeout(() => {
+      setIsTransitioning(false);
+      setIsFetching(false);
+      const maxVis = Math.max(...visiblePages);
+
+      // Tentukan arah: jika currentPage > maxVisible sebelumnya = scroll down, sebaliknya up
+      const isScrollDown = currentPage >= maxVis;
+      const pagesToPrefetch = isScrollDown
+        ? Array.from(
+            { length: STREAM_BUFFER_SIZE },
+            (_, i) => currentPage + 1 + i
+          ).filter((p) => p <= totalPages)
+        : Array.from(
+            { length: STREAM_BUFFER_SIZE },
+            (_, i) => currentPage - 1 - i
+          ).filter((p) => p >= 1);
+
+      if (pagesToPrefetch.length > 0) {
+        setTimeout(() => prefetchPages(pagesToPrefetch), 200);
+      }
+    }, 100);
+  }, [
+    allData,
+    currentPage,
+    filters,
+    isDataUpdated,
+    shouldBulkFetch,
+    isAfterMutation
+  ]);
+
+  // 3. Row Combiner (Mapping cache to rows state)
+  useEffect(() => {
+    const combinedRows: JurnalUmumHeader[] = [];
+    visiblePages?.forEach((page) => {
+      const pageData = pageDataCache.get(page);
+      if (pageData) combinedRows.push(...pageData);
+    });
+
+    if (combinedRows.length > 0) {
+      const newMinPage = Math.min(...visiblePages);
+      setRows(combinedRows);
+      prevMinPageRef.current = newMinPage;
+      prevRowsLengthRef.current = combinedRows.length;
+
+      // --- Fokus baris yang baru disimpan (add/edit) BERDASARKAN ID ---
+      // Window yang dirakit di onSuccess memuat baris baru; cari index-nya di
+      // sini lalu scroll+select. Pakai idx 1 (kolom data pertama) sehingga
+      // TIDAK kena THRESHOLD_ROWS handleScroll -> window tidak bergeser ->
+      // fokus tidak meleset. `return` mencegah cabang else men-scroll ke row 0
+      // (yang memicu pergeseran window).
+      if (pendingFocusIdRef.current != null) {
+        const fid = pendingFocusIdRef.current;
+        pendingFocusIdRef.current = null;
+        const fidx = combinedRows.findIndex(
+          (r) => String(r.id) === String(fid)
+        );
+        if (fidx >= 0) {
+          selectedRowRef.current = fidx;
+          setSelectedRow(fidx);
+          setTimeout(() => {
+            gridRef.current?.scrollToCell?.({ rowIdx: fidx, idx: 1 });
+            gridRef.current?.selectCell?.({ rowIdx: fidx, idx: 1 });
+          }, 50);
+        }
+        return;
+      }
+
+      if (jumpToFirstRef.current) {
+        // Ctrl+Home — selalu idx 0
+        jumpToFirstRef.current = false;
+        setSelectedRow(0);
+        setTimeout(() => {
+          gridRef.current?.scrollToCell?.({ rowIdx: 0, idx: 0 });
+          gridRef.current?.selectCell?.({ rowIdx: 0, idx: 0 });
+        }, 50);
+      } else if (jumpToLastRef.current) {
+        jumpToLastRef.current = false;
+        const lastIdx = combinedRows.length - 1;
+        setSelectedRow(lastIdx);
+        setTimeout(() => {
+          gridRef.current?.scrollToCell?.({ rowIdx: lastIdx, idx: 0 });
+          gridRef.current?.selectCell?.({ rowIdx: lastIdx, idx: 0 });
+        }, 50);
+      } else if (isPageTransitionRef.current) {
+        isPageTransitionRef.current = false;
+        // Commit selectedRow yang sudah digeser BERSAMAAN dengan setRows di atas,
+        // sehingga highlight (getRowClass) selalu menunjuk baris data yang sama
+        // di satu render -> tidak ada frame inkonsisten -> highlight tidak berkedip.
+        const targetRow = Math.min(
+          Math.max(selectedRowRef.current, 0),
+          combinedRows.length - 1
+        );
+        selectedRowRef.current = targetRow;
+        setSelectedRow(targetRow);
+      } else {
+        const targetIdx = pendingSelectIdxRef.current;
+        const inputToRestore = activeFilterInputRef.current;
+
+        setTimeout(() => {
+          if (
+            inputToRestore &&
+            document.contains(inputToRestore) &&
+            (inputToRestore.classList.contains('filter-input') ||
+              inputToRestore.tagName === 'INPUT')
+          ) {
+            inputToRestore.focus({ preventScroll: true });
+            requestAnimationFrame(() => {
+              gridRef.current?.scrollToCell?.({ rowIdx: 0, idx: targetIdx });
+              gridRef.current?.selectCell?.({ rowIdx: 0, idx: targetIdx });
+              requestAnimationFrame(() => {
+                if (inputToRestore && document.contains(inputToRestore)) {
+                  inputToRestore.focus({ preventScroll: true });
+                }
+              });
+            });
+          } else {
+            gridRef.current?.scrollToCell?.({ rowIdx: 0, idx: targetIdx });
+            gridRef.current?.selectCell?.({ rowIdx: 0, idx: targetIdx });
+          }
+        }, 50);
       }
     }
-    // Cek perubahan tanggal setelah pertama kali load
-    else if (
-      (selectedDate !== filters.filters.tglDari ||
-        selectedDate2 !== filters.filters.tglSampai) &&
-      onReload &&
-      !isFirstLoad
-    ) {
-      setFilters((prevFilters) => ({
-        ...prevFilters,
-        filters: {
-          ...prevFilters.filters,
-          tglDari: selectedDate,
-          tglSampai: selectedDate2
-        },
-        isreload: false, // Ubah ke false, karena ini filter biasa
-        page: 1
-      }));
-      setCurrentPage(1);
-      setFetchedPages(new Set([1]));
-      setRows([]);
+  }, [visiblePages, pageDataCache]);
+
+  useLayoutEffect(() => {
+    if (pendingScrollAdjustment.current !== 0 && scrollContainerRef.current) {
+      const container = scrollContainerRef.current;
+
+      // Geser scroll seketika (Sync)
+      container.scrollTop += pendingScrollAdjustment.current;
+
+      // Update referensi agar sistem tidak mengira user scroll manual
+      scrollPositionRef.current = container.scrollTop;
+      lastScrollTopRef.current = container.scrollTop;
+      hasAdjustedScrollRef.current = true;
+
+      // Reset
+      pendingScrollAdjustment.current = 0;
+      if (reanchorFromKeyboardRef.current) {
+        const targetRow = selectedRowRef.current;
+        const idxFromKey = finalColumns.findIndex(
+          (c) => c.key === selectedCellKey
+        );
+        const idx = idxFromKey >= 0 ? idxFromKey : 1;
+        gridRef.current?.selectCell?.({ rowIdx: targetRow, idx });
+        // selectCell sudah memindahkan DOM focus ke sel target.
+        gridCellHadFocusRef.current = false;
+      } else {
+        restoreGridCellFocus();
+      }
+      reanchorFromKeyboardRef.current = false;
     }
-  }, [
-    selectedDate,
-    selectedDate2,
-    filters.filters.tglDari,
-    filters.filters.tglSampai,
-    onReload,
-    isFirstLoad
-  ]);
+  }, [rows]);
 
   useEffect(() => {
     if (rows.length > 0 && selectedRow !== null) {
       const selectedRowData = rows[selectedRow];
-      dispatch(setHeaderData(selectedRowData)); // Pastikan data sudah benar
-    } else {
+      if (selectedRowData?.id !== lastDispatchedId.current) {
+        dispatch(setHeaderData(selectedRowData));
+        lastDispatchedId.current = selectedRowData?.id;
+      }
+      return;
+    }
+
+    // Grid master-detail: kalau header benar-benar kosong (bukan sekadar sedang
+    // memuat), detail harus ikut kosong — kalau tidak, detail bukti sebelumnya
+    // tetap tampil di bawah grid yang sudah tidak punya baris.
+    const sedangMuat =
+      isLoadingData || isFetching || isTransitioning || shouldBulkFetch;
+    if (rows.length === 0 && !sedangMuat && lastDispatchedId.current !== null) {
+      lastDispatchedId.current = null;
       dispatch(setHeaderData({}));
     }
-  }, [rows, selectedRow, dispatch]);
+  }, [
+    rows,
+    selectedRow,
+    dispatch,
+    isLoadingData,
+    isFetching,
+    isTransitioning,
+    shouldBulkFetch
+  ]);
+
   useEffect(() => {
-    const headerCells = document.querySelectorAll('.rdg-header-row .rdg-cell');
-    headerCells.forEach((cell) => {
-      cell.setAttribute('tabindex', '-1');
-    });
+    const filterHandler = (e: any) => {
+      const keterangan = e.detail;
+
+      setFilters((prev) => ({
+        ...prev,
+        filters: { ...prev.filters, keterangan },
+        page: 1
+      }));
+      setRows([]);
+      setCurrentPage(1);
+      resetBufferingCache();
+    };
+
+    const printHandler = () => {
+      handleReport();
+    };
+
+    window.addEventListener('AI_FILTER_Comodity', filterHandler);
+    window.addEventListener('AI_PRINT', printHandler);
+
+    return () => {
+      window.removeEventListener('AI_FILTER_Comodity', filterHandler);
+      window.removeEventListener('AI_PRINT', printHandler);
+    };
   }, []);
+
   useEffect(() => {
     const preventScrollOnSpace = (event: KeyboardEvent) => {
       // Cek apakah target yang sedang fokus adalah input atau textarea
@@ -1672,14 +2640,20 @@ const GridJurnalUmumHeader = () => {
       }
     };
 
-    // Menambahkan event listener saat komponen di-mount
     document.addEventListener('keydown', preventScrollOnSpace);
-
-    // Menghapus event listener saat komponen di-unmount
     return () => {
       document.removeEventListener('keydown', preventScrollOnSpace);
     };
   }, []);
+
+  const handleClickOutside = (event: MouseEvent) => {
+    if (
+      contextMenuRef.current &&
+      !contextMenuRef.current.contains(event.target as Node)
+    ) {
+      setContextMenu(null);
+    }
+  };
 
   useEffect(() => {
     window.addEventListener('mousedown', handleClickOutside);
@@ -1687,25 +2661,45 @@ const GridJurnalUmumHeader = () => {
       window.removeEventListener('mousedown', handleClickOutside);
     };
   }, []);
-  useEffect(() => {
-    if (
-      selectedRow !== null &&
-      rows.length > 0 &&
-      mode !== 'add' &&
-      !successApproved
-    ) {
-      const row = rows[selectedRow];
 
-      forms.setValue('nobukti', row.nobukti);
-      forms.setValue('tglbukti', row.tglbukti);
-      forms.setValue('keterangan', row.keterangan ?? '');
+  useEffect(() => {
+    const headerCells = document.querySelectorAll('.rdg-header-row .rdg-cell');
+    headerCells.forEach((cell) => {
+      cell.setAttribute('tabindex', '-1');
+    });
+  }, []);
+  useEffect(() => {
+    if (gridRef.current && dataGridKey) {
+      setTimeout(() => {
+        gridRef.current?.selectCell({ rowIdx: 0, idx: 1 });
+        setIsFirstLoad(false);
+      }, 0);
+    }
+  }, [dataGridKey]);
+
+  // --- Reset Flag Transisi saat selesai
+  useEffect(() => {
+    if (!isTransitioning && !isFetching) {
+      setTimeout(() => {
+        hasAdjustedScrollRef.current = false;
+      }, 200);
+    }
+  }, [isTransitioning, isFetching]);
+
+  useEffect(() => {
+    const rowData = rows[selectedRow];
+    if (selectedRow !== null && rows.length > 0 && mode !== 'add') {
+      forms.setValue('nobukti', rowData.nobukti);
+      forms.setValue('tglbukti', rowData.tglbukti);
+      forms.setValue('keterangan', rowData.keterangan ?? '');
       // Saat form pertama kali di-render
       forms.setValue('details', []); // Menyiapkan details sebagai array kosong jika belum ada
     } else {
       const currentDate = new Date(); // Dapatkan tanggal sekarang
       forms.setValue('tglbukti', formatDateToDDMMYYYY(currentDate));
     }
-  }, [forms, selectedRow, rows, mode, successApproved]);
+  }, [forms, selectedRow, rows, mode]);
+
   useEffect(() => {
     // Initialize the refs based on columns dynamically
     columns.forEach((col) => {
@@ -1714,101 +2708,24 @@ const GridJurnalUmumHeader = () => {
       }
     });
   }, []);
+
   useEffect(() => {
     const handleEscape = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
+        clearError();
         forms.reset(); // Reset the form when the Escape key is pressed
         setMode(''); // Reset the mode to empty
+        setPopOver(false);
         dispatch(clearOpenName());
       }
     };
 
-    // Add event listener for keydown when the component is mounted
     document.addEventListener('keydown', handleEscape);
-
-    // Cleanup event listener when the component is unmounted or the effect is re-run
     return () => {
       document.removeEventListener('keydown', handleEscape);
     };
   }, [forms]);
-  useEffect(() => {
-    // Memastikan refetch dilakukan saat filters berubah
-    if (filters !== prevFilters) {
-      refetch(); // Memanggil ulang API untuk mendapatkan data terbaru
-      setPrevFilters(filters); // Simpan filters terbaru
-    }
-  }, [filters]); // Dependency array termasuk filters dan refetch
-  useEffect(() => {
-    if (onReload) {
-      setFilters((prev) => ({
-        ...prev,
-        isreload: true // Set true hanya saat explicit reload
-      }));
-      refetch();
-      setPrevFilters(filters);
-    }
-  }, [onReload]);
-  useEffect(() => {
-    // Memastikan refetch dilakukan saat filters berubah
-    if (successApproved) {
-      setIsFirstLoad(true);
-      setCheckedRows(new Set());
-      setCurrentPage(1);
-      setFetchedPages(new Set([1]));
-      setHasMore(true);
-      setFilters((prevFilters) => ({
-        ...prevFilters,
-        page: 1
-      }));
-    }
-  }, [successApproved]); // Dependency array termasuk filters dan ref
-  useEffect(() => {
-    // Ambil parameter nobukti dari URL
-    const rawNobukti = searchParams.get('nobukti');
 
-    // Set filters
-    setFilters((prevFilters: Filter) => ({
-      ...prevFilters,
-      filters: {
-        ...prevFilters.filters,
-        nobukti: rawNobukti ?? ''
-      }
-    }));
-
-    // Menambahkan timeout 1 detik sebelum menghapus parameter dari URL
-    setTimeout(() => {
-      const url = new URL(window.location.href);
-      url.searchParams.delete('nobukti');
-      window.history.replaceState({}, '', url.toString());
-    }, 1000); // Delay 1 detik (1000 ms)
-  }, []);
-  useEffect(() => {
-    if (!allData || isFetchingManually) return;
-
-    const newRows = allData.data || [];
-    setRows((prevRows) => {
-      if (currentPage === 1 || filters !== prevFilters) {
-        setCurrentPage(1);
-        setFetchedPages(new Set([1]));
-        return newRows;
-      }
-
-      if (!fetchedPages.has(currentPage)) {
-        return [...prevRows, ...newRows];
-      }
-
-      return prevRows;
-    });
-
-    if (allData.pagination.totalPages) {
-      setTotalPages(allData.pagination.totalPages);
-    }
-
-    setHasMore(newRows.length === filters.limit);
-    setFetchedPages((prev) => new Set(prev).add(currentPage));
-    setPrevFilters(filters);
-    setIsFirstLoad(false);
-  }, [allData, currentPage, filters, isFetchingManually]);
   useEffect(() => {
     return () => {
       debouncedFilterUpdate.cancel();
@@ -1816,7 +2733,16 @@ const GridJurnalUmumHeader = () => {
   }, []);
   return (
     <div className={`flex h-[100%] w-full justify-center`}>
-      <div className="flex h-[100%] w-full flex-col rounded-sm border border-border bg-background">
+      <div
+        onKeyDownCapture={handleGridInputNavigationKeyDownCapture}
+        onWheelCapture={() => {
+          interactionModeRef.current = 'pointer';
+        }}
+        onPointerDownCapture={() => {
+          interactionModeRef.current = 'pointer';
+        }}
+        className="flex h-[100%] w-full flex-col rounded-sm border border-border bg-background"
+      >
         <div className="flex h-[38px] w-full flex-row items-center justify-between rounded-t-sm border-b border-border bg-background-grid-header px-2">
           <div className="flex flex-row items-center">
             <label htmlFor="" className="text-xs">
@@ -1899,19 +2825,27 @@ const GridJurnalUmumHeader = () => {
           ref={gridRef}
           columns={finalColumns}
           rows={rows}
-          rowKeyGetter={rowKeyGetter}
           rowClass={getRowClass}
+          rowKeyGetter={rowKeyGetter}
           onCellClick={handleCellClick}
-          headerRowHeight={70}
-          rowHeight={30}
+          onSelectedCellChange={(args) => {
+            setSelectedCellKey(args.column.key);
+            handleCellClick({ row: args.row });
+          }}
+          headerRowHeight={HEADER_ROW_HEIGHT}
+          rowHeight={ROW_HEIGHT}
           className={`${isDark ? 'rdg-dark' : 'rdg-light'} fill-grid`}
+          // WAJIB false (sama seperti GridCuti). Dengan virtualization aktif,
+          // RDG hanya me-render baris di viewport (+4 overscan) -- begitu sel
+          // aktif ter-scroll keluar layar elemennya ter-unmount, DOM focus jatuh
+          // ke <body>, dan Arrow/PageUp/PageDown tidak lagi sampai ke grid.
+          // Dengan false, sel aktif tetap ter-mount walau tidak terlihat,
+          // sehingga tombol navigasi langsung menarik pandangan kembali ke sel
+          // yang ter-select.
           enableVirtualization={false}
           onColumnResize={onColumnResize}
           onColumnsReorder={onColumnsReorder}
-          onSelectedCellChange={(args) => {
-            handleCellClick({ row: args.row });
-          }}
-          onScroll={handleScroll}
+          onScroll={suppressScrollRef.current ? undefined : handleScroll}
           renderers={{
             noRowsFallback: <EmptyRowsRenderer />
           }}
@@ -1932,6 +2866,12 @@ const GridJurnalUmumHeader = () => {
                 icon: <FaPrint />,
                 onClick: () => handleReport(),
                 className: 'bg-cyan-500 hover:bg-cyan-700'
+              },
+              {
+                label: 'Export',
+                icon: <FaFileExport />,
+                onClick: () => handleExportExcel(),
+                className: 'bg-green-600 hover:bg-green-700'
               }
             ]}
           />
@@ -1979,7 +2919,7 @@ const GridJurnalUmumHeader = () => {
         isLoadingDelete={isLoadingDelete}
         forms={forms}
         mode={mode}
-        onSubmit={forms.handleSubmit(onSubmit)}
+        onSubmit={onSubmit as any}
         isLoadingCreate={isLoadingCreate}
       />
     </div>

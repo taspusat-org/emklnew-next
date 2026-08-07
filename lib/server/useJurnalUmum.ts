@@ -1,18 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from 'react-query';
 import {
-  deleteKasGantungFn,
-  getKasGantungDetailFn,
-  getKasGantungHeaderFn,
   getKasgantungListFn,
-  getKasgantungPengembalianFn,
-  storeKasGantungFn,
-  updateKasGantungFn
+  getKasgantungPengembalianFn
 } from '../apis/kasgantungheader.api';
 import {
   setProcessed,
   setProcessing
 } from '../store/loadingSlice/loadingSlice';
-import { useToast } from '@/hooks/use-toast';
 import { useDispatch } from 'react-redux';
 import { AxiosError } from 'axios';
 import { IErrorResponse } from '../types/user.type';
@@ -24,6 +18,7 @@ import {
   updateJurnalUmumFn
 } from '../apis/jurnalumumheader.api';
 import { useAlert } from '../store/client/useAlert';
+import { useFormError } from '../hooks/formErrorContext';
 
 export const useGetJurnalUmumHeader = (
   filters: {
@@ -43,33 +38,23 @@ export const useGetJurnalUmumHeader = (
   } = {},
   signal?: AbortSignal
 ) => {
-  const dispatch = useDispatch();
-  const { toast } = useToast();
-  const { alert } = useAlert();
-  const queryClient = useQueryClient();
-
   return useQuery(
     ['jurnalumum', filters],
-    async () => {
-      // Only trigger processing if the page is 1
-      if (filters.page === 1) {
-        dispatch(setProcessing());
-      }
-
-      try {
-        const data = await getJurnalUmumHeaderFn(filters, signal);
-        return data;
-      } catch (error) {
-        // Show error toast and dispatch processed
-        dispatch(setProcessed());
-        throw error;
-      } finally {
-        // Regardless of success or failure, we dispatch setProcessed after the query finishes
-        dispatch(setProcessed());
-      }
-    },
+    async () => await getJurnalUmumHeaderFn(filters, signal),
     {
-      enabled: !signal?.aborted
+      // Guard page >= 1 disamakan dengan usePengeluaran. GridJurnalUmumHeader
+      // memakai trik setCurrentPage(0) di handleScroll untuk memaksa effect
+      // jalan ulang saat halaman tujuan kebetulan == currentPage yang basi.
+      // Tanpa guard ini, fase antara itu benar-benar mengirim request page=0;
+      // FindAllSchema meng-clamp-nya ke 1, jadi yang balik adalah data halaman 1
+      // yang lalu tersimpan ke pageDataCache dengan key 0 — satu request sia-sia
+      // plus entri cache yang tidak pernah dirender.
+      enabled: !signal?.aborted && (filters.page ?? 1) >= 1,
+      // staleTime/cacheTime 0: window pagination dikelola sendiri oleh grid.
+      // Tanpa ini refetch pasca-update sempat memakai cache lama sehingga baris
+      // yang baru disimpan tampil dengan nilai basi.
+      staleTime: 0,
+      cacheTime: 0
     }
   );
 };
@@ -88,60 +73,83 @@ export const useGetJurnalUmumDetail = (
       created_at?: string;
       updated_at?: string;
     };
-  } = {}
+  } = {},
+  signal?: AbortSignal
 ) => {
+  // Key 'jurnalumumdetail', BUKAN 'jurnalumum'. Dulu detail memakai key yang
+  // sama persis dengan useGetJurnalUmumHeader, sehingga
+  // invalidateQueries('jurnalumum') (useUpdateJurnalUmum, useDeleteJurnalUmum,
+  // useHutang, useKasGantung) ikut membatalkan cache detail — dan sebaliknya,
+  // cache detail ikut di-refetch tiap kali header berubah walau isinya tidak
+  // terkait. Sama seperti usePengeluaran / useHutang.
   return useQuery(
-    ['jurnalumum', filters],
-    async () => await getJurnalUmumDetailFn(filters),
+    ['jurnalumumdetail', filters],
+    async () => await getJurnalUmumDetailFn(filters, signal),
     {
-      enabled: !!filters.filters?.nobukti
+      // Jangan fetch saat page < 1 (trik setCurrentPage(0) di grid untuk memaksa
+      // refetch). Backend meng-clamp page<1 ke 1, jadi tanpa guard ini halaman 0
+      // memulangkan halaman 1 dan mengotori window cache.
+      enabled:
+        !!filters.filters?.nobukti &&
+        !signal?.aborted &&
+        (filters.page ?? 1) >= 1,
+      // staleTime/cacheTime 0: window pagination dikelola sendiri oleh grid
+      // (pageDataCache + streamBuffer). Cache react-query di atasnya hanya
+      // membuat data lama sempat terpakai saat filter/sort berubah.
+      staleTime: 0,
+      cacheTime: 0
     }
   );
 };
 
 export const useCreateJurnalUmum = () => {
-  const queryClient = useQueryClient();
   const dispatch = useDispatch();
-  const { toast } = useToast();
   const { alert } = useAlert();
+  const { setError } = useFormError();
 
+  // Sengaja TIDAK invalidateQueries('jurnalumum') di sini. Alur onSuccess di
+  // GridJurnalUmumHeader sudah otoritatif: ia mengambil window baru dari redis
+  // lalu setCurrentPage(pageNumber) yang memicu refetch halaman yang BENAR.
+  // invalidateQueries malah me-refetch `currentPage` yang mungkin masih basi;
+  // karena useGetJurnalUmumHeader memakai staleTime/cacheTime 0, refetch itu
+  // selalu jalan, tiba paling akhir, dan menimpa baris + fokus hasil onSuccess.
+  // Sama seperti useCreatePengeluaran.
   return useMutation(storeJurnalUmumFn, {
-    // before the mutation fn runs
     onMutate: () => {
       dispatch(setProcessing());
     },
-    // on success, invalidate + toast + clear loading
     onSuccess: () => {
-      void queryClient.invalidateQueries(['jurnalumum']);
-      toast({
-        title: 'Proses Berhasil',
-        description: 'Data Berhasil Ditambahkan'
-      });
       dispatch(setProcessed());
     },
-    // on error, toast + clear loading
     onError: (error: AxiosError) => {
-      const err = (error.response?.data as IErrorResponse) ?? {};
-      alert({
-        title: err.message ?? 'Gagal',
-        variant: 'danger',
-        submitText: 'OK'
-      });
+      const errorResponse = error.response?.data as IErrorResponse;
+      if (errorResponse !== undefined) {
+        const errorFields = Array.isArray(errorResponse.message)
+          ? errorResponse.message
+          : [];
+
+        if (errorResponse.statusCode === 400) {
+          errorFields?.forEach((err: { path: string[]; message: string }) => {
+            const path = err.path[0];
+            setError(path, err.message);
+          });
+        } else {
+          alert({
+            variant: 'danger',
+            submitText: 'OK',
+            title: errorResponse.message ?? 'Gagal'
+          });
+        }
+      }
       dispatch(setProcessed());
     }
-    // alternatively: always clear loading, whether success or fail
-    // onSettled: () => {
-    //   dispatch(clearProcessing());
-    // }
   });
 };
 export const useGetKasGantungHeaderList = (
   params: { dari: string; sampai: string } = { dari: '', sampai: '' },
   popOver: boolean
 ) => {
-  const { toast } = useToast();
   const { alert } = useAlert();
-  const queryClient = useQueryClient();
 
   return useQuery(
     ['kasgantungheaderlist', params],
@@ -172,9 +180,7 @@ export const useGetKasGantungHeaderPengembalian = (
   },
   popOver: boolean // Menambahkan argumen popOver untuk kontrol kondisi fetch
 ) => {
-  const { toast } = useToast();
   const { alert } = useAlert();
-  const queryClient = useQueryClient();
 
   return useQuery(
     ['kasgantungheaderpengembalian', params],
@@ -202,42 +208,44 @@ export const useGetKasGantungHeaderPengembalian = (
   );
 };
 export const useUpdateJurnalUmum = () => {
-  const queryClient = useQueryClient();
-  const { toast } = useToast();
   const { alert } = useAlert();
+  const { setError } = useFormError();
 
+  // Sama seperti useCreateJurnalUmum: JANGAN invalidateQueries di sini.
+  // onSuccess di GridJurnalUmumHeader yang mengatur data + posisi baris;
+  // refetch dari invalidate mendarat belakangan dan menimpa fokus tersebut
+  // (gejala "setelah update grid balik ke baris 1").
   return useMutation(updateJurnalUmumFn, {
-    onSuccess: () => {
-      void queryClient.invalidateQueries('jurnalumum');
-      toast({
-        title: 'Proses Berhasil.',
-        description: 'Data Berhasil Diubah.'
-      });
-    },
     onError: (error: AxiosError) => {
       const errorResponse = error.response?.data as IErrorResponse;
       if (errorResponse !== undefined) {
-        alert({
-          title: errorResponse.message ?? 'Gagal',
-          variant: 'danger',
-          submitText: 'OK'
-        });
+        const errorFields = Array.isArray(errorResponse.message)
+          ? errorResponse.message
+          : [];
+
+        if (errorResponse.statusCode === 400) {
+          errorFields?.forEach((err: { path: string[]; message: string }) => {
+            const path = err.path[0];
+            setError(path, err.message);
+          });
+        } else {
+          alert({
+            title: errorResponse.message ?? 'Gagal',
+            variant: 'danger',
+            submitText: 'OK'
+          });
+        }
       }
     }
   });
 };
 export const useDeleteJurnalUmum = () => {
   const queryClient = useQueryClient();
-  const { toast } = useToast();
   const { alert } = useAlert();
 
   return useMutation(deleteJurnalUmumFn, {
     onSuccess: () => {
       void queryClient.invalidateQueries('jurnalumum');
-      toast({
-        title: 'Proses Berhasil.',
-        description: 'Data Berhasil Dihapus.'
-      });
     },
     onError: (error: AxiosError) => {
       const errorResponse = error.response?.data as IErrorResponse;

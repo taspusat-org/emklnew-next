@@ -6,6 +6,11 @@ import {
 import { buildQueryParams } from '../utils';
 import { api2 } from '../utils/AxiosInstance';
 import { JurnalUmumHeaderInput } from '../validations/jurnalumum.validation';
+import {
+  BuktiJobPayload,
+  ExportJobPayload,
+  ReportJobResponse
+} from './report.api';
 interface UpdateParams {
   id: string;
   fields: JurnalUmumHeaderInput;
@@ -37,11 +42,13 @@ export const getJurnalUmumHeaderFn = async (
 };
 
 export const getJurnalUmumDetailFn = async (
-  filters: GetParams = {}
+  filters: GetParams = {},
+  signal?: AbortSignal
 ): Promise<IAllJurnalUmumDetail> => {
   const queryParams = buildQueryParams(filters);
   const response = await api2.get(`/jurnalumumdetail`, {
-    params: queryParams
+    params: queryParams,
+    signal
   });
   return response.data;
 };
@@ -99,4 +106,16 @@ export const exportJurnalUmumFn = async (
     console.error('Error exporting data jurnal umum:', error);
     throw new Error('Failed to export data jurnal umum');
   }
+};
+export const generateJurnalUmumHeaderReportFn = async (
+  payload: BuktiJobPayload
+): Promise<ReportJobResponse> => {
+  const response = await api2.post('/jurnalumumheader/report', payload);
+  return response.data;
+};
+export const generateJurnalUmumHeaderExportFn = async (
+  payload: ExportJobPayload
+): Promise<ReportJobResponse> => {
+  const response = await api2.post('/jurnalumumheader/export', payload);
+  return response.data;
 };

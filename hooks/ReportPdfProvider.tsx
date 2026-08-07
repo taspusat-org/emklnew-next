@@ -16,11 +16,6 @@ type ReportPdfContextValue = Pick<
 
 const ReportPdfContext = createContext<ReportPdfContextValue | null>(null);
 
-/**
- * Dipasang sekali di layout dashboard. Toast dan modal viewer dirender di
- * level ini supaya proses cetak tetap berjalan (dan tetap terlihat) walau
- * user pindah menu setelah menekan Print.
- */
 export function ReportPdfProvider({ children }: { children: React.ReactNode }) {
   const {
     toasts,

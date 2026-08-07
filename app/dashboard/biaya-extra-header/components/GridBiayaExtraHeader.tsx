@@ -112,6 +112,7 @@ import {
 } from '@/lib/types/biayaextraheader.type';
 import { generateBiayaExtraHeaderExportFn } from '@/lib/apis/report.api';
 import { useReportPdfContext } from '@/hooks/ReportPdfProvider';
+import { HEADER_ROW_HEIGHT, LIMIT, ROW_HEIGHT } from '@/constants/constant';
 
 interface Filter {
   page: number;
@@ -200,7 +201,6 @@ const GridBiayaExtraHeader = () => {
 
   const STREAM_BUFFER_SIZE = 5;
   const WINDOW_SIZE = 5;
-  const ROW_HEIGHT = 27;
   const jumpToFirstRef = useRef(false);
   const jumpToLastRef = useRef(false);
   // Id baris yang harus difokuskan Row Combiner setelah window settle pasca
@@ -369,7 +369,7 @@ const GridBiayaExtraHeader = () => {
 
   const [filters, setFilters] = useState<Filter>({
     page: 1,
-    limit: 50,
+    limit: LIMIT,
     filters: {
       ...filterBiayaExtraHeader,
       tglDari: committed.tglDari,
@@ -3012,7 +3012,7 @@ const GridBiayaExtraHeader = () => {
             setSelectedCellKey(args.column.key);
             handleCellClick({ row: args.row });
           }}
-          headerRowHeight={70}
+          headerRowHeight={HEADER_ROW_HEIGHT}
           rowHeight={ROW_HEIGHT}
           className={`${isDark ? 'rdg-dark' : 'rdg-light'} fill-grid`}
           enableVirtualization={false}

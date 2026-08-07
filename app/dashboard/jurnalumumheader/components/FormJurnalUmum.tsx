@@ -588,7 +588,6 @@ const FormKasGantung = ({
       forms.setValue('details', filteredRows);
     }
   }, [rows]);
-
   return (
     <Dialog open={popOver} onOpenChange={setPopOver}>
       <DialogTitle hidden={true}>Title</DialogTitle>
@@ -618,7 +617,13 @@ const FormKasGantung = ({
             <Form {...forms}>
               <form
                 ref={formRef}
-                onSubmit={onSubmit}
+                // `onSubmit` adalah handler MENTAH dari grid, jadi pembungkusan
+                // handleSubmit dilakukan di sini. Submit native (mis. ENTER di
+                // sebuah field) diperlakukan sama dengan tombol SAVE:
+                // keepOpenModal = false, dialog menutup.
+                onSubmit={forms.handleSubmit((values: any) =>
+                  onSubmit(values, false)
+                )}
                 className="flex h-full flex-col gap-6"
               >
                 <div className="flex h-[100%] flex-col gap-2 lg:gap-3">
@@ -733,7 +738,9 @@ const FormKasGantung = ({
         </div>
         <FormFooterButtons
           mode={mode}
-          onSave={onSubmit}
+          onSave={() => {
+            forms.handleSubmit((values: any) => onSubmit(values, false))();
+          }}
           onCancel={handleClose}
           isLoadingCreate={isLoadingCreate}
           isLoadingUpdate={isLoadingUpdate}

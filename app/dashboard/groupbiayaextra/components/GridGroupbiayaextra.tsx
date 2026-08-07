@@ -87,6 +87,7 @@ import {
   generateGroupbiayaextraReportFn
 } from '@/lib/apis/report.api';
 import { useReportPdfContext } from '@/hooks/ReportPdfProvider';
+import { HEADER_ROW_HEIGHT, LIMIT, ROW_HEIGHT } from '@/constants/constant';
 
 interface Filter {
   page: number;
@@ -210,7 +211,6 @@ const GridGroupbiayaextra = () => {
   const prefetchingPagesRef = useRef<Set<number>>(new Set());
   const STREAM_BUFFER_SIZE = 5;
   const WINDOW_SIZE = 5;
-  const ROW_HEIGHT = 27;
   const jumpToLastRef = useRef(false);
   const jumpToFirstRef = useRef(false);
   // Modalitas input terakhir: 'keyboard' (Arrow/Page) atau 'pointer' (wheel/drag
@@ -310,7 +310,7 @@ const GridGroupbiayaextra = () => {
   const router = useRouter();
   const [filters, setFilters] = useState<Filter>({
     page: 1,
-    limit: 50,
+    limit: LIMIT,
     search: '',
     filters: {
       keterangan: '',
@@ -2531,7 +2531,7 @@ const GridGroupbiayaextra = () => {
             setSelectedCellKey(args.column.key);
             handleCellClick({ row: args.row });
           }}
-          headerRowHeight={70}
+          headerRowHeight={HEADER_ROW_HEIGHT}
           rowHeight={ROW_HEIGHT}
           className={`${isDark ? 'rdg-dark' : 'rdg-light'} fill-grid`}
           // WAJIB false (sama seperti GridCuti). Dengan virtualization aktif,
