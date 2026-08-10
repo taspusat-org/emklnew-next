@@ -81,7 +81,10 @@ import {
   saveGridConfig
 } from '@/lib/utils';
 
-import { getGroupbiayaextraFn } from '@/lib/apis/groupbiayaextra.api';
+import {
+  checkValidationGroupbiayaextraFn,
+  getGroupbiayaextraFn
+} from '@/lib/apis/groupbiayaextra.api';
 import {
   generateGroupbiayaextraExportFn,
   generateGroupbiayaextraReportFn
@@ -1785,18 +1788,50 @@ const GridGroupbiayaextra = () => {
     }
   };
 
-  const handleEdit = () => {
-    if (selectedRow !== null) {
-      setPopOver(true);
-      setMode('edit');
+  // Pra-cek ke backend sebelum dialog dibuka: EDIT mengambil lock baris, DELETE
+  // memastikan group-nya tidak sedang dipakai biayaextramuatandetail. Server
+  // tetap menolak lagi saat submit — ini hanya supaya user tahu lebih awal.
+  const runCheckValidation = async (aksi: 'EDIT' | 'DELETE') => {
+    const rowData = rows[selectedRow];
+    if (!rowData) return false;
+
+    try {
+      const result = await checkValidationGroupbiayaextraFn({
+        aksi,
+        value: rowData.id
+      });
+
+      if (result.data?.status === 'failed') {
+        alert({
+          title: result.data.message,
+          variant: 'danger',
+          submitText: 'OK'
+        });
+        return false;
+      }
+
+      return true;
+    } catch (error) {
+      console.error('Error checking validation:', error);
+      alert({
+        title: 'Gagal memeriksa data, silakan coba lagi.',
+        variant: 'danger',
+        submitText: 'OK'
+      });
+      return false;
     }
   };
 
-  const handleDelete = () => {
-    if (selectedRow !== null) {
-      setMode('delete');
-      setPopOver(true);
-    }
+  const handleEdit = async () => {
+    if (!(await runCheckValidation('EDIT'))) return;
+    setPopOver(true);
+    setMode('edit');
+  };
+
+  const handleDelete = async () => {
+    if (!(await runCheckValidation('DELETE'))) return;
+    setMode('delete');
+    setPopOver(true);
   };
 
   const handleView = () => {

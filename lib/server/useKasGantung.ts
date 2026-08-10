@@ -25,8 +25,17 @@ export const useGetKasGantungHeader = (
       tglbukti?: string;
       keterangan?: string | null;
       bank_id?: number | null;
+      relasi_nama?: string | null;
+      alatbayar_nama?: string | null;
       pengeluaran_nobukti?: string | null;
       coakaskeluar?: string | null;
+      dibayarke?: string | null;
+      nowarkat?: string | null;
+      tgljatuhtempo?: string | null;
+      gantungorderan_nobukti?: string | null;
+      modifiedby?: string | null;
+      created_at?: string | null;
+      updated_at?: string | null;
       tglDari?: string | null;
       tglSampai?: string | null;
     };
@@ -34,41 +43,29 @@ export const useGetKasGantungHeader = (
     sortBy?: string;
     sortDirection?: string;
     limit?: number;
+    isreload?: boolean;
     search?: string; // Kata kunci pencarian
-  } = {}
+  } = {},
+  signal?: AbortSignal
 ) => {
-  const dispatch = useDispatch();
-  const { toast } = useToast();
-  const { alert } = useAlert();
-  const queryClient = useQueryClient();
-
   return useQuery(
     ['kasgantung', filters],
-    async () => {
-      // Only trigger processing if the page is 1
-      if (filters.page === 1) {
-        dispatch(setProcessing());
-      }
-
-      try {
-        const data = await getKasGantungHeaderFn(filters);
-        return data;
-      } catch (error) {
-        // Show error toast and dispatch processed
-        dispatch(setProcessed());
-        throw error;
-      } finally {
-        // Regardless of success or failure, we dispatch setProcessed after the query finishes
-        dispatch(setProcessed());
-      }
-    },
+    async () => await getKasGantungHeaderFn(filters, signal),
     {
-      // Optionally, you can use the `onSettled` callback if you want to reset the processing state after query success or failure
-      onSettled: () => {
-        if (filters.page === 1) {
-          dispatch(setProcessed());
-        }
-      }
+      // Guard page >= 1 disamakan dengan useGetJurnalUmumHeader.
+      // GridKasGantungHeader memakai trik setCurrentPage(0) di handleScroll
+      // untuk memaksa effect jalan ulang saat halaman tujuan kebetulan ==
+      // currentPage yang basi. Tanpa guard ini, fase antara itu benar-benar
+      // mengirim request page=0; FindAllSchema meng-clamp-nya ke 1, jadi yang
+      // balik adalah data halaman 1 yang lalu tersimpan ke pageDataCache dengan
+      // key 0 — satu request sia-sia plus entri cache yang tidak pernah
+      // dirender.
+      enabled: !signal?.aborted && (filters.page ?? 1) >= 1,
+      // staleTime/cacheTime 0: window pagination dikelola sendiri oleh grid.
+      // Tanpa ini refetch pasca-update sempat memakai cache lama sehingga baris
+      // yang baru disimpan tampil dengan nilai basi.
+      staleTime: 0,
+      cacheTime: 0
     }
   );
 };
@@ -88,13 +85,27 @@ export const useGetKasGantungDetail = (
       created_at?: string;
       updated_at?: string;
     };
-  } = {}
+  } = {},
+  signal?: AbortSignal
 ) => {
+  // Key 'kasgantungdetail', BUKAN 'kasgantung'. Dulu detail memakai key yang
+  // sama persis dengan useGetKasGantungHeader, sehingga
+  // invalidateQueries('kasgantung') ikut membatalkan cache detail — dan
+  // sebaliknya, cache detail ikut di-refetch tiap kali header berubah walau
+  // isinya tidak terkait. Sama seperti usePengeluaran / useJurnalUmum.
   return useQuery(
-    ['kasgantung', filters],
-    async () => await getKasGantungDetailFn(filters),
+    ['kasgantungdetail', filters],
+    async () => await getKasGantungDetailFn(filters, signal),
     {
-      enabled: !!filters.filters?.nobukti
+      // Jangan fetch saat page < 1 (trik setCurrentPage(0) di grid untuk memaksa
+      // refetch). Backend meng-clamp page<1 ke 1, jadi tanpa guard ini halaman 0
+      // memulangkan halaman 1 dan mengotori window cache.
+      enabled:
+        !!filters.filters?.nobukti &&
+        !signal?.aborted &&
+        (filters.page ?? 1) >= 1,
+      staleTime: 0,
+      cacheTime: 0
     }
   );
 };
@@ -104,14 +115,24 @@ export const useCreateKasGantung = () => {
   const { toast } = useToast();
   const { alert } = useAlert();
 
+  // Sengaja TIDAK invalidateQueries('kasgantung') di sini. Alur onSuccess di
+  // GridKasGantungHeader sudah otoritatif: ia mengambil window baru dari redis
+  // lalu setCurrentPage(pageNumber) yang memicu refetch halaman yang BENAR.
+  // invalidateQueries malah me-refetch `currentPage` yang mungkin masih basi;
+  // karena useGetKasGantungHeader memakai staleTime/cacheTime 0, refetch itu
+  // selalu jalan, tiba paling akhir, dan menimpa baris + fokus hasil onSuccess.
+  // Sama seperti useCreateJurnalUmum.
   return useMutation(storeKasGantungFn, {
     // before the mutation fn runs
     onMutate: () => {
       dispatch(setProcessing());
     },
-    // on success, invalidate + toast + clear loading
     onSuccess: () => {
-      void queryClient.invalidateQueries(['kasgantung']);
+      // Kas gantung membuat bukti pengeluaran & jurnal umum sebagai efek
+      // samping, jadi grid detail di tab lain harus ikut disegarkan.
+      void queryClient.invalidateQueries('kasgantungdetail');
+      void queryClient.invalidateQueries('pengeluarandetail');
+      void queryClient.invalidateQueries('jurnalumumdetail');
       toast({
         title: 'Proses Berhasil',
         description: 'Data Berhasil Ditambahkan'
@@ -128,10 +149,6 @@ export const useCreateKasGantung = () => {
       });
       dispatch(setProcessed());
     }
-    // alternatively: always clear loading, whether success or fail
-    // onSettled: () => {
-    //   dispatch(clearProcessing());
-    // }
   });
 };
 export const useGetKasGantungHeaderList = (
@@ -205,10 +222,15 @@ export const useUpdatePengembalianKasGantung = () => {
   const { toast } = useToast();
   const { alert } = useAlert();
 
+  // Seperti useUpdateJurnalUmum: JANGAN invalidate key header 'kasgantung'.
+  // onSuccess di GridKasGantungHeader yang mengatur data + posisi baris;
+  // refetch dari invalidate mendarat belakangan dan menimpa fokus tersebut
+  // (gejala "setelah update grid balik ke baris 1").
   return useMutation(updateKasGantungFn, {
     onSuccess: () => {
-      void queryClient.invalidateQueries('kasgantung');
+      void queryClient.invalidateQueries('kasgantungdetail');
       void queryClient.invalidateQueries('pengeluaran');
+      void queryClient.invalidateQueries('pengeluarandetail');
       // Tab yang dirender di halaman ini adalah jurnal umum DETAIL, jadi key-nya
       // 'jurnalumumdetail' sejak key detail dipisah dari header di useJurnalUmum.
       void queryClient.invalidateQueries('jurnalumumdetail');
@@ -237,6 +259,10 @@ export const useDeleteKasGantung = () => {
   return useMutation(deleteKasGantungFn, {
     onSuccess: () => {
       void queryClient.invalidateQueries('kasgantung');
+      void queryClient.invalidateQueries('kasgantungdetail');
+      void queryClient.invalidateQueries('pengeluaran');
+      void queryClient.invalidateQueries('pengeluarandetail');
+      void queryClient.invalidateQueries('jurnalumumdetail');
       toast({
         title: 'Proses Berhasil.',
         description: 'Data Berhasil Dihapus.'

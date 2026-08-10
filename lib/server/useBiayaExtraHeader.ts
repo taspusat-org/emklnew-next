@@ -75,11 +75,11 @@ export const useGetBiayaExtraMuatanDetail = (
 ) => {
   return useQuery(
     ['biayaextramuatandetail', id, filters],
-    async () => await getBiayaExtraMuatanDetailFn(id!, filters),
+    async () => await getBiayaExtraMuatanDetailFn(id!, filters, signal),
     {
       // Jangan fetch saat page < 1 (trik setCurrentPage(0) di grid untuk memaksa
       // refetch window pagination) atau saat belum ada header terpilih.
-      enabled: !!id && (filters.page ?? 1) >= 1,
+      enabled: !!id && !signal?.aborted && (filters.page ?? 1) >= 1,
       // staleTime/cacheTime 0: window pagination dikelola sendiri oleh grid
       // (pageDataCache + streamBuffer), sama seperti useGetPengeluaranDetail.
       staleTime: 0,
@@ -111,9 +111,9 @@ export const useGetBiayaExtraBongkaranDetail = (
 ) => {
   return useQuery(
     ['biayaextrabongkarandetail', id, filters],
-    async () => await getBiayaExtraBongkaranDetailFn(id!, filters),
+    async () => await getBiayaExtraBongkaranDetailFn(id!, filters, signal),
     {
-      enabled: !!id && (filters.page ?? 1) >= 1,
+      enabled: !!id && !signal?.aborted && (filters.page ?? 1) >= 1,
       staleTime: 0,
       cacheTime: 0
     }

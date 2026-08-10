@@ -7,10 +7,6 @@ interface UpdateParams {
   id: string;
   fields: HutangHeaderInput;
 }
-interface validationFields {
-  aksi: string;
-  value: number | string;
-}
 export const getHutangHeaderFn = async (
   filters: GetParams = {},
   signal?: AbortSignal
@@ -107,11 +103,6 @@ export const deleteHutangFn = async (id: string) => {
     throw error; // Re-throw the error if you want to handle it in the calling function
   }
 };
-export const checkValidationHutangFn = async (fields: validationFields) => {
-  const response = await api2.post(`/hutangheader/check-validation`, fields);
-  return response.data;
-};
-
 export const exportHutangFn = async (
   id: string,
   filters: any
