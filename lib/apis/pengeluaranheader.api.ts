@@ -10,10 +10,6 @@ interface UpdateParams {
   id: string;
   fields: PengeluaranHeaderInput;
 }
-interface validationFields {
-  aksi: string;
-  value: number | string;
-}
 export const getPengeluaranHeaderFn = async (
   filters: GetParams = {},
   signal?: AbortSignal
@@ -29,10 +25,13 @@ export const getPengeluaranHeaderFn = async (
     return response.data;
   } catch (error) {
     if (signal?.aborted) {
-      throw new Error('Request was cancelled');
+      throw error;
     }
-    console.error('Error fetching Akun Pusat:', error);
-    throw new Error('Failed to fetch Akun Pusat');
+    console.error('Error fetching pengeluaran header:', error);
+    // Lempar ulang error ASLINYA. Membungkusnya jadi `new Error('...')` membuang
+    // error.response — pemanggil kehilangan pesan + statusCode dari backend dan
+    // hanya bisa menampilkan teks generik. Berlaku untuk semua fungsi di file ini.
+    throw error;
   }
 };
 
@@ -44,8 +43,8 @@ export const getPengeluaranHeaderByIdFn = async (
 
     return response.data;
   } catch (error) {
-    console.error('Error:', error);
-    throw new Error('Failed');
+    console.error('Error fetching pengeluaran header by id:', error);
+    throw error;
   }
 };
 
@@ -64,10 +63,10 @@ export const getPengeluaranDetailFn = async (
     return response.data;
   } catch (error) {
     if (signal?.aborted) {
-      throw new Error('Request was cancelled');
+      throw error;
     }
-    console.error('Error:', error);
-    throw new Error('Failed');
+    console.error('Error fetching pengeluaran detail:', error);
+    throw error;
   }
 };
 export const storePengeluaranFn = async (fields: PengeluaranHeaderInput) => {
@@ -89,8 +88,8 @@ export const getPengeluaranListFn = async (dari: string, sampai: string) => {
 
     return response.data;
   } catch (error) {
-    console.error('Error fetching pengeluaran:', error);
-    throw new Error('Failed to fetch pengeluaran');
+    console.error('Error fetching daftar pengeluaran:', error);
+    throw error;
   }
 };
 export const getPengeluaranFn = async (
@@ -107,27 +106,18 @@ export const getPengeluaranFn = async (
 
     return response.data;
   } catch (error) {
-    console.error('Error fetching pengeluaran:', error);
-    throw new Error('Failed to fetch pengeluaran');
+    console.error('Error fetching pengembalian pengeluaran:', error);
+    throw error;
   }
 };
 export const deletePengeluaranFn = async (id: string) => {
   try {
     const response = await api2.delete(`/pengeluaranheader/${id}`);
-    return response.data; // Optionally return response data if needed
+    return response.data;
   } catch (error) {
-    console.error('Error deleting order:', error);
-    throw error; // Re-throw the error if you want to handle it in the calling function
+    console.error('Error deleting pengeluaran:', error);
+    throw error;
   }
-};
-export const checkValidationPengeluaranFn = async (
-  fields: validationFields
-) => {
-  const response = await api2.post(
-    `/pengeluaranheader/check-validation`,
-    fields
-  );
-  return response.data;
 };
 export const exportPengeluaranFn = async (
   id: string,
@@ -144,6 +134,6 @@ export const exportPengeluaranFn = async (
     return response.data; // ini sudah Blob
   } catch (error) {
     console.error('Error exporting data pengeluaran:', error);
-    throw new Error('Failed to export data pengeluaran');
+    throw error;
   }
 };

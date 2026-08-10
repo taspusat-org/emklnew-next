@@ -178,6 +178,7 @@ const GridJurnalUmumHeader = () => {
   const [hasMore, setHasMore] = useState(true);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const lastDispatchedId = useRef<string | null>(null);
+  const headerClearedRef = useRef(false);
   const { mutateAsync: deleteJurnalUmum, isLoading: isLoadingDelete } =
     useDeleteJurnalUmum();
   const [columnsOrder, setColumnsOrder] = useState<readonly number[]>([]);
@@ -1094,6 +1095,7 @@ const GridJurnalUmumHeader = () => {
       setIsAllSelected(false);
       setRows([]);
       setCurrentPage(1);
+      setSelectedRow(0);
       resetBufferingCache();
     },
     [columns, columnsOrder]
@@ -1968,6 +1970,21 @@ const GridJurnalUmumHeader = () => {
         return;
       }
 
+      // Baris detail tanpa COA lolos zod (jurnalumumDetailSchema.coa nullable)
+      // tapi ditolak FK jurnalumumdetail -> akunpusat di backend. Dihadang di
+      // sini supaya user tahu baris mana yang salah, bukan menunggu error db.
+      const barisTanpaCoa = (values.details ?? []).findIndex(
+        (detail) => String(detail?.coa ?? '').trim() === ''
+      );
+      if (barisTanpaCoa !== -1) {
+        alert({
+          title: `COA PADA BARIS ${barisTanpaCoa + 1} WAJIB DIISI.`,
+          variant: 'danger',
+          submitText: 'OK'
+        });
+        return;
+      }
+
       if (mode === 'add') {
         const newOrder = await createJurnalUmum(
           {
@@ -2024,25 +2041,46 @@ const GridJurnalUmumHeader = () => {
     }
   };
 
+  // `selectedRow` selalu number (default 0), jadi cek `!== null` tidak pernah
+  // menahan apa pun: saat grid kosong dialog tetap terbuka membawa nilai baris
+  // lama. Yang menentukan adalah ada/tidaknya baris di index terpilih.
+  const hasSelectedRow = rows.length > 0 && rows[selectedRow] !== undefined;
+
+  // Tombol tetap aktif walau grid kosong; guard-nya berupa alert supaya user
+  // tahu alasannya, bukan tombol mati tanpa penjelasan.
+  const alertNoSelectedRow = () => {
+    alert({
+      title: 'HARAP PILIH DATA TERLEBIH DAHULU!',
+      variant: 'danger',
+      submitText: 'OK'
+    });
+  };
+
   const handleEdit = () => {
-    if (selectedRow !== null) {
-      setPopOver(true);
-      setMode('edit');
+    if (!hasSelectedRow) {
+      alertNoSelectedRow();
+      return;
     }
+    setPopOver(true);
+    setMode('edit');
   };
 
   const handleDelete = () => {
-    if (selectedRow !== null) {
-      setMode('delete');
-      setPopOver(true);
+    if (!hasSelectedRow) {
+      alertNoSelectedRow();
+      return;
     }
+    setMode('delete');
+    setPopOver(true);
   };
 
   const handleView = () => {
-    if (selectedRow !== null) {
-      setMode('view');
-      setPopOver(true);
+    if (!hasSelectedRow) {
+      alertNoSelectedRow();
+      return;
     }
+    setMode('view');
+    setPopOver(true);
   };
 
   // Cetak bukti dijalankan di BACKEND (background job + socket). Frontend
@@ -2276,7 +2314,6 @@ const GridJurnalUmumHeader = () => {
     }
   }, [isSubmitSuccessful, setFocus]);
 
-  // 1. Bulk Fetch Initialization
   useEffect(() => {
     const handleBulkFetch = async () => {
       if (
@@ -2294,13 +2331,34 @@ const GridJurnalUmumHeader = () => {
       }
 
       const bulkData = allData.data || [];
-      if (bulkData.length === 0) return;
-
       const pageSize = filters.limit;
       const newCache = new Map<number, JurnalUmumHeader[]>();
       const wasJumpingToLast = jumpToLastRef.current;
 
       const logicalStartPage = (bulkStartPage - 1) * WINDOW_SIZE + 1;
+
+      // Hasil filter kosong tetap harus mematikan shouldBulkFetch. Dulu effect
+      // ini early-return, jadi flag bulk nyangkut di true -> grid selamanya
+      // dianggap "sedang memuat" sehingga headerData tidak pernah dikosongkan
+      // dan grid detail masih menampilkan bukti yang sudah tidak ada di header.
+      if (bulkData.length === 0) {
+        setPageDataCache(new Map());
+        setVisiblePages(
+          Array.from({ length: WINDOW_SIZE }, (_, i) => logicalStartPage + i)
+        );
+        setRows([]);
+        setSelectedRow(0);
+        selectedRowRef.current = 0;
+        setTotalPages(1);
+        setHasMore(false);
+        setShouldBulkFetch(false);
+        setIsFirstLoad(false);
+        setIsFetching(false);
+        jumpToLastRef.current = false;
+        jumpToFirstRef.current = false;
+        return;
+      }
+
       for (let i = 0; i < WINDOW_SIZE; i++) {
         const pageNum = logicalStartPage + i;
         const startIdx = i * pageSize;
@@ -2537,6 +2595,14 @@ const GridJurnalUmumHeader = () => {
           }
         }, 50);
       }
+    } else {
+      // Window kosong = tidak ada baris sama sekali. Tanpa ini `rows` menyimpan
+      // hasil query sebelumnya.
+      setRows((prev) => (prev.length > 0 ? [] : prev));
+      selectedRowRef.current = 0;
+      setSelectedRow(0);
+      isPageTransitionRef.current = false;
+      pendingScrollAdjustment.current = 0;
     }
   }, [visiblePages, pageDataCache]);
 
@@ -2577,6 +2643,7 @@ const GridJurnalUmumHeader = () => {
         dispatch(setHeaderData(selectedRowData));
         lastDispatchedId.current = selectedRowData?.id;
       }
+      headerClearedRef.current = false;
       return;
     }
 
@@ -2585,7 +2652,11 @@ const GridJurnalUmumHeader = () => {
     // tetap tampil di bawah grid yang sudah tidak punya baris.
     const sedangMuat =
       isLoadingData || isFetching || isTransitioning || shouldBulkFetch;
-    if (rows.length === 0 && !sedangMuat && lastDispatchedId.current !== null) {
+    if (rows.length === 0 && !sedangMuat && !headerClearedRef.current) {
+      // Pakai flag sendiri, bukan `lastDispatchedId !== null`: headerData di
+      // redux bisa masih terisi dari kunjungan sebelumnya walau komponen ini
+      // baru mount (lastDispatchedId masih null), dan detail ikut ketinggalan.
+      headerClearedRef.current = true;
       lastDispatchedId.current = null;
       dispatch(setHeaderData({}));
     }
@@ -2688,12 +2759,19 @@ const GridJurnalUmumHeader = () => {
 
   useEffect(() => {
     const rowData = rows[selectedRow];
-    if (selectedRow !== null && rows.length > 0 && mode !== 'add') {
+    if (rowData && mode !== 'add') {
       forms.setValue('nobukti', rowData.nobukti);
       forms.setValue('tglbukti', rowData.tglbukti);
       forms.setValue('keterangan', rowData.keterangan ?? '');
       // Saat form pertama kali di-render
       forms.setValue('details', []); // Menyiapkan details sebagai array kosong jika belum ada
+    } else if (rows.length === 0 && mode !== 'add') {
+      // Grid kosong: buang sisa nilai baris terakhir supaya tidak ada bukti
+      // "hantu" yang menempel di form.
+      forms.setValue('nobukti', '');
+      forms.setValue('keterangan', '');
+      forms.setValue('details', []);
+      forms.setValue('tglbukti', formatDateToDDMMYYYY(new Date()));
     } else {
       const currentDate = new Date(); // Dapatkan tanggal sekarang
       forms.setValue('tglbukti', formatDateToDDMMYYYY(currentDate));

@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { createPortal } from 'react-dom';
+import { DismissableLayerBranch } from '@radix-ui/react-dismissable-layer';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { FaTimes } from 'react-icons/fa';
@@ -133,8 +134,12 @@ export default function Alert({
 
   useDisableBodyScroll(open);
 
+  // DismissableLayerBranch mendaftarkan node ini sebagai "cabang" milik semua
+  // DismissableLayer Radix yang sedang terbuka (Dialog form, Popover, Select).
+  // Tanpa itu, pointerdown di backdrop alert dianggap klik DI LUAR dialog dan
+  // Radix menutup form modal yang ada di belakangnya.
   const alertContent = (
-    <>
+    <DismissableLayerBranch>
       <div
         ref={outerRef}
         className={cn(
@@ -268,7 +273,7 @@ export default function Alert({
           )}
         </div>
       </div>
-    </>
+    </DismissableLayerBranch>
   );
 
   if (!mounted || typeof window === 'undefined') return null;

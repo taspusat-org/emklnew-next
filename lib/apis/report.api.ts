@@ -71,6 +71,22 @@ export const generateHargatruckingReportFn = async (
   return response.data;
 };
 
+/** Cetak bukti Pengeluaran di background — lihat generateHutangReportFn. */
+export const generatePengeluaranReportFn = async (
+  payload: BuktiJobPayload
+): Promise<ReportJobResponse> => {
+  const response = await api2.post('/pengeluaranheader/report', payload);
+  return response.data;
+};
+
+/** Cetak bukti Biaya Extra di background — lihat generateHutangReportFn. */
+export const generateBiayaExtraHeaderReportFn = async (
+  payload: BuktiJobPayload
+): Promise<ReportJobResponse> => {
+  const response = await api2.post('/biayaextraheader/report', payload);
+  return response.data;
+};
+
 /** Payload export Excel background — sama seperti report, tanpa template .mrt. */
 export interface ExportJobPayload {
   search?: string;
@@ -113,6 +129,14 @@ export const generateHutangExportFn = async (
   payload: ExportJobPayload
 ): Promise<ReportJobResponse> => {
   const response = await api2.post('/hutangheader/export', payload);
+  return response.data;
+};
+
+/** Export Excel daftar Pengeluaran di background — lihat generateAlatbayarExportFn. */
+export const generatePengeluaranExportFn = async (
+  payload: ExportJobPayload
+): Promise<ReportJobResponse> => {
+  const response = await api2.post('/pengeluaranheader/export', payload);
   return response.data;
 };
 
