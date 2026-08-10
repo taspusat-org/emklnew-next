@@ -1427,7 +1427,16 @@ const GridJurnalUmumDetail = ({
       if (pageData) combinedRows.push(...pageData);
     });
 
-    if (combinedRows.length === 0) return;
+    if (combinedRows.length === 0) {
+      // Window kosong (header tidak punya baris / filter tidak match): jangan
+      // biarkan hasil bukti sebelumnya tetap terpampang.
+      setRows((prev) => (prev.length > 0 ? [] : prev));
+      selectedRowRef.current = 0;
+      setSelectedRow(0);
+      isPageTransitionRef.current = false;
+      pendingScrollAdjustment.current = 0;
+      return;
+    }
 
     setRows(combinedRows);
 

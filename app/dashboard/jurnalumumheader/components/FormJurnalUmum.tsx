@@ -529,7 +529,7 @@ const FormKasGantung = ({
     if (allData || popOver) {
       if (allData && (allData.data?.length ?? 0) > 0 && mode !== 'add') {
         const formattedRows = allData.data.map((item: any) => ({
-          id: Number(item.id),
+          id: item.id,
           coa: item.coa ?? '',
           coa_nama: item.coa_nama ?? '',
           nobukti: item.nobukti ?? '',

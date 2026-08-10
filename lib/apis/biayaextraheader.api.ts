@@ -55,11 +55,16 @@ export const getBiayaExtraHeaderByIdFn = async (id: any) => {
 
 export const getBiayaExtraMuatanDetailFn = async (
   id: string,
-  filters: GetParams = {}
+  filters: GetParams = {},
+  signal?: AbortSignal
 ): Promise<IAllBiayaExtraMuatanDetail> => {
   const queryParams = buildQueryParams(filters);
   const response = await api2.get(`/biayaextramuatandetail/${id}`, {
-    params: queryParams
+    params: queryParams,
+    // signal diteruskan agar request halaman lama bisa dibatalkan saat window
+    // lazy-load bergeser cepat; tanpa ini respons basi bisa mendarat belakangan
+    // dan menimpa isi window yang sudah benar.
+    signal
   });
 
   return response.data;
@@ -67,11 +72,13 @@ export const getBiayaExtraMuatanDetailFn = async (
 
 export const getBiayaExtraBongkaranDetailFn = async (
   id: string,
-  filters: GetParams = {}
+  filters: GetParams = {},
+  signal?: AbortSignal
 ): Promise<IAllBiayaExtraBongkaranDetail> => {
   const queryParams = buildQueryParams(filters);
   const response = await api2.get(`/biayaextrabongkarandetail/${id}`, {
-    params: queryParams
+    params: queryParams,
+    signal
   });
 
   return response.data;

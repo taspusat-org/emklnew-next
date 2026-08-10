@@ -26,13 +26,23 @@ export const alertStore = create<AlertState>((set) => ({
         awaitingPromiseRef: { resolve, reject }
       }));
     }),
+  // Tutup lewat tombol X / backdrop / ESC. Promise WAJIB di-settle di sini:
+  // dulu alert tanpa catchOnCancel dibiarkan menggantung, jadi pemanggil yang
+  // `await alert(...)` tidak pernah lanjut — mutation react-query tetap
+  // isLoading dan tombol SAVE mati permanen sampai halaman di-reload.
   handleClose: () => {
     set((state) => {
-      if (
-        (state.alertOptions?.catchOnCancel ?? false) &&
-        state.awaitingPromiseRef != null
-      ) {
-        state.awaitingPromiseRef.reject();
+      const options = state.alertOptions;
+      const pending = state.awaitingPromiseRef;
+      if (pending != null) {
+        // Alert konfirmasi (punya tombol cancel) diperlakukan sebagai batal,
+        // sama seperti handleCancel. Alert informasi (hanya OK) dianggap
+        // di-acknowledge supaya alurnya jalan terus.
+        if ((options?.catchOnCancel ?? false) || options?.cancelText) {
+          pending.reject();
+        } else {
+          pending.resolve();
+        }
       }
       return {
         alertOptions: null,

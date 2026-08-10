@@ -3,6 +3,7 @@
 import React, {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState
@@ -10,154 +11,200 @@ import React, {
 import 'react-data-grid/lib/styles.scss';
 
 import DataGrid, {
-  CellClickArgs,
   CellKeyDownArgs,
   Column,
   DataGridHandle
 } from 'react-data-grid';
 import { useSelector } from 'react-redux';
 import { RootState } from '@/lib/store/store';
-import ActionButton from '@/components/custom-ui/ActionButton';
-import { FaPen } from 'react-icons/fa';
-import { ImSpinner2 } from 'react-icons/im';
 import { Button } from '@/components/ui/button';
-import { useGetKasGantungDetail } from '@/lib/server/useKasGantung';
 import {
   formatCurrency,
   handleContextMenu,
   loadGridConfig,
   resetGridConfig,
-  saveGridConfig,
-  cancelPreviousRequest
+  saveGridConfig
 } from '@/lib/utils';
 import {
   filterkasgantungDetail,
-  IAllKasGantungDetail,
   KasGantungDetail
 } from '@/lib/types/kasgantungheader.type';
+import { useGetKasGantungDetail } from '@/lib/server/useKasGantung';
+import { getKasGantungDetailFn } from '@/lib/apis/kasgantungheader.api';
 import { Input } from '@/components/ui/input';
 import Image from 'next/image';
 import IcClose from '@/public/image/x.svg';
 import { highlightText } from '@/components/custom-ui/HighlightText';
 import { FaSort, FaSortDown, FaSortUp, FaTimes } from 'react-icons/fa';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger
-} from '@/components/ui/tooltip';
+import JsxParser from 'react-jsx-parser';
 import { debounce } from 'lodash';
 import FilterInput from '@/components/custom-ui/FilterInput';
 import DraggableColumn from '@/components/custom-ui/DraggableColumns';
 import { useTheme } from 'next-themes';
 import { EmptyRowsRenderer } from '@/components/EmptyRows';
 import { LoadRowsRenderer } from '@/components/LoadRows';
-interface GridProps {
-  activeTab: string; // Menerima props activeTab
-}
+import { useSession } from 'next-auth/react';
+import { HEADER_ROW_HEIGHT, LIMIT, ROW_HEIGHT } from '@/constants/constant';
+
+const emptyDetailFilters = { ...filterkasgantungDetail, nobukti: '' };
 
 interface Filter {
+  page: number;
+  limit: number;
   search: string;
-  filters: typeof filterkasgantungDetail;
+  filters: typeof emptyDetailFilters;
   sortBy: string;
   sortDirection: 'asc' | 'desc';
 }
-interface GridProps {
-  activeTab: string; // Menerima props activeTab
-}
+
 const GridKasGantungDetail = ({
   activeTab,
-  nobukti
+  nobukti,
+  hyperlink = true
 }: {
   activeTab: string;
   nobukti?: string;
+  hyperlink?: boolean;
 }) => {
   const { theme, resolvedTheme } = useTheme();
   const isDark = theme === 'dark' || resolvedTheme === 'dark';
   const headerData = useSelector((state: RootState) => state.header.headerData);
+  const { data: session } = useSession();
+
   const [filters, setFilters] = useState<Filter>({
+    page: 1,
+    limit: LIMIT,
     filters: {
-      ...filterkasgantungDetail,
+      ...emptyDetailFilters,
       nobukti: nobukti ?? headerData?.nobukti ?? ''
     },
     search: '',
     sortBy: 'nobukti',
     sortDirection: 'asc'
   });
-  const [prevFilters, setPrevFilters] = useState<Filter>(filters);
-  const {
-    data: detail,
-    isLoading,
-    refetch
-  } = useGetKasGantungDetail(
-    activeTab === 'kasgantungdetail'
-      ? filters
-      : { filters: { nobukti: nobukti ?? headerData?.nobukti ?? '' } }
+
+  // ── Lazy loading + caching (pola GridJurnalUmumDetail) ───────────────────
+  // Grid hanya menyimpan WINDOW_SIZE halaman di memori (`visiblePages`), isinya
+  // di `pageDataCache`. Halaman di luar window dibuang; halaman berikutnya
+  // di-prefetch diam-diam ke `streamBufferRef` supaya saat user scroll sampai
+  // ambang batas, data sudah ada dan window bergeser tanpa spinner.
+  const WINDOW_SIZE = 5;
+  const STREAM_BUFFER_SIZE = 5;
+
+  const [shouldBulkFetch, setShouldBulkFetch] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [visiblePages, setVisiblePages] = useState<number[]>([1, 2, 3, 4, 5]);
+  const minVisiblePage = useMemo(
+    () => (visiblePages.length > 0 ? Math.min(...visiblePages) : 1),
+    [visiblePages]
   );
+  // Nomor baris pertama yang sedang ada di window (bukan di layar).
+  const startRow = (minVisiblePage - 1) * filters.limit + 1;
+  const [pageDataCache, setPageDataCache] = useState<
+    Map<number, KasGantungDetail[]>
+  >(new Map());
+  const streamBufferRef = useRef<Map<number, KasGantungDetail[]>>(new Map());
+  const prefetchingPagesRef = useRef<Set<number>>(new Set());
+
+  const [isFetching, setIsFetching] = useState(false);
+  const [isTransitioning, setIsTransitioning] = useState(false);
+  const isScrollingRef = useRef(false);
+  const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const lastScrollTopRef = useRef<number>(0);
+  const scrollPositionRef = useRef<number>(0);
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const pendingScrollAdjustment = useRef<number>(0);
+  const hasAdjustedScrollRef = useRef<boolean>(false);
+  const isPageTransitionRef = useRef(false);
+  const selectedRowRef = useRef<number>(0);
+
+  // Menggeser index baris terpilih saat window bergeser, supaya baris DATA yang
+  // sama tetap ter-highlight. Posisi visual dijaga oleh kompensasi scrollTop
+  // (pendingScrollAdjustment), jadi jangan panggil selectCell di sini.
+  const shiftSelectionForWindow = (deltaRows: number) => {
+    selectedRowRef.current = Math.max(0, selectedRowRef.current + deltaRows);
+  };
+
+  const resetBufferingCache = useCallback(() => {
+    setShouldBulkFetch(true);
+    setCurrentPage(1);
+    setPageDataCache(new Map());
+    setVisiblePages([1, 2, 3, 4, 5]);
+    setIsFetching(false);
+    setIsTransitioning(false);
+    streamBufferRef.current = new Map();
+    prefetchingPagesRef.current = new Set();
+    selectedRowRef.current = 0;
+  }, []);
+
+  // Bulk fetch pertama menarik WINDOW_SIZE halaman sekaligus (1 request) lalu
+  // dipecah di memori; setelah itu tiap pergeseran window cuma 1 halaman.
+  const effectiveLimit = shouldBulkFetch
+    ? filters.limit * WINDOW_SIZE
+    : filters.limit;
+
+  const queryParams = useMemo(() => {
+    const base =
+      activeTab === 'kasgantungdetail'
+        ? filters
+        : {
+            ...filters,
+            search: '',
+            filters: {
+              ...emptyDetailFilters,
+              nobukti: nobukti ?? headerData?.nobukti ?? ''
+            }
+          };
+
+    return {
+      ...base,
+      page: shouldBulkFetch ? 1 : currentPage,
+      limit: effectiveLimit
+    };
+  }, [
+    activeTab,
+    filters,
+    nobukti,
+    headerData?.nobukti,
+    shouldBulkFetch,
+    currentPage,
+    effectiveLimit
+  ]);
+
+  const { data: detail, isLoading } = useGetKasGantungDetail(queryParams);
+
   const [rows, setRows] = useState<KasGantungDetail[]>([]);
-  const [popOver, setPopOver] = useState<boolean>(false);
-  const { user } = useSelector((state: RootState) => state.auth);
+  const [selectedRow, setSelectedRow] = useState<number>(0);
+  const [inputValue, setInputValue] = useState<string>('');
 
   const [columnsOrder, setColumnsOrder] = useState<readonly number[]>([]);
   const [columnsWidth, setColumnsWidth] = useState<{ [key: string]: number }>(
     {}
   );
-  const [selectedRow, setSelectedRow] = useState<number>(0);
-  const [inputValue, setInputValue] = useState<string>('');
   const gridRef = useRef<DataGridHandle>(null);
-  const inputRef = useRef<HTMLInputElement | null>(null);
+
   const [dataGridKey, setDataGridKey] = useState(0);
   const resizeDebounceTimeout = useRef<NodeJS.Timeout | null>(null); // Timer debounce untuk resize
   const inputColRefs = useRef<{ [key: string]: HTMLInputElement | null }>({});
-  const abortControllerRef = useRef<AbortController | null>(null); // AbortController untuk cancel request
   const contextMenuRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
   const [contextMenu, setContextMenu] = useState<{
     x: number;
     y: number;
   } | null>(null);
 
-  const debouncedFilterUpdate = useRef(
-    debounce((colKey: string, value: string) => {
-      setInputValue('');
-      setFilters((prev) => ({
-        ...prev,
-        search: '',
-        filters: { ...prev.filters, [colKey]: value },
-        page: 1
-      }));
-      setRows([]);
-    }, 300) // Bisa dikurangi jadi 250-300ms
-  ).current;
-
-  const handleFilterInputChange = useCallback(
-    (colKey: string, value: string) => {
-      cancelPreviousRequest(abortControllerRef);
-      debouncedFilterUpdate(colKey, value);
-    },
-    []
-  );
-  const handleClearFilter = useCallback((colKey: string) => {
-    cancelPreviousRequest(abortControllerRef);
-    debouncedFilterUpdate.cancel(); // Cancel pending updates
-    setFilters((prev) => ({
-      ...prev,
-      filters: { ...prev.filters, [colKey]: '' },
-      page: 1
-    }));
-    setRows([]);
-  }, []);
-
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    cancelPreviousRequest(abortControllerRef);
     const searchValue = e.target.value;
     setInputValue(searchValue);
     setFilters((prev) => ({
       ...prev,
       filters: {
-        ...filterkasgantungDetail,
-        nobukti: nobukti ?? headerData?.nobukti
+        ...emptyDetailFilters,
+        nobukti: nobukti ?? headerData?.nobukti ?? ''
       },
-      search: searchValue
+      search: searchValue,
+      page: 1
     }));
     setTimeout(() => {
       gridRef?.current?.selectCell({ rowIdx: 0, idx: 1 });
@@ -171,9 +218,58 @@ const GridKasGantungDetail = ({
 
     setSelectedRow(0);
     setRows([]);
+    // Hasil pencarian = himpunan baris yang berbeda, jadi window & buffer lama
+    // tidak lagi valid. Tanpa reset, halaman 2..5 hasil query LAMA masih
+    // menempel di cache dan ikut tergabung ke `rows`.
+    resetBufferingCache();
   };
+
+  const debouncedFilterUpdate = useRef(
+    debounce((colKey: string, value: string) => {
+      setInputValue('');
+      setFilters((prev) => ({
+        ...prev,
+        search: '',
+        filters: { ...prev.filters, [colKey]: value },
+        page: 1
+      }));
+      setRows([]);
+      resetBufferingCache();
+    }, 300) // Bisa dikurangi jadi 250-300ms
+  ).current;
+
+  const handleFilterInputChange = useCallback(
+    (colKey: string, value: string) => {
+      debouncedFilterUpdate(colKey, value);
+      setTimeout(() => {
+        setSelectedRow(0);
+        gridRef?.current?.selectCell({ rowIdx: 0, idx: 1 });
+      }, 400);
+    },
+    []
+  );
+
+  const handleClearFilter = useCallback((colKey: string) => {
+    debouncedFilterUpdate.cancel(); // Cancel pending updates
+
+    setFilters((prev) => ({
+      ...prev,
+      filters: { ...prev.filters, [colKey]: '' },
+      page: 1
+    }));
+    setRows([]);
+    resetBufferingCache();
+  }, []);
+
   const handleSort = (column: string) => {
-    cancelPreviousRequest(abortControllerRef);
+    const originalIndex = columns.findIndex((col) => col.key === column);
+
+    // index tampilan berdasar columnsOrder; jika belum ada reorder
+    // (columnsOrder kosong), fallback ke originalIndex
+    const displayIndex =
+      columnsOrder.length > 0
+        ? columnsOrder.findIndex((idx) => idx === originalIndex)
+        : originalIndex;
     const newSortOrder =
       filters.sortBy === column && filters.sortDirection === 'asc'
         ? 'desc'
@@ -186,11 +282,13 @@ const GridKasGantungDetail = ({
       page: 1
     }));
     setTimeout(() => {
-      gridRef?.current?.selectCell({ rowIdx: 0, idx: 1 });
+      gridRef?.current?.selectCell({ rowIdx: 0, idx: displayIndex });
     }, 200);
-
     setSelectedRow(0);
+
     setRows([]);
+    // Sort berubah -> urutan seluruh hasil berubah, halaman lama tidak valid.
+    resetBufferingCache();
   };
 
   const columns = useMemo((): Column<KasGantungDetail>[] => {
@@ -200,16 +298,10 @@ const GridKasGantungDetail = ({
         name: 'NO',
         width: 50,
         headerCellClass: 'column-headers',
-        renderHeaderCell: (column: any) => (
+        renderHeaderCell: () => (
           <div className="flex h-full flex-col items-center gap-1">
             <div className="headers-cell h-[50%] items-center justify-center text-center">
-              <p
-                className={`text-sm ${
-                  filters.sortBy === 'nobukti' ? 'font-bold' : 'font-normal'
-                }`}
-              >
-                No.
-              </p>
+              <p className="text-sm font-normal">No.</p>
             </div>
 
             <div
@@ -218,12 +310,14 @@ const GridKasGantungDetail = ({
                 setFilters({
                   ...filters,
                   search: '',
+                  page: 1,
                   filters: {
-                    ...filterkasgantungDetail,
-                    nobukti: nobukti ?? headerData?.nobukti
+                    ...emptyDetailFilters,
+                    nobukti: nobukti ?? headerData?.nobukti ?? ''
                   }
                 }),
                   setInputValue('');
+                resetBufferingCache();
                 setTimeout(() => {
                   gridRef?.current?.selectCell({ rowIdx: 0, idx: 1 });
                 }, 0);
@@ -234,10 +328,17 @@ const GridKasGantungDetail = ({
           </div>
         ),
         renderCell: (props: any) => {
-          const rowIndex = rows.findIndex((row) => row.id === props.row.id);
+          // Nomor ABSOLUT, bukan index dalam window. `rows` hanya memuat
+          // WINDOW_SIZE halaman yang sedang terlihat, jadi index lokal akan
+          // mengulang dari 1 tiap kali window bergeser.
+          const localIndex = rows.findIndex((row) => row.id === props.row.id);
+          const absoluteNumber =
+            localIndex === -1
+              ? '—'
+              : (minVisiblePage - 1) * filters.limit + localIndex + 1;
           return (
             <div className="flex h-full w-full cursor-pointer items-center justify-center text-sm">
-              {rowIndex + 1}
+              {absoluteNumber}
             </div>
           );
         }
@@ -248,7 +349,8 @@ const GridKasGantungDetail = ({
         resizable: true,
         draggable: true,
         width: 200,
-        renderHeaderCell: (column: any) => (
+        name: 'NO BUKTI',
+        renderHeaderCell: () => (
           <div className="flex h-full cursor-pointer flex-col items-center gap-1">
             <div
               className="headers-cell h-[48%] px-8"
@@ -262,7 +364,7 @@ const GridKasGantungDetail = ({
                   filters.sortBy === 'nobukti' ? 'font-bold' : 'font-normal'
                 }`}
               >
-                Nomor Bukti
+                NO BUKTI
               </p>
               <div className="ml-2">
                 {filters.sortBy === 'nobukti' &&
@@ -278,24 +380,26 @@ const GridKasGantungDetail = ({
             </div>
           </div>
         ),
-        name: 'NO BUKTI',
         renderCell: (props: any) => {
+          const value = props.row.nobukti;
+          const HighlightWrapper = () => {
+            return highlightText(value, filters.search);
+          };
           return (
-            <TooltipProvider delayDuration={0}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="m-0 flex h-full w-full cursor-pointer items-center p-0 text-xs">
-                    {props.row.nobukti}
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent
-                  side="right"
-                  className="rounded-none border border-zinc-400 bg-white text-sm text-zinc-900"
-                >
-                  <p>{props.row.nobukti}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <div
+              title={value}
+              className="m-0 flex h-full w-full cursor-pointer items-center p-0 text-xs"
+            >
+              {hyperlink && props.row.link ? (
+                <JsxParser
+                  components={{ HighlightWrapper }}
+                  jsx={props.row.link}
+                  renderInWrapper={false}
+                />
+              ) : (
+                value
+              )}
+            </div>
           );
         }
       },
@@ -305,7 +409,8 @@ const GridKasGantungDetail = ({
         resizable: true,
         draggable: true,
         width: 150,
-        renderHeaderCell: (column: any) => (
+        name: 'keterangan',
+        renderHeaderCell: () => (
           <div className="flex h-full cursor-pointer flex-col items-center gap-1">
             <div
               className="headers-cell h-[50%] px-8"
@@ -319,7 +424,7 @@ const GridKasGantungDetail = ({
                   filters.sortBy === 'keterangan' ? 'font-bold' : 'font-normal'
                 }`}
               >
-                Keterangan
+                KETERANGAN
               </p>
               <div className="ml-2">
                 {filters.sortBy === 'keterangan' &&
@@ -349,26 +454,16 @@ const GridKasGantungDetail = ({
             </div>
           </div>
         ),
-        name: 'keterangan',
         renderCell: (props: any) => {
           const columnFilter = filters.filters.keterangan || '';
           const cellValue = props.row.keterangan || '';
           return (
-            <TooltipProvider delayDuration={0}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="m-0 flex h-full cursor-pointer items-center p-0 text-sm">
-                    {highlightText(cellValue, filters.search, columnFilter)}
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent
-                  side="right"
-                  className="rounded-none border border-zinc-400 bg-white text-sm text-zinc-900"
-                >
-                  <p>{cellValue}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <div
+              title={cellValue}
+              className="m-0 flex h-full cursor-pointer items-center p-0 text-sm"
+            >
+              {highlightText(cellValue, filters.search, columnFilter)}
+            </div>
           );
         }
       },
@@ -378,7 +473,8 @@ const GridKasGantungDetail = ({
         resizable: true,
         draggable: true,
         width: 150,
-        renderHeaderCell: (column: any) => (
+        name: 'nominal',
+        renderHeaderCell: () => (
           <div className="flex h-full cursor-pointer flex-col items-center gap-1">
             <div
               className="headers-cell h-[50%] px-8"
@@ -392,7 +488,7 @@ const GridKasGantungDetail = ({
                   filters.sortBy === 'nominal' ? 'font-bold' : 'font-normal'
                 }`}
               >
-                nominal
+                NOMINAL
               </p>
               <div className="ml-2">
                 {filters.sortBy === 'nominal' &&
@@ -420,30 +516,17 @@ const GridKasGantungDetail = ({
             </div>
           </div>
         ),
-        name: 'nominal',
         renderCell: (props: any) => {
           const columnFilter = filters.filters.nominal || '';
-          const cellValue = props.row.nominal || '';
+          const cellValue =
+            props.row.nominal != null ? formatCurrency(props.row.nominal) : '';
           return (
-            <TooltipProvider delayDuration={0}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="m-0 flex h-full cursor-pointer items-center justify-end p-0 text-sm">
-                    {highlightText(
-                      formatCurrency(cellValue),
-                      filters.search,
-                      columnFilter
-                    )}
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent
-                  side="right"
-                  className="rounded-none border border-zinc-400 bg-white text-sm text-zinc-900"
-                >
-                  <p className="text-right">{formatCurrency(cellValue)}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <div
+              title={cellValue}
+              className="m-0 flex h-full cursor-pointer items-center justify-end p-0 text-sm"
+            >
+              {highlightText(cellValue, filters.search, columnFilter)}
+            </div>
           );
         }
       },
@@ -453,7 +536,8 @@ const GridKasGantungDetail = ({
         resizable: true,
         draggable: true,
         width: 150,
-        renderHeaderCell: (column: any) => (
+        name: 'modified by',
+        renderHeaderCell: () => (
           <div className="flex h-full cursor-pointer flex-col items-center gap-1">
             <div
               className="headers-cell h-[50%] px-8"
@@ -467,7 +551,7 @@ const GridKasGantungDetail = ({
                   filters.sortBy === 'modifiedby' ? 'font-bold' : 'font-normal'
                 }`}
               >
-                modified by
+                Modified By
               </p>
               <div className="ml-2">
                 {filters.sortBy === 'modifiedby' &&
@@ -497,26 +581,16 @@ const GridKasGantungDetail = ({
             </div>
           </div>
         ),
-        name: 'modified by',
         renderCell: (props: any) => {
           const columnFilter = filters.filters.modifiedby || '';
           const cellValue = props.row.modifiedby || '';
           return (
-            <TooltipProvider delayDuration={0}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="m-0 flex h-full cursor-pointer items-center p-0 text-sm">
-                    {highlightText(cellValue, filters.search, columnFilter)}
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent
-                  side="right"
-                  className="rounded-none border border-zinc-400 bg-white text-sm text-zinc-900"
-                >
-                  <p>{cellValue}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <div
+              title={cellValue}
+              className="m-0 flex h-full cursor-pointer items-center p-0 text-sm"
+            >
+              {highlightText(cellValue, filters.search, columnFilter)}
+            </div>
           );
         }
       },
@@ -526,7 +600,8 @@ const GridKasGantungDetail = ({
         resizable: true,
         draggable: true,
         width: 200,
-        renderHeaderCell: (column: any) => (
+        name: 'Created At',
+        renderHeaderCell: () => (
           <div className="flex h-full cursor-pointer flex-col items-center gap-1">
             <div
               className="headers-cell h-[50%] px-8"
@@ -540,7 +615,7 @@ const GridKasGantungDetail = ({
                   filters.sortBy === 'created_at' ? 'font-bold' : 'font-normal'
                 }`}
               >
-                created at
+                Created At
               </p>
               <div className="ml-2">
                 {filters.sortBy === 'created_at' &&
@@ -570,26 +645,16 @@ const GridKasGantungDetail = ({
             </div>
           </div>
         ),
-        name: 'Created At',
         renderCell: (props: any) => {
           const columnFilter = filters.filters.created_at || '';
           const cellValue = props.row.created_at || '';
           return (
-            <TooltipProvider delayDuration={0}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="m-0 flex h-full cursor-pointer items-center p-0 text-sm">
-                    {highlightText(cellValue, filters.search, columnFilter)}
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent
-                  side="right"
-                  className="rounded-none border border-zinc-400 bg-white text-sm text-zinc-900"
-                >
-                  <p>{cellValue}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <div
+              title={cellValue}
+              className="m-0 flex h-full cursor-pointer items-center p-0 text-sm"
+            >
+              {highlightText(cellValue, filters.search, columnFilter)}
+            </div>
           );
         }
       },
@@ -599,7 +664,8 @@ const GridKasGantungDetail = ({
         resizable: true,
         draggable: true,
         width: 200,
-        renderHeaderCell: (column: any) => (
+        name: 'Updated At',
+        renderHeaderCell: () => (
           <div className="flex h-full cursor-pointer flex-col items-center gap-1">
             <div
               className="headers-cell h-[50%] px-8"
@@ -613,7 +679,7 @@ const GridKasGantungDetail = ({
                   filters.sortBy === 'updated_at' ? 'font-bold' : 'font-normal'
                 }`}
               >
-                updated at
+                Updated At
               </p>
               <div className="ml-2">
                 {filters.sortBy === 'updated_at' &&
@@ -643,31 +709,40 @@ const GridKasGantungDetail = ({
             </div>
           </div>
         ),
-        name: 'Updated At',
         renderCell: (props: any) => {
           const columnFilter = filters.filters.updated_at || '';
           const cellValue = props.row.updated_at || '';
           return (
-            <TooltipProvider delayDuration={0}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="m-0 flex h-full cursor-pointer items-center p-0 text-sm">
-                    {highlightText(cellValue, filters.search, columnFilter)}
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent
-                  side="right"
-                  className="rounded-none border border-zinc-400 bg-white text-sm text-zinc-900"
-                >
-                  <p>{cellValue}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <div
+              title={cellValue}
+              className="m-0 flex h-full cursor-pointer items-center p-0 text-sm"
+            >
+              {highlightText(cellValue, filters.search, columnFilter)}
+            </div>
           );
         }
       }
     ];
-  }, [rows, filters]);
+  }, [rows, filters, minVisiblePage]);
+
+  function getRowClass(row: KasGantungDetail) {
+    const rowIndex = rows.findIndex((r) => r.id === row.id);
+    return rowIndex === selectedRow ? 'selected-row' : '';
+  }
+  function rowKeyGetter(row: KasGantungDetail) {
+    return row.id;
+  }
+
+  function handleCellClick(args: { row: KasGantungDetail }) {
+    const clickedRow = args.row;
+    const rowIndex = rows.findIndex((r) => r.id === clickedRow.id);
+    if (rowIndex !== -1) {
+      setSelectedRow(rowIndex);
+      // Ref ikut disinkronkan: dia yang jadi acuan saat window bergeser.
+      selectedRowRef.current = rowIndex;
+    }
+  }
+
   const onColumnResize = (index: number, width: number) => {
     // 1) Dapatkan key kolom yang di-resize
     const columnKey = columns[columnsOrder[index]].key;
@@ -685,7 +760,7 @@ const GridKasGantungDetail = ({
     //    saveGridConfig akan dipanggil
     resizeDebounceTimeout.current = setTimeout(() => {
       saveGridConfig(
-        user.id,
+        String(session?.user?.id),
         'GridKasGantungDetail',
         [...columnsOrder],
         newWidthMap
@@ -706,7 +781,7 @@ const GridKasGantungDetail = ({
       newOrder.splice(targetIndex, 0, newOrder.splice(sourceIndex, 1)[0]);
 
       saveGridConfig(
-        user.id,
+        String(session?.user?.id),
         'GridKasGantungDetail',
         [...newOrder],
         columnsWidth
@@ -714,36 +789,21 @@ const GridKasGantungDetail = ({
       return newOrder;
     });
   };
-  const handleCloseTable = () => {
-    setPopOver(false);
-  };
-  const handleEditTable = () => {
-    setPopOver(true);
-  };
 
-  function getRowClass(row: KasGantungDetail) {
-    const rowIndex = rows.findIndex((r) => r.id === row.id);
-    return rowIndex === selectedRow ? 'selected-row' : '';
-  }
-  function handleCellClick(args: { row: KasGantungDetail }) {
-    const clickedRow = args.row;
-    const rowIndex = rows.findIndex((r) => r.id === clickedRow.id);
-    if (rowIndex !== -1) {
-      setSelectedRow(rowIndex);
-    }
-  }
   const handleClearInput = () => {
-    cancelPreviousRequest(abortControllerRef);
     setFilters((prev) => ({
       ...prev,
       filters: {
         ...prev.filters,
-        nobukti: nobukti ?? headerData?.nobukti
+        nobukti: nobukti ?? headerData?.nobukti ?? ''
       },
-      search: ''
+      search: '',
+      page: 1
     }));
     setInputValue('');
+    resetBufferingCache();
   };
+
   const handleClickOutside = (event: MouseEvent) => {
     if (
       contextMenuRef.current &&
@@ -752,15 +812,234 @@ const GridKasGantungDetail = ({
       setContextMenu(null);
     }
   };
+
+  const mapDetailRows = useCallback(
+    (data: any[] | undefined | null): KasGantungDetail[] =>
+      (data ?? []).map((item: any) => ({
+        id: item.id,
+        kasgantung_id: item.kasgantung_id,
+        nobukti: item.nobukti,
+        keterangan: item.keterangan,
+        nominal: item.nominal,
+        info: item.info,
+        modifiedby: item.modifiedby,
+        editing_by: item.editing_by ?? null,
+        editing_at: item.editing_at ?? null,
+        created_at: item.created_at,
+        updated_at: item.updated_at,
+        pengeluarandetail_id: item.pengeluarandetail_id ?? null,
+        link: item.link ?? ''
+      })),
+    []
+  );
+
+  // Tarik halaman-halaman berikutnya diam-diam ke streamBuffer. Saat window
+  // nanti bergeser ke salah satunya, datanya sudah ada -> tidak ada spinner &
+  // tidak ada network latency di jalur scroll.
+  const prefetchPages = useCallback(
+    async (
+      pagesToFetch: number[],
+      existingCache?: Map<number, KasGantungDetail[]>,
+      knownTotalPages?: number
+    ) => {
+      const cacheToCheck = existingCache ?? pageDataCache;
+      const effectiveTotalPages = knownTotalPages ?? totalPages;
+
+      const validPages = pagesToFetch.filter(
+        (p) =>
+          p >= 1 &&
+          p <= effectiveTotalPages &&
+          !streamBufferRef.current.has(p) &&
+          !cacheToCheck.has(p) &&
+          !prefetchingPagesRef.current.has(p)
+      );
+
+      if (validPages.length === 0) return;
+
+      validPages.forEach((p) => prefetchingPagesRef.current.add(p));
+
+      await Promise.allSettled(
+        validPages.map(async (pageNum) => {
+          try {
+            const data = await getKasGantungDetailFn({
+              ...queryParams,
+              page: pageNum,
+              limit: filters.limit
+            });
+
+            if (data?.data && data.data.length > 0) {
+              streamBufferRef.current = new Map(streamBufferRef.current);
+              streamBufferRef.current.set(pageNum, mapDetailRows(data.data));
+            }
+          } catch (err) {
+            // Silent fail — prefetch gagal bukan error yang perlu dilihat user;
+            // window tetap bisa bergeser lewat jalur fetch normal.
+            console.warn(
+              `[StreamBuffer] Prefetch detail page ${pageNum} gagal:`,
+              err
+            );
+          } finally {
+            prefetchingPagesRef.current.delete(pageNum);
+          }
+        })
+      );
+    },
+    [queryParams, filters.limit, totalPages, pageDataCache, mapDetailRows]
+  );
+
+  async function handleScroll(event: React.UIEvent<HTMLDivElement>) {
+    if (isLoading || rows.length === 0 || isTransitioning || isFetching) return;
+
+    const { currentTarget } = event;
+    const scrollTop = currentTarget.scrollTop;
+    const clientHeight = currentTarget.clientHeight;
+
+    const hasScrolled = Math.abs(scrollTop - lastScrollTopRef.current) > 5;
+    if (!hasScrolled) return;
+
+    lastScrollTopRef.current = scrollTop;
+    isScrollingRef.current = true;
+
+    if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
+    scrollTimeoutRef.current = setTimeout(() => {
+      isScrollingRef.current = false;
+    }, 150);
+
+    scrollPositionRef.current = scrollTop;
+    scrollContainerRef.current = currentTarget;
+
+    const firstVisibleRow = Math.floor(scrollTop / ROW_HEIGHT);
+    const lastVisibleRow = Math.floor((scrollTop + clientHeight) / ROW_HEIGHT);
+
+    const THRESHOLD_ROWS = 50;
+
+    // SCROLL KE BAWAH
+    if (rows.length - lastVisibleRow <= THRESHOLD_ROWS) {
+      const nextPage = Math.max(...visiblePages) + 1;
+
+      if (nextPage <= totalPages && !isFetching && isScrollingRef.current) {
+        if (streamBufferRef.current.has(nextPage)) {
+          // Buffer hit — geser window langsung tanpa request.
+          setIsFetching(true);
+          setIsTransitioning(true);
+          hasAdjustedScrollRef.current = false;
+
+          const bufferedData = streamBufferRef.current.get(nextPage)!;
+
+          setPageDataCache((prev) => {
+            const updated = new Map(prev);
+            updated.set(nextPage, bufferedData);
+            return updated;
+          });
+
+          streamBufferRef.current = new Map(streamBufferRef.current);
+          streamBufferRef.current.delete(nextPage);
+
+          isPageTransitionRef.current = true;
+          pendingScrollAdjustment.current = -(filters.limit * ROW_HEIGHT);
+          shiftSelectionForWindow(-filters.limit);
+          setVisiblePages((prevVisible) => {
+            const removedPage = prevVisible[0];
+            const newPages = [...prevVisible.slice(1), nextPage];
+
+            setPageDataCache((prev) => {
+              const updated = new Map(prev);
+              updated.delete(removedPage);
+              return updated;
+            });
+
+            return newPages;
+          });
+
+          setTimeout(() => {
+            setIsTransitioning(false);
+            setIsFetching(false);
+          }, 50);
+
+          prefetchPages(
+            Array.from(
+              { length: STREAM_BUFFER_SIZE },
+              (_, i) => nextPage + 1 + i
+            )
+          );
+        } else if (!pageDataCache.has(nextPage)) {
+          // Buffer miss — fallback ke fetch normal (effect #2 yang merakit).
+          setIsFetching(true);
+          setIsTransitioning(true);
+          hasAdjustedScrollRef.current = false;
+          setCurrentPage(nextPage);
+        }
+      }
+    }
+
+    // SCROLL KE ATAS
+    if (firstVisibleRow <= THRESHOLD_ROWS) {
+      const prevPage = Math.min(...visiblePages) - 1;
+
+      if (prevPage >= 1 && !isFetching && isScrollingRef.current) {
+        if (streamBufferRef.current.has(prevPage)) {
+          setIsFetching(true);
+          setIsTransitioning(true);
+          hasAdjustedScrollRef.current = false;
+
+          const bufferedData = streamBufferRef.current.get(prevPage)!;
+
+          setPageDataCache((prev) => {
+            const updated = new Map(prev);
+            updated.set(prevPage, bufferedData);
+            return updated;
+          });
+
+          streamBufferRef.current = new Map(streamBufferRef.current);
+          streamBufferRef.current.delete(prevPage);
+
+          isPageTransitionRef.current = true;
+          pendingScrollAdjustment.current = filters.limit * ROW_HEIGHT;
+          shiftSelectionForWindow(filters.limit);
+          setVisiblePages((prevVisible) => {
+            const removedPage = prevVisible[prevVisible.length - 1];
+            const newPages = [
+              prevPage,
+              ...prevVisible.slice(0, WINDOW_SIZE - 1)
+            ];
+
+            setPageDataCache((prev) => {
+              const updated = new Map(prev);
+              updated.delete(removedPage);
+              return updated;
+            });
+
+            return newPages;
+          });
+
+          setTimeout(() => {
+            setIsTransitioning(false);
+            setIsFetching(false);
+          }, 50);
+
+          prefetchPages(
+            Array.from(
+              { length: STREAM_BUFFER_SIZE },
+              (_, i) => prevPage - 1 - i
+            ).filter((p) => p >= 1)
+          );
+        } else if (!pageDataCache.has(prevPage)) {
+          setIsFetching(true);
+          setIsTransitioning(true);
+          hasAdjustedScrollRef.current = false;
+          // Reset ke 0 dulu supaya setCurrentPage(prevPage) tetap memicu effect
+          // walau prevPage kebetulan sama dengan currentPage yang basi.
+          setCurrentPage(0);
+          setTimeout(() => setCurrentPage(prevPage), 0);
+        }
+      }
+    }
+  }
+
   const orderedColumns = useMemo(() => {
     if (Array.isArray(columnsOrder) && columnsOrder.length > 0) {
-      // filter key columns dengan key yg ada di columnsWidth
-      const filteredColumns = columns.filter((col) =>
-        Object.prototype.hasOwnProperty.call(columnsWidth, col.key)
-      );
-      // Mapping dan filter untuk menghindari undefined
       return columnsOrder
-        .map((orderIndex) => filteredColumns[orderIndex])
+        .map((orderIndex) => columns[orderIndex])
         .filter((col) => col !== undefined);
     }
     return columns;
@@ -775,55 +1054,215 @@ const GridKasGantungDetail = ({
   }, [orderedColumns, columnsWidth]);
 
   useEffect(() => {
+    if (!session?.user?.id) return;
     loadGridConfig(
-      user.id,
+      String(session?.user?.id),
       'GridKasGantungDetail',
       columns,
       setColumnsOrder,
       setColumnsWidth
     );
-  }, []);
+  }, [session]);
+
   useEffect(() => {
-    if (headerData?.nobukti || nobukti) {
-      setFilters((prev) => ({
-        ...prev,
-        filters: { ...prev.filters, nobukti: nobukti ?? headerData?.nobukti }
-      }));
-    } else {
-      setFilters((prev) => ({
-        ...prev,
-        filters: { ...prev.filters, nobukti: '' }
-      }));
-    }
+    setFilters((prev) => ({
+      ...prev,
+      filters: {
+        ...emptyDetailFilters,
+        nobukti: nobukti ?? headerData?.nobukti ?? ''
+      }
+    }));
   }, [headerData?.nobukti, nobukti]);
+
   useEffect(() => {
     window.addEventListener('mousedown', handleClickOutside);
     return () => {
       window.removeEventListener('mousedown', handleClickOutside);
     };
   }, []);
-  useEffect(() => {
-    if (detail) {
-      const formattedRows = detail?.data?.map((item: any) => ({
-        id: item.id,
-        kasgantung_id: item.kasgantung_id,
-        nobukti: item.nobukti, // Updated to match the field name
-        keterangan: item.keterangan, // Updated to match the field name
-        nominal: item.nominal, // Updated to match the field name
-        info: item.info, // Updated to match the field name
-        modifiedby: item.modifiedby, // Updated to match the field name
-        editing_by: item.editing_by, // Updated to match the field name
-        editing_at: item.editing_at, // Updated to match the field name
-        created_at: item.created_at, // Updated to match the field name
-        updated_at: item.updated_at, // Updated to match the field name
-        pengeluarandetail_id: item.pengeluarandetail_id ?? null
-      }));
 
-      setRows(formattedRows);
-    } else if (!headerData?.nobukti || !nobukti) {
-      setRows([]);
+  // ── 1. Bulk fetch awal ────────────────────────────────────────────────────
+  // Request pertama menarik WINDOW_SIZE halaman sekaligus lalu dipecah di
+  // memori jadi cache per-halaman. Satu round-trip untuk mengisi seluruh window.
+  useEffect(() => {
+    if (!shouldBulkFetch || !detail) return;
+
+    const bulkData = mapDetailRows(detail.data);
+
+    const newCache = new Map<number, KasGantungDetail[]>();
+    for (let i = 0; i < WINDOW_SIZE; i++) {
+      const pageNum = i + 1;
+      const pageData = bulkData.slice(
+        i * filters.limit,
+        i * filters.limit + filters.limit
+      );
+      if (pageData.length > 0) newCache.set(pageNum, pageData);
     }
-  }, [detail, headerData?.nobukti, nobukti]);
+
+    setPageDataCache(newCache);
+    setVisiblePages(Array.from({ length: WINDOW_SIZE }, (_, i) => i + 1));
+
+    const totalItems = detail.pagination?.totalItems ?? bulkData.length;
+    // pagination.totalPages dari backend dihitung memakai limit bulk
+    // (limit * WINDOW_SIZE), jadi TIDAK bisa dipakai langsung — hitung ulang
+    // dengan limit per-halaman yang sebenarnya.
+    const totalPgs = Math.max(1, Math.ceil(totalItems / filters.limit));
+
+    setTotalPages(totalPgs);
+    setShouldBulkFetch(false);
+    setIsFetching(false);
+
+    if (bulkData.length === 0) {
+      setRows([]);
+      return;
+    }
+
+    const initialPrefetch = Array.from(
+      { length: STREAM_BUFFER_SIZE },
+      (_, i) => WINDOW_SIZE + 1 + i
+    ).filter((p) => p <= totalPgs);
+
+    if (initialPrefetch.length > 0) {
+      prefetchPages(initialPrefetch, newCache, totalPgs);
+    }
+  }, [detail, shouldBulkFetch, filters.limit]);
+
+  // ── 2. Fetch per-halaman saat window bergeser (buffer miss) ───────────────
+  useEffect(() => {
+    if (shouldBulkFetch || !detail) return;
+    // currentPage 0 = fase antara dari trik setCurrentPage(0) di handleScroll
+    // (memaksa effect jalan ulang walau halaman tujuan == halaman sekarang).
+    // Query untuk page 0 tidak pernah dijalankan (guard di useGetKasGantungDetail),
+    // jadi `detail` di sini masih milik halaman lama.
+    if (currentPage < 1) return;
+
+    const newRows = mapDetailRows(detail.data);
+
+    setPageDataCache((prevCache) => {
+      const newCache = new Map(prevCache);
+      newCache.set(currentPage, newRows);
+      return newCache;
+    });
+
+    isPageTransitionRef.current = true;
+    const maxVisible = Math.max(...visiblePages);
+    const minVisible = Math.min(...visiblePages);
+
+    if (currentPage > maxVisible && currentPage <= maxVisible + 1) {
+      // SCROLL KE BAWAH: buang halaman teratas, sisipkan halaman baru di bawah.
+      const removedPage = visiblePages[0];
+      pendingScrollAdjustment.current = -(filters.limit * ROW_HEIGHT);
+      shiftSelectionForWindow(-filters.limit);
+
+      setPageDataCache((prev) => {
+        const updated = new Map(prev);
+        updated.delete(removedPage);
+        return updated;
+      });
+      setVisiblePages((prevVisible) => [...prevVisible.slice(1), currentPage]);
+    } else if (currentPage < minVisible && currentPage >= minVisible - 1) {
+      // SCROLL KE ATAS: kebalikannya.
+      const removedPage = visiblePages[visiblePages.length - 1];
+      pendingScrollAdjustment.current = filters.limit * ROW_HEIGHT;
+      shiftSelectionForWindow(filters.limit);
+
+      setPageDataCache((prev) => {
+        const updated = new Map(prev);
+        updated.delete(removedPage);
+        return updated;
+      });
+      setVisiblePages((prevVisible) => [
+        currentPage,
+        ...prevVisible.slice(0, WINDOW_SIZE - 1)
+      ]);
+    }
+
+    if (detail.pagination?.totalPages) {
+      setTotalPages(detail.pagination.totalPages);
+    }
+
+    setTimeout(() => {
+      setIsTransitioning(false);
+      setIsFetching(false);
+
+      const isScrollDown = currentPage >= Math.max(...visiblePages);
+      const pagesToPrefetch = isScrollDown
+        ? Array.from(
+            { length: STREAM_BUFFER_SIZE },
+            (_, i) => currentPage + 1 + i
+          ).filter((p) => p <= totalPages)
+        : Array.from(
+            { length: STREAM_BUFFER_SIZE },
+            (_, i) => currentPage - 1 - i
+          ).filter((p) => p >= 1);
+
+      if (pagesToPrefetch.length > 0) {
+        setTimeout(() => prefetchPages(pagesToPrefetch), 200);
+      }
+    }, 100);
+  }, [detail, currentPage, shouldBulkFetch]);
+
+  // ── 3. Row combiner: gabungkan halaman-halaman window jadi `rows` ─────────
+  useEffect(() => {
+    const combinedRows: KasGantungDetail[] = [];
+    visiblePages?.forEach((page) => {
+      const pageData = pageDataCache.get(page);
+      if (pageData) combinedRows.push(...pageData);
+    });
+
+    if (combinedRows.length === 0) {
+      // Window kosong (header tidak punya baris / filter tidak match): jangan
+      // biarkan hasil bukti sebelumnya tetap terpampang.
+      setRows((prev) => (prev.length > 0 ? [] : prev));
+      selectedRowRef.current = 0;
+      setSelectedRow(0);
+      isPageTransitionRef.current = false;
+      pendingScrollAdjustment.current = 0;
+      return;
+    }
+
+    setRows(combinedRows);
+
+    if (isPageTransitionRef.current) {
+      isPageTransitionRef.current = false;
+      // Commit selectedRow yang sudah digeser BERSAMAAN dengan setRows, supaya
+      // highlight (getRowClass) tidak berkedip di frame antara.
+      const targetRow = Math.min(
+        Math.max(selectedRowRef.current, 0),
+        combinedRows.length - 1
+      );
+      selectedRowRef.current = targetRow;
+      setSelectedRow(targetRow);
+    }
+  }, [visiblePages, pageDataCache]);
+
+  // ── 4. Kompensasi scroll setelah window bergeser ──────────────────────────
+  // Window geser 1 halaman = `rows` bertambah/berkurang filters.limit baris di
+  // salah satu ujung. Tanpa menggeser scrollTop sebesar tinggi halaman itu,
+  // konten akan melompat di bawah kursor user.
+  useLayoutEffect(() => {
+    if (pendingScrollAdjustment.current !== 0 && scrollContainerRef.current) {
+      const container = scrollContainerRef.current;
+
+      container.scrollTop += pendingScrollAdjustment.current;
+
+      // Sinkronkan referensi supaya handleScroll tidak mengira ini scroll manual.
+      scrollPositionRef.current = container.scrollTop;
+      lastScrollTopRef.current = container.scrollTop;
+      hasAdjustedScrollRef.current = true;
+
+      pendingScrollAdjustment.current = 0;
+    }
+  }, [rows]);
+
+  // nobukti berganti (user pindah baris header) = dataset benar-benar lain.
+  // Buang seluruh window + buffer, jangan sampai detail bukti sebelumnya ikut
+  // tergabung ke grid.
+  useEffect(() => {
+    setRows([]);
+    setSelectedRow(0);
+    resetBufferingCache();
+  }, [filters.filters.nobukti, resetBufferingCache]);
 
   async function handleKeyDown(
     args: CellKeyDownArgs<KasGantungDetail>,
@@ -840,40 +1279,17 @@ const GridKasGantungDetail = ({
       cell.setAttribute('tabindex', '-1');
     });
   }, []);
-  useEffect(() => {
-    if (filters !== prevFilters) {
-      refetch();
-      setPrevFilters(filters);
-    }
-  }, [filters, refetch]);
-  useEffect(() => {
-    if (headerData?.nobukti || nobukti) {
-      setFilters((prev) => ({
-        ...prev,
-        filters: {
-          ...filterkasgantungDetail, // <--- semua filter dikosongkan dulu
-          nobukti: nobukti ?? headerData?.nobukti // <--- kecuali nobukti tetap diisi
-        }
-      }));
-    } else {
-      setFilters((prev) => ({
-        ...prev,
-        filters: {
-          ...filterkasgantungDetail,
-          nobukti: '' // semua dikosongkan
-        }
-      }));
-    }
-  }, [headerData?.nobukti, nobukti]);
+
   useEffect(() => {
     return () => {
       debouncedFilterUpdate.cancel();
     };
   }, []);
+
   return (
     <div className={`flex h-[100%] w-full justify-center`}>
       <div className="flex h-[100%] w-full flex-col rounded-sm border border-border bg-background">
-        <div className="flex h-[38px] w-full flex-row items-center justify-between border-b border-border bg-background-grid-header px-2">
+        <div className="flex h-[38px] w-full flex-row items-center justify-between rounded-t-sm border-b border-border bg-background-grid-header px-2">
           <div className="flex flex-row items-center">
             <label htmlFor="" className="text-xs">
               SEARCH :
@@ -904,7 +1320,7 @@ const GridKasGantungDetail = ({
             <DraggableColumn
               defaultColumns={columns}
               saveColumns={finalColumns}
-              userId={user.id}
+              userId={String(session?.user?.id)}
               gridName="GridKasGantungDetail"
               setColumnsOrder={setColumnsOrder}
               setColumnsWidth={setColumnsWidth}
@@ -921,14 +1337,16 @@ const GridKasGantungDetail = ({
           columns={finalColumns}
           onColumnResize={onColumnResize}
           onColumnsReorder={onColumnsReorder}
-          rows={rows}
+          rows={rows ?? []}
           rowClass={getRowClass}
-          headerRowHeight={70}
           onSelectedCellChange={(args) => {
             handleCellClick({ row: args.row });
           }}
+          rowKeyGetter={rowKeyGetter}
+          headerRowHeight={HEADER_ROW_HEIGHT}
           onCellKeyDown={handleKeyDown}
-          rowHeight={30}
+          rowHeight={ROW_HEIGHT}
+          onScroll={handleScroll}
           renderers={{ noRowsFallback: <EmptyRowsRenderer /> }}
           className={`${isDark ? 'rdg-dark' : 'rdg-light'} fill-grid`}
           enableVirtualization={false}
@@ -951,7 +1369,7 @@ const GridKasGantungDetail = ({
               variant="default"
               onClick={() => {
                 resetGridConfig(
-                  user.id,
+                  String(session?.user?.id),
                   'GridKasGantungDetail',
                   columns,
                   setColumnsOrder,
@@ -966,7 +1384,14 @@ const GridKasGantungDetail = ({
             </Button>
           </div>
         )}
-        <div className="flex flex-row justify-between border border-x-0 border-b-0 border-border bg-background-grid-header p-2">
+        <div className="flex flex-row items-center justify-between border border-x-0 border-b-0 border-border bg-background-grid-header p-2">
+          <span className="text-xs">
+            {rows.length > 0
+              ? `Menampilkan ${startRow} - ${startRow + rows.length - 1} dari ${
+                  detail?.pagination?.totalItems ?? rows.length
+                } data`
+              : ''}
+          </span>
           {isLoading ? <LoadRowsRenderer /> : null}
         </div>
       </div>

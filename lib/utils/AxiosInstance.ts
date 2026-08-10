@@ -13,6 +13,7 @@ import { clearSearch } from '../store/searchLookupSlice/searchLookupSlice';
 import { alertStore } from '../store/client/useAlert';
 import { offlineOverlayStore } from '../store/client/useOfflineOverlay';
 import { setProcessed } from '../store/loadingSlice/loadingSlice';
+import { sanitizeAxiosError } from './errorMessage';
 
 // ─── HTTP method classification ───────────────────────────────────────────────
 // Only mutation methods get the aggressive 10s timeout + abort-on-offline
@@ -395,6 +396,11 @@ const configureAxios = (baseURL: string): AxiosInstance => {
     },
     async (error) => {
       const originalRequest = error.config;
+
+      // Satu-satunya gerbang menuju UI: pesan SQL/constraint/stack trace dari
+      // backend diganti kalimat yang bisa dibaca user SEBELUM sampai ke hook
+      // mana pun di lib/server.
+      sanitizeAxiosError(error);
 
       // Always clean up the tracked controller, regardless of error type
       const ctrl = (
