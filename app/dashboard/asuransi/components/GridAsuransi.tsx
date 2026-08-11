@@ -16,7 +16,6 @@ import DataGrid, {
   Column,
   DataGridHandle
 } from 'react-data-grid';
-// Untuk types, import langsung (types tidak affect runtime)
 
 import { ImSpinner2 } from 'react-icons/im';
 import ActionButton from '@/components/custom-ui/ActionButton';
@@ -68,7 +67,7 @@ import { Button } from '@/components/ui/button';
 import Image from 'next/image';
 import IcClose from '@/public/image/x.svg';
 import { setHeaderData } from '@/lib/store/headerSlice/headerSlice';
-import { IAsuransi } from '@/lib/types/asuransi.type';
+import { IAsuransi, filterAsuransi } from '@/lib/types/asuransi.type';
 import { number } from 'zod';
 import {
   clearOpenName,
@@ -113,35 +112,7 @@ interface Filter {
   limit: number;
   search: string;
 
-  filters: {
-    nama: string;
-    keterangan: string;
-    contactperson: string;
-    alamat: string;
-    kota: string;
-    kodepos: string;
-    telp: string;
-    email: string;
-    fax: string;
-    web: string;
-    ratemodal: string;
-    ratejual: string;
-    npwp: string;
-    nominalasuransi: string;
-    rateopendoor: string;
-    adminbiaya: string;
-    admintagih: string;
-    batas1: string;
-    batas2: string;
-    batas3: string;
-    materai1: string;
-    materai2: string;
-    materai3: string;
-    statusaktif?: string;
-    created_at: string;
-    updated_at: string;
-    modifiedby?: string;
-  };
+  filters: typeof filterAsuransi;
   sortBy: string;
   sortDirection: 'asc' | 'desc';
 }
@@ -155,10 +126,6 @@ const GridAsuransi = () => {
 
   const [totalPages, setTotalPages] = useState(1);
   const [popOver, setPopOver] = useState<boolean>(false);
-  // Dinaikkan setiap "Save & Add" untuk me-remount form (Dialog) agar semua
-  // LookUp re-init dari nilai form hasil resetAddForm -> STATUS AKTIF kembali
-  // ke "AKTIF" dan field lain kosong. Tanpa ini, modal yang tetap terbuka
-  // membuat LookUp memakai state lama (tampilan status aktif kosong).
   const [addFormKey, setAddFormKey] = useState<number>(0);
   const { generateReport } = useReportPdfContext();
 
@@ -172,17 +139,11 @@ const GridAsuransi = () => {
   const hasAdjustedScrollRef = useRef<boolean>(false);
   const [isFetching, setIsFetching] = useState(false);
   const [isScrolling, setIsScrolling] = useState(false);
-  // Versi ref dari isScrolling: di-set sinkron agar pengecekan di dalam
-  // handleScroll yang sama langsung melihat nilai terbaru. State `isScrolling`
-  // bersifat async, sehingga pada navigasi keyboard (hanya 1 event scroll per
-  // tekan PageUp/PageDown) closure-nya masih `false` dan pemicu fetch halaman
-  // berikutnya tidak pernah jalan. Ref ini mencegah masalah tsb.
   const isScrollingRef = useRef(false);
   const [scrollDirection, setScrollDirection] = useState<'up' | 'down' | null>(
     null
   );
-  // Tambah ref baru di dekat ref lainnya
-  const pendingSelectIdxRef = useRef<number>(1); // default ke idx 1 (skip nomor/select)
+  const pendingSelectIdxRef = useRef<number>(1);
   const suppressScrollRef = useRef(false);
   const isPageTransitionRef = useRef(false);
   const { start } = useReportProgress();
@@ -231,7 +192,7 @@ const GridAsuransi = () => {
   const [isFetchingManually, setIsFetchingManually] = useState(false);
   const [rows, setRows] = useState<IAsuransi[]>([]);
   const [isDataUpdated, setIsDataUpdated] = useState(false);
-  const resizeDebounceTimeout = useRef<NodeJS.Timeout | null>(null); // Timer debounce untuk resize
+  const resizeDebounceTimeout = useRef<NodeJS.Timeout | null>(null);
   const prevPageRef = useRef(currentPage);
   const dispatch = useDispatch();
   const [checkedRows, setCheckedRows] = useState<Set<string>>(new Set());
@@ -243,44 +204,18 @@ const GridAsuransi = () => {
   useEffect(() => {
     selectedRowRef.current = selectedRow;
   }, [selectedRow]);
-  // ID baris yang baru disimpan (add/edit). Dipakai Row Combiner untuk
-  // memfokuskan baris itu BERDASARKAN ID (bukan index) setelah data window
-  // settle -- index bisa meleset karena window pagination ikut bergeser saat
-  // re-render. Selama ref ini ter-set, Combiner TIDAK menjalankan scroll-ke-
-  // row-0 (cabang else) yang memicu handleScroll menggeser window.
   const pendingFocusIdRef = useRef<string | null>(null);
-  // Diset true selama window settle pasca-mutasi (add/edit) untuk memblokir
-  // data-effect memproses ulang hasil refetch (yang menimpa fokus ke baris 0).
-  // Ref (bukan state) supaya reset-nya TIDAK memicu ulang effect.
   const suppressRefetchRef = useRef(false);
   const activeFilterInputRef = useRef<HTMLElement | null>(null);
-  const [selectedCellKey, setSelectedCellKey] = useState<string>('nomor');
+  const [selectedCellKey, setSelectedCellKey] = useState<string>('nama');
   const streamBufferRef = useRef<Map<number, IAsuransi[]>>(new Map());
   const prefetchingPagesRef = useRef<Set<string>>(new Set());
   const STREAM_BUFFER_SIZE = 5;
   const WINDOW_SIZE = 5;
   const jumpToLastRef = useRef(false);
   const jumpToFirstRef = useRef(false);
-  // Modalitas input terakhir: 'keyboard' (Arrow/Page) atau 'pointer' (wheel/drag
-  // scrollbar). Dipakai utk menentukan apakah selectCell harus di-re-anchor
-  // ke baris data yg sama setelah window-shift.
   const interactionModeRef = useRef<'keyboard' | 'pointer'>('pointer');
-  // Diset saat window benar-benar bergeser (shiftSelectionForWindow). Menandai
-  // apakah pergeseran itu dari keyboard, sehingga useLayoutEffect tahu apakah
-  // perlu re-anchor selectCell. Mouse scroll TIDAK boleh memindahkan sel aktif.
   const reanchorFromKeyboardRef = useRef(false);
-
-  // Saat window pagination bergeser (halaman atas/bawah keluar dari window),
-  // index setiap baris di array `rows` ikut bergeser sebanyak filters.limit.
-  // Fungsi ini menjaga agar baris DATA yang sama tetap ter-select dengan HANYA
-  // menggeser index (selectedRowRef) -- highlight digambar via getRowClass.
-  // Posisi visual dijaga oleh kompensasi scrollTop (pendingScrollAdjustment),
-  // jadi kita TIDAK memanggil selectCell/scrollToCell di sini agar grid tidak
-  // dipaksa scroll ke baris tsb.
-  // CATATAN: setSelectedRow TIDAK dipanggil di sini -- ditunda ke Row Combiner
-  // agar commit bersamaan dengan setRows. Jika selectedRow di-update sekarang,
-  // akan ada 1 frame di mana selectedRow sudah bergeser tapi `rows` belum
-  // -> highlight kuning "berkedip".
   const shiftSelectionForWindow = (deltaRows: number) => {
     const next = Math.max(0, selectedRowRef.current + deltaRows);
     selectedRowRef.current = next;
@@ -537,7 +472,7 @@ const GridAsuransi = () => {
                 filterBy={{ grp: 'STATUS AKTIF', subgrp: 'STATUS AKTIF' }}
                 onChange={(value) =>
                   handleFilterInputChange('statusaktif', value)
-                } // Menangani perubahan nilai di parent
+                }
               />
             </div>
           </div>
@@ -575,7 +510,7 @@ const GridAsuransi = () => {
             <div title="N/A" className="text-xs text-gray-500">
               N/A
             </div>
-          ); // Tampilkan 'N/A' jika memo tidak tersedia
+          );
         }
       },
       {
@@ -2373,7 +2308,6 @@ const GridAsuransi = () => {
     debouncedFilterUpdate.cancel();
     pendingUpdates.current[colKey] = '';
 
-    // ✅ Arahkan ke kolom yang di-clear
     const originalIndex = columns.findIndex((col) => col.key === colKey);
     const displayIndex =
       columnsOrder.length > 0
@@ -2399,7 +2333,6 @@ const GridAsuransi = () => {
     cancelPreviousRequest(abortControllerRef);
     const searchValue = e.target.value;
 
-    // ✅ Track global search input agar focus bisa di-restore
     activeFilterInputRef.current = inputRef.current;
     pendingSelectIdxRef.current = 1;
 
@@ -2407,35 +2340,7 @@ const GridAsuransi = () => {
     setCurrentPage(1);
     setFilters((prev) => ({
       ...prev,
-      filters: {
-        nama: '',
-        keterangan: '',
-        contactperson: '',
-        alamat: '',
-        kota: '',
-        kodepos: '',
-        telp: '',
-        email: '',
-        fax: '',
-        web: '',
-        ratemodal: '',
-        ratejual: '',
-        npwp: '',
-        nominalasuransi: '',
-        rateopendoor: '',
-        adminbiaya: '',
-        admintagih: '',
-        batas1: '',
-        batas2: '',
-        batas3: '',
-        materai1: '',
-        materai2: '',
-        materai3: '',
-        statusaktif: '',
-        modifiedby: '',
-        created_at: '',
-        updated_at: ''
-      },
+      ...filters,
       search: searchValue,
       page: 1
     }));
@@ -2456,7 +2361,7 @@ const GridAsuransi = () => {
         ? columnsOrder.findIndex((idx) => idx === originalIndex)
         : originalIndex;
 
-    activeFilterInputRef.current = null; // ✅ Sort bukan dari input, tidak perlu restore focus
+    activeFilterInputRef.current = null;
     pendingSelectIdxRef.current = displayIndex >= 0 ? displayIndex : 1;
 
     const newSortOrder =
@@ -2516,7 +2421,7 @@ const GridAsuransi = () => {
     cancelPreviousRequest(abortControllerRef);
     debouncedFilterUpdate.cancel();
     activeFilterInputRef.current = null;
-    pendingSelectIdxRef.current = 1; // ✅ Reset ke default idx 1
+    pendingSelectIdxRef.current = 1;
     setFilters((prev) => ({
       ...prev,
       filters: {
@@ -2535,20 +2440,15 @@ const GridAsuransi = () => {
   };
 
   const onColumnResize = (index: number, width: number) => {
-    // 1) Dapatkan key kolom yang di-resize
     const columnKey = columns[columnsOrder[index]].key;
 
-    // 2) Update state width seketika (biar kolom langsung responsif)
     const newWidthMap = { ...columnsWidth, [columnKey]: width };
     setColumnsWidth(newWidthMap);
 
-    // 3) Bersihkan timeout sebelumnya agar tidak menumpuk
     if (resizeDebounceTimeout.current) {
       clearTimeout(resizeDebounceTimeout.current);
     }
 
-    // 4) Set ulang timer: hanya ketika 300ms sejak resize terakhir berlalu,
-    //    saveGridConfig akan dipanggil
     resizeDebounceTimeout.current = setTimeout(() => {
       saveGridConfig(
         String(user?.id),
@@ -2610,7 +2510,7 @@ const GridAsuransi = () => {
     scrollPositionRef.current = scrollTop;
     scrollContainerRef.current = currentTarget;
 
-    const rowHeight = 27; // Mengikuti rowHeight grid prospek
+    const rowHeight = 27;
     const firstVisibleRow = Math.floor(scrollTop / rowHeight);
     const lastVisibleRow = Math.floor((scrollTop + clientHeight) / rowHeight);
 
@@ -2625,25 +2525,21 @@ const GridAsuransi = () => {
 
       if (nextPage <= totalPages && !isFetching && isScrollingRef.current) {
         if (streamBufferRef.current.has(nextPage)) {
-          // ✅ DATA ADA DI BUFFER — langsung masuk tanpa loading!
           setIsFetching(true);
           setIsTransitioning(true);
           hasAdjustedScrollRef.current = false;
 
           const bufferedData = streamBufferRef.current.get(nextPage)!;
 
-          // Pindahkan dari buffer ke pageDataCache
           setPageDataCache((prev) => {
             const updated = new Map(prev);
             updated.set(nextPage, bufferedData);
             return updated;
           });
 
-          // Hapus dari buffer (sudah masuk ke visible cache)
           streamBufferRef.current = new Map(streamBufferRef.current);
           streamBufferRef.current.delete(nextPage);
 
-          // Update visiblePages (geser window)
           isPageTransitionRef.current = true;
           pendingScrollAdjustment.current = -(filters.limit * ROW_HEIGHT);
           shiftSelectionForWindow(-filters.limit);
@@ -2653,29 +2549,24 @@ const GridAsuransi = () => {
 
             setPageDataCache((prev) => {
               const updated = new Map(prev);
-              updated.delete(removedPage); // Langsung hapus total dari memori
+              updated.delete(removedPage);
               return updated;
             });
 
             return newPages;
           });
 
-          // Update totalPages jika perlu (dari cache tidak ada pagination data,
-          // jadi kita biarkan dari fetch terakhir)
-
           setTimeout(() => {
             setIsTransitioning(false);
             setIsFetching(false);
-          }, 50); // Lebih cepat karena tidak ada network latency
+          }, 50);
 
-          // Prefetch page berikutnya di background
           const pagesToPrefetch = Array.from(
             { length: STREAM_BUFFER_SIZE },
             (_, i) => nextPage + 1 + i
           );
           prefetchPages(pagesToPrefetch);
         } else if (!pageDataCache.has(nextPage)) {
-          // ⚠️ Buffer miss — fallback ke fetch normal
           setIsFetching(true);
           setIsTransitioning(true);
           hasAdjustedScrollRef.current = false;
@@ -2691,7 +2582,6 @@ const GridAsuransi = () => {
 
       if (prevPage >= 1 && !isFetching && isScrollingRef.current) {
         if (streamBufferRef.current.has(prevPage)) {
-          // ✅ DATA ADA DI BUFFER — langsung masuk tanpa loading!
           setIsFetching(true);
           setIsTransitioning(true);
           hasAdjustedScrollRef.current = false;
@@ -2716,7 +2606,7 @@ const GridAsuransi = () => {
 
             setPageDataCache((prev) => {
               const updated = new Map(prev);
-              updated.delete(removedPage); // Langsung hapus total dari memori
+              updated.delete(removedPage);
               return updated;
             });
 
@@ -2728,19 +2618,15 @@ const GridAsuransi = () => {
             setIsFetching(false);
           }, 50);
 
-          // Prefetch page sebelumnya di background
           const pagesToPrefetch = Array.from(
             { length: STREAM_BUFFER_SIZE },
             (_, i) => prevPage - 1 - i
           ).filter((p) => p >= 1);
           prefetchPages(pagesToPrefetch);
         } else if (!pageDataCache.has(prevPage)) {
-          // ⚠️ Buffer miss — fallback ke fetch normal
           setIsFetching(true);
           setIsTransitioning(true);
           hasAdjustedScrollRef.current = false;
-          // Reset ke 0 dulu agar setCurrentPage(prevPage) pasti trigger re-fetch
-          // even jika prevPage == currentPage (stale value)
           setCurrentPage(0);
           setTimeout(() => setCurrentPage(prevPage), 0);
         }
@@ -2774,7 +2660,6 @@ const GridAsuransi = () => {
     (delta: number, focusBackTo?: HTMLElement | null) => {
       if (rows.length === 0) return;
 
-      // Navigasi via input filter/search = modalitas keyboard.
       interactionModeRef.current = 'keyboard';
 
       const nextRow = Math.min(
@@ -2788,7 +2673,6 @@ const GridAsuransi = () => {
       );
       const idx = idxFromKey >= 0 ? idxFromKey : 0;
 
-      // Pindahkan selected cell bawaan grid (untuk ArrowLeft/ArrowRight) + tetap jaga input tetap fokus
       gridRef.current?.scrollToCell?.({ rowIdx: nextRow, idx });
       gridRef.current?.selectCell?.({ rowIdx: nextRow, idx });
 
@@ -2924,17 +2808,11 @@ const GridAsuransi = () => {
     jumpToLastRef.current = true;
     setRows([]);
 
-    // Jika total halaman <= WINDOW_SIZE, semua halaman muat di satu bulk window
-    // pertama — pakai bulk-fetch normal (lebih efisien: 1 request).
     if (totalPages <= WINDOW_SIZE) {
       resetBufferingCache();
       return;
     }
 
-    // Kasus umum: WINDOW_SIZE halaman terakhir TIDAK selalu sejajar dengan
-    // batas bulk block (mis. totalPages=23, WINDOW_SIZE=5 -> butuh halaman
-    // 19..23, sementara bulk block hanya {1-5,6-10,11-15,16-20,21-25}). Jadi
-    // fetch tiap halaman terakhir secara langsung lalu rakit cache & window.
     setIsFetching(true);
     setShouldBulkFetch(false);
     setBulkStartPage(1);
@@ -3005,7 +2883,6 @@ const GridAsuransi = () => {
       const isGlobalSearchInput =
         !!inputRef.current && target === inputRef.current;
 
-      // Hanya handle key navigation dari input filter column & input search global
       if (!isFilterInput && !isGlobalSearchInput) return;
 
       const visibleRowCount = 8;
@@ -3052,14 +2929,10 @@ const GridAsuransi = () => {
       handleGoToLastPage
     ]
   );
-  // Cache default STATUS AKTIF ("AKTIF") supaya tidak fetch berulang.
   const statusAktifDefaultRef = useRef<{ id: string; text: string } | null>(
     null
   );
 
-  // Reset form mode "add" sekaligus set default STATUS AKTIF = "AKTIF".
-  // Auto-default LookUp tidak reliabel untuk field ini, jadi di-set eksplisit
-  // dari data parameter (id berupa varchar, jadi disimpan sebagai string).
   const resetAddForm = async () => {
     let aktif = statusAktifDefaultRef.current;
     if (!aktif) {
@@ -3119,17 +2992,9 @@ const GridAsuransi = () => {
   ) => {
     clearError();
     setIsFetchingManually(true);
-    // Tandai baris baru agar Row Combiner memfokuskannya by-id setelah data
-    // window settle (lihat pendingFocusIdRef). Lebih andal daripada selectCell
-    // by-index yang bisa meleset saat window bergeser.
     pendingFocusIdRef.current = focusId ?? null;
     try {
       if (keepOpenModal) {
-        // SAVE & ADD: reset form (set default STATUS AKTIF = "AKTIF") lalu
-        // remount modal via addFormKey agar semua LookUp re-init dari nilai
-        // form. JANGAN dispatch setClearLookup di sini: pada mount, effect
-        // clearLookup berjalan SETELAH init sehingga malah mengosongkan
-        // tampilan status aktif yang baru di-set.
         await resetAddForm();
         setAddFormKey((k) => k + 1);
         setPopOver(true);
@@ -3139,21 +3004,12 @@ const GridAsuransi = () => {
         setPopOver(false);
       }
       if (mode !== 'delete') {
-        // Blokir data-effect memproses ulang hasil refetch pasca-mutasi selama
-        // window settle, agar fokus by-id tidak tertimpa (fokus "lompat ke
-        // baris 1"). Dibuka lagi via setTimeout di bawah.
         suppressRefetchRef.current = true;
         const response = await api2.get(
           `/redis/get/asuransi-page-${pageNumber}`
         );
         setRows([]);
         setRows(response.data);
-        // Fokus BERDASARKAN ID baris, bukan indexOnPage dari backend. Setelah
-        // edit, posisi baris di data window yang dimuat bisa berbeda dari
-        // hitungan index backend (mis. tie-break urutan nama) sehingga fokus
-        // meleset. Cari index baris (add: newItem.id, edit: updatedItem.id)
-        // langsung di data yang dimuat -> selalu tepat. Fallback ke indexOnPage
-        // bila id tak ketemu.
         const loadedRows: IAsuransi[] = Array.isArray(response.data)
           ? response.data
           : [];
@@ -3188,13 +3044,6 @@ const GridAsuransi = () => {
           });
         }, 200);
 
-        // Penahan fokus pasca-mutasi. setCurrentPage(pageNumber) memicu refetch
-        // yang menjalankan Row Combiner lagi; karena pendingFocusIdRef sudah
-        // dikonsumsi pada run pertama, cabang else-nya men-scroll ke baris 0
-        // (gejala "edit selalu ke baris 1"). Re-assert id fokus beberapa kali
-        // selama window settle agar SETIAP run Row Combiner (termasuk akibat
-        // refetch) memfokuskan ulang baris yang benar by-id, lalu bersihkan
-        // supaya tidak mengganggu navigasi berikutnya.
         if (focusId != null) {
           [120, 320, 620].forEach((d) =>
             setTimeout(() => {
@@ -3208,8 +3057,6 @@ const GridAsuransi = () => {
           }, 950);
         }
 
-        // Buka blokir refetch setelah window settle. Karena ref, reset ini TIDAK
-        // memicu ulang data-effect -> tidak ada clobber saat dibuka.
         setTimeout(() => {
           suppressRefetchRef.current = false;
         }, 1000);
@@ -3232,13 +3079,10 @@ const GridAsuransi = () => {
           await deleteAsuransi(selectedRowId as unknown as string, {
             onSuccess: () => {
               setPopOver(false);
-
-              // 1. Remove from visible rows
               setRows((prevRows) =>
                 prevRows.filter((row) => row.id !== selectedRowId)
               );
 
-              // 2. Remove from pageDataCache (all pages)
               setPageDataCache((prevCache) => {
                 const updated = new Map(prevCache);
                 updated.forEach((pageRows, pageNum) => {
@@ -3252,7 +3096,6 @@ const GridAsuransi = () => {
                 return updated;
               });
 
-              // 3. Remove from streamBuffer
               const newBuffer = new Map(streamBufferRef.current);
               newBuffer.forEach((pageRows, pageNum) => {
                 const filtered = pageRows.filter(
@@ -3264,20 +3107,11 @@ const GridAsuransi = () => {
               });
               streamBufferRef.current = newBuffer;
 
-              // 4. Fokus baris BERIKUTNYA (by-id). Setelah baris dihapus,
-              // baris tepat di bawahnya naik mengisi slot yang sama -> itulah
-              // yang difokuskan. Jika yang dihapus baris paling bawah window,
-              // jatuh ke baris di atasnya. Pemfokusan dilakukan via
-              // pendingFocusIdRef (BY-ID), bukan selectCell by-index: Row
-              // Combiner jalan ulang setelah cache di-update, dan tanpa
-              // pendingFocusIdRef cabang else-nya men-scroll & men-select balik
-              // ke row 0 (lihat onSuccess add/edit yang memakai pola sama).
               const nextFocusRow =
                 rows[selectedRow + 1] ?? rows[selectedRow - 1];
               if (nextFocusRow) {
                 pendingFocusIdRef.current = String(nextFocusRow.id);
               } else {
-                // Tidak ada baris tersisa pada window ini.
                 setSelectedRow(0);
                 selectedRowRef.current = 0;
               }
@@ -3290,7 +3124,7 @@ const GridAsuransi = () => {
         const newOrder = await createAsuransi(
           {
             ...values,
-            ...filters // Kirim filter ke body/payload
+            ...filters
           },
           {
             onSuccess: (data) =>
@@ -3371,9 +3205,7 @@ const GridAsuransi = () => {
         sortDirection: filtersWithoutLimit.sortDirection
       },
       apiFn: generateAsuransiReportFn,
-      // Tombol Export di toolbar viewer — memakai filter yang sama dengan
-      // laporan yang sedang dibuka (sama seperti di halaman /reports/*).
-      onExport: () => handleExportExcel(filtersWithoutLimit)
+      onExport: () => handleExportExcel()
     });
   };
 
@@ -3441,13 +3273,6 @@ const GridAsuransi = () => {
   //   }
   // };
 
-  /**
-   * Export Excel dijalankan di BACKEND (background job + socket), sama seperti
-   * alur cetak laporan. Frontend hanya mengirim filter yang sedang aktif di
-   * grid — filter kolom, search global, dan sort — lalu progresnya muncul di
-   * toast. Setelah selesai, toast menampilkan tombol Download untuk menyimpan
-   * file xlsx-nya.
-   */
   const handleExportExcel = async () => {
     const { page, limit, ...filtersWithoutLimit } = filters;
 
@@ -3504,8 +3329,6 @@ const GridAsuransi = () => {
   const handleAdd = async () => {
     try {
       setMode('add');
-      // Fetch default AKTIF lalu reset SEBELUM buka modal, supaya lookupNama
-      // (non-reaktif) sudah terisi saat LookUp pertama kali mount.
       await resetAddForm();
       setPopOver(true);
     } catch (error) {
@@ -3520,7 +3343,7 @@ const GridAsuransi = () => {
       knownTotalPages?: number
     ) => {
       const cacheToCheck = existingCache ?? pageDataCache;
-      const effectiveTotalPages = knownTotalPages ?? totalPages; // ← pakai nilai fresh jika dikirim
+      const effectiveTotalPages = knownTotalPages ?? totalPages;
 
       const validPages = pagesToFetch.filter(
         (p) =>
@@ -3533,10 +3356,8 @@ const GridAsuransi = () => {
 
       if (validPages.length === 0) return;
 
-      // Tandai semua sebagai sedang di-fetch agar tidak dobel
       validPages.forEach((p) => prefetchingPagesRef.current.add(p));
 
-      // Fetch semua secara paralel
       await Promise.allSettled(
         validPages.map(async (pageNum) => {
           try {
@@ -3554,7 +3375,6 @@ const GridAsuransi = () => {
               streamBufferRef.current.set(pageNum, data.data);
             }
           } catch (err) {
-            // Silent fail — user tidak perlu tahu jika prefetch gagal
             console.warn(
               `[StreamBuffer] Prefetch page ${pageNum} failed:`,
               err
@@ -3619,10 +3439,6 @@ const GridAsuransi = () => {
         !allAsuransi ||
         isDataUpdated ||
         isAfterMutation ||
-        // Selama settle pasca-mutasi (add/edit), jangan biarkan hasil refetch
-        // membangun ulang cache — kalau tidak, Row Combiner jalan lagi setelah
-        // pendingFocusIdRef dikonsumsi & fokus loncat ke baris 1. Effect #2
-        // (Pagination Fetch) sudah punya guard yang sama.
         suppressRefetchRef.current
       ) {
         return;
@@ -3726,7 +3542,6 @@ const GridAsuransi = () => {
     if (currentPage > maxVisible && currentPage <= maxVisible + 1) {
       const removedPage = visiblePages[0];
       pendingScrollAdjustment.current = -(filters.limit * ROW_HEIGHT);
-      // --- TAMBAHAN: Geser index selected ke atas agar data tetap menunjuk ke item yg sama ---
       shiftSelectionForWindow(-filters.limit);
 
       setPageDataCache((prev) => {
@@ -3739,7 +3554,6 @@ const GridAsuransi = () => {
       // --- SCROLL KE ATAS ---
       const removedPage = visiblePages[visiblePages.length - 1];
       pendingScrollAdjustment.current = filters.limit * ROW_HEIGHT;
-      // --- TAMBAHAN: Geser index selected ke bawah ---
       shiftSelectionForWindow(filters.limit);
 
       setPageDataCache((prev) => {
@@ -3805,12 +3619,6 @@ const GridAsuransi = () => {
       prevMinPageRef.current = newMinPage;
       prevRowsLengthRef.current = combinedRows.length;
 
-      // --- Fokus baris yang baru disimpan (add/edit) BERDASARKAN ID ---
-      // Backend mengembalikan window yang memuat baris baru; cari index-nya di
-      // sini lalu scroll+select. Pakai posisi tengah window (idx 1 = kolom data
-      // pertama) sehingga TIDAK kena THRESHOLD_ROWS handleScroll -> window tidak
-      // bergeser -> fokus tidak meleset. `return` mencegah cabang else
-      // men-scroll ke row 0 (yang memicu pergeseran window).
       if (pendingFocusIdRef.current != null) {
         const fid = pendingFocusIdRef.current;
         pendingFocusIdRef.current = null;
@@ -3846,9 +3654,6 @@ const GridAsuransi = () => {
         }, 50);
       } else if (isPageTransitionRef.current) {
         isPageTransitionRef.current = false;
-        // Commit selectedRow yang sudah digeser BERSAMAAN dengan setRows di atas,
-        // sehingga highlight (getRowClass) selalu menunjuk baris data yang sama
-        // di satu render -> tidak ada frame inkonsisten -> highlight tidak berkedip.
         const targetRow = Math.min(
           Math.max(selectedRowRef.current, 0),
           combinedRows.length - 1
@@ -3900,12 +3705,6 @@ const GridAsuransi = () => {
       // Reset
       pendingScrollAdjustment.current = 0;
 
-      // Re-anchor selected cell react-data-grid ke index baris yang sudah
-      // digeser -- HANYA jika window-shift dipicu navigasi keyboard. Saat mouse
-      // scroll, user tidak sedang menavigasi sel, jadi sel aktif tidak boleh
-      // ikut pindah. Karena scrollTop sudah dikompensasi di atas, baris target
-      // berada di posisi visual yang sama -> selectCell TIDAK memicu scroll
-      // tambahan (cell sudah di viewport), jadi tampilan tidak loncat.
       if (reanchorFromKeyboardRef.current) {
         const targetRow = selectedRowRef.current;
         const idxFromKey = finalColumns.findIndex(
@@ -4036,15 +3835,7 @@ const GridAsuransi = () => {
       forms.setValue('materai3', rowData?.materai3);
 
       forms.setValue('statusaktif', String(rowData?.statusaktif ?? ''));
-      // forms.setValue('statusaktif_nama', rowData?.statusaktif_nama);
     }
-    // JANGAN forms.reset() saat mode 'add' di sini. Effect ini ikut ter-trigger
-    // setiap kali `rows` di-update background fetch (bulk/prefetch) selama modal
-    // Add terbuka, sehingga me-reset nilai yang baru diisi user ke default
-    // kosong (''). Sejak id status migrasi number→string (z.string().min(1)),
-    // default '' membuat validasi gagal diam-diam → Save/Save & Add "tidak
-    // terjadi apa-apa" padahal LookUp masih menampilkan teks. Reset form
-    // add-mode sudah ditangani handleAdd()/onSuccess() lewat resetAddForm().
   }, [forms, selectedRow, rows, mode]);
 
   useEffect(() => {

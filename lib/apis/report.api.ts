@@ -59,6 +59,39 @@ export const generateHutangReportFn = async (
   const response = await api2.post('/hutangheader/report', payload);
   return response.data;
 };
+/**
+ * Cetak Harga trucking di background — alurnya sama dengan laporan daftar
+ * (balas jobId, progres lewat socket `/report`), hanya datanya satu bukti
+ * beserta rinciannya sesuai dua datasource di LaporanHutang.mrt.
+ */
+export const generateHargatruckingReportFn = async (
+  payload: BuktiJobPayload
+): Promise<ReportJobResponse> => {
+  const response = await api2.post('/hargatrucking/report', payload);
+  return response.data;
+};
+export const generateLabaRugiKalkulasiReportFn = async (
+  payload: BuktiJobPayload
+): Promise<ReportJobResponse> => {
+  const response = await api2.post('/labarugikalkulasi/report', payload);
+  return response.data;
+};
+
+/** Cetak bukti Pengeluaran di background — lihat generateHutangReportFn. */
+export const generatePengeluaranReportFn = async (
+  payload: BuktiJobPayload
+): Promise<ReportJobResponse> => {
+  const response = await api2.post('/pengeluaranheader/report', payload);
+  return response.data;
+};
+
+/** Cetak bukti Biaya Extra di background — lihat generateHutangReportFn. */
+export const generateBiayaExtraHeaderReportFn = async (
+  payload: BuktiJobPayload
+): Promise<ReportJobResponse> => {
+  const response = await api2.post('/biayaextraheader/report', payload);
+  return response.data;
+};
 
 /** Cetak bukti Pengeluaran di background — lihat generateHutangReportFn. */
 export const generatePengeluaranReportFn = async (
@@ -150,6 +183,13 @@ export const generateAsuransiExportFn = async (
   payload: ExportJobPayload
 ): Promise<ReportJobResponse> => {
   const response = await api2.post('/asuransi/export', payload);
+  return response.data;
+};
+
+export const generateLabaRugiKalkulasiExportFn = async (
+  payload: ExportJobPayload
+): Promise<ReportJobResponse> => {
+  const response = await api2.post('/labarugikalkulasi/export', payload);
   return response.data;
 };
 
