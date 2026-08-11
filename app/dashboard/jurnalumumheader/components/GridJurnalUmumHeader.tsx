@@ -2938,6 +2938,7 @@ const GridJurnalUmumHeader = () => {
             onEdit={handleEdit}
             rowsLength={rows.length}
             totalItems={allData ? allData.pagination.totalItems : 0}
+            startRow={startRow}
             customActions={[
               {
                 label: 'Print',

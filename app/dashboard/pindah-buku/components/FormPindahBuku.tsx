@@ -54,7 +54,7 @@ const FormPindahBuku = ({
       singleColumn: true,
       pageSize: 20,
       disabled: mode === 'view' || mode === 'delete' ? true : false,
-      postData: 'text',
+      postData: 'keterangan',
       dataToPost: 'id'
     }
   ];
@@ -223,7 +223,13 @@ const FormPindahBuku = ({
             <Form {...forms}>
               <form
                 ref={formRef}
-                onSubmit={onSubmit}
+                // `onSubmit` adalah handler MENTAH dari grid, jadi pembungkusan
+                // handleSubmit dilakukan di sini. Submit native (mis. ENTER di
+                // sebuah field) diperlakukan sama dengan tombol SAVE:
+                // keepOpenModal = false, dialog menutup.
+                onSubmit={forms.handleSubmit((values: any) =>
+                  onSubmit(values, false)
+                )}
                 className="flex h-full flex-col gap-6"
               >
                 <div className="flex h-[100%] flex-col gap-2 lg:gap-3">
@@ -297,7 +303,7 @@ const FormPindahBuku = ({
                           key={index}
                           {...props}
                           lookupValue={(value: any) => {
-                            forms.setValue('bankdari_id', Number(value));
+                            forms.setValue('bankdari_id', value);
                           }}
                           onSelectRow={(val) => {
                             forms.setValue('bankdari_nama', val?.keterangan);
@@ -325,7 +331,7 @@ const FormPindahBuku = ({
                           key={index}
                           {...props}
                           lookupValue={(value: any) => {
-                            forms.setValue('bankke_id', Number(value));
+                            forms.setValue('bankke_id', value);
                           }}
                           onSelectRow={(val) => {
                             forms.setValue('bankke_nama', val?.keterangan);
@@ -488,12 +494,16 @@ const FormPindahBuku = ({
         <FormFooterButtons
           mode={mode}
           onSave={() => {
-            onSubmit(false);
-            dispatch(setSubmitClicked(true));
+            forms.handleSubmit((values: any) => {
+              onSubmit(values, false);
+              dispatch(setSubmitClicked(true));
+            })();
           }}
           onSaveAndAdd={() => {
-            onSubmit(true);
-            dispatch(setSubmitClicked(true));
+            forms.handleSubmit((values: any) => {
+              onSubmit(values, true);
+              dispatch(setSubmitClicked(true));
+            })();
           }}
           onCancel={handleClose}
           isLoadingCreate={isLoadingCreate}

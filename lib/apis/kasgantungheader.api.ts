@@ -8,7 +8,7 @@ import { api2 } from '../utils/AxiosInstance';
 import { KasGantungHeaderInput } from '../validations/kasgantung.validation';
 import {
   BuktiJobPayload,
-  ExportJobPayload,
+  ExportBuktiJobPayload,
   ReportJobResponse
 } from './report.api';
 interface UpdateParams {
@@ -146,8 +146,9 @@ export const generateKasGantungHeaderReportFn = async (
   const response = await api2.post('/kasgantungheader/report', payload);
   return response.data;
 };
+/** Export Excel satu bukti kas gantung + rinciannya (background job). */
 export const generateKasGantungHeaderExportFn = async (
-  payload: ExportJobPayload
+  payload: ExportBuktiJobPayload
 ): Promise<ReportJobResponse> => {
   const response = await api2.post('/kasgantungheader/export', payload);
   return response.data;
