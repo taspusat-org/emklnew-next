@@ -141,7 +141,9 @@ export const useUpdatePengembalianKasGantung = () => {
     onSuccess: () => {
       void queryClient.invalidateQueries('pengembaliankasgantung');
       void queryClient.invalidateQueries(['penerimaan']);
-      void queryClient.invalidateQueries(['jurnalumum']);
+      // Tab yang dirender di halaman ini adalah jurnal umum DETAIL, jadi key-nya
+      // 'jurnalumumdetail' sejak key detail dipisah dari header di useJurnalUmum.
+      void queryClient.invalidateQueries(['jurnalumumdetail']);
       toast({
         title: 'Proses Berhasil.',
         description: 'Data Berhasil Diubah.'

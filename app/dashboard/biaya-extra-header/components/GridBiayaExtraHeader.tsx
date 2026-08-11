@@ -85,10 +85,7 @@ import { checkValidationKasGantungFn } from '@/lib/apis/kasgantungheader.api';
 import { formatCurrency, formatDateToDDMMYYYY } from '@/lib/utils';
 import { useFormError } from '@/lib/hooks/formErrorContext';
 import FilterOptions from '@/components/custom-ui/FilterOptions';
-import {
-  getAllBiayaExtraHeaderFn,
-  getBiayaExtraHeaderByIdFn
-} from '@/lib/apis/biayaextraheader.api';
+import { getAllBiayaExtraHeaderFn } from '@/lib/apis/biayaextraheader.api';
 import JsxParser from 'react-jsx-parser';
 import {
   cancelPreviousRequest,
@@ -102,16 +99,18 @@ import { highlightText } from '@/components/custom-ui/HighlightText';
 import { useTheme } from 'next-themes';
 import { LoadRowsRenderer } from '@/components/LoadRows';
 import { EmptyRowsRenderer } from '@/components/EmptyRows';
-import { useReportProgress } from '@/components/custom-ui/ReportProgressProvider';
-import { loadStimulsoftScript } from '@/lib/loadStimulsoft';
 import { useSession } from 'next-auth/react';
 import { clearOnReload } from '@/lib/store/filterSlice/filterSlice';
 import {
   BiayaExtraHeader,
   filterBiayaExtraHeader
 } from '@/lib/types/biayaextraheader.type';
-import { generateBiayaExtraHeaderExportFn } from '@/lib/apis/report.api';
+import {
+  generateBiayaExtraHeaderExportFn,
+  generateBiayaExtraHeaderReportFn
+} from '@/lib/apis/report.api';
 import { useReportPdfContext } from '@/hooks/ReportPdfProvider';
+import { HEADER_ROW_HEIGHT, LIMIT, ROW_HEIGHT } from '@/constants/constant';
 
 interface Filter {
   page: number;
@@ -131,8 +130,7 @@ const GridBiayaExtraHeader = () => {
   const [isFirstLoad, setIsFirstLoad] = useState(true);
   const dispatch = useDispatch();
   const searchParams = useSearchParams();
-  const { start } = useReportProgress();
-  const { generateExport } = useReportPdfContext();
+  const { generateReport, generateExport } = useReportPdfContext();
   const { data: session, status } = useSession();
 
   const [totalPages, setTotalPages] = useState(1);
@@ -200,7 +198,6 @@ const GridBiayaExtraHeader = () => {
 
   const STREAM_BUFFER_SIZE = 5;
   const WINDOW_SIZE = 5;
-  const ROW_HEIGHT = 27;
   const jumpToFirstRef = useRef(false);
   const jumpToLastRef = useRef(false);
   // Id baris yang harus difokuskan Row Combiner setelah window settle pasca
@@ -236,14 +233,6 @@ const GridBiayaExtraHeader = () => {
     );
     cell?.focus({ preventScroll: true });
   };
-  // ⚠️ DIAGNOSTIK SEMENTARA — hapus setelah bug fokus pasca-save selesai.
-  // Filter console dengan "[FOKUS]" untuk melihat seluruh rantainya.
-  const dbg = (...a: any[]) => console.log('[FOKUS]', ...a);
-  const dbgActive = (tag: string) =>
-    setTimeout(() => {
-      const el = document.activeElement as HTMLElement | null;
-      dbg(`activeElement@${tag}:`, el?.tagName, el?.className?.slice?.(0, 60));
-    }, 0);
   // Index display kolom yang akan di-focus setelah re-fetch (sort/filter).
   // Default 1 = lewati kolom 'nomor' (idx 0).
   const pendingSelectIdxRef = useRef<number>(1);
@@ -369,7 +358,7 @@ const GridBiayaExtraHeader = () => {
 
   const [filters, setFilters] = useState<Filter>({
     page: 1,
-    limit: 50,
+    limit: LIMIT,
     filters: {
       ...filterBiayaExtraHeader,
       tglDari: committed.tglDari,
@@ -1783,19 +1772,6 @@ const GridBiayaExtraHeader = () => {
     dispatch(setClearLookup(true));
     clearError();
     setIsFetchingManually(true);
-    dbg('1) onSuccess masuk', {
-      mode,
-      keepOpenModal,
-      dialogTetapTerbuka: keepOpenModal,
-      focusId,
-      indexOnPage,
-      pageNumber,
-      fetchedPages,
-      pagedDataKeys: Object.keys(pagedData ?? {}),
-      pagedDataCounts: Object.entries(pagedData ?? {}).map(
-        ([k, v]) => `${k}:${(v as any[])?.length}`
-      )
-    });
     // Tandai baris yang baru disimpan agar Row Combiner memfokuskannya by-id
     // setelah data window settle (lihat pendingFocusIdRef).
     pendingFocusIdRef.current = focusId ?? null;
@@ -1833,16 +1809,6 @@ const GridBiayaExtraHeader = () => {
             ? loadedRows.findIndex((r) => String(r.id) === String(focusId))
             : -1;
         const targetIndex = focusIdx >= 0 ? focusIdx : indexOnPage;
-        dbg('2) hasil GET redis', {
-          isArray: Array.isArray(response.data),
-          len: Array.isArray(response.data) ? response.data.length : null,
-          rawJikaBukanArray: Array.isArray(response.data)
-            ? undefined
-            : response.data,
-          focusIdx,
-          targetIndex,
-          idBarisTermuat: loadedRows.slice(0, 5).map((r) => r.id)
-        });
 
         setSelectedRow(targetIndex);
         setPageDataCache(
@@ -1885,7 +1851,6 @@ const GridBiayaExtraHeader = () => {
           // dialog (dan sempat menggeser fokus) setelah animasi tutup selesai,
           // yang bisa mendarat belakangan daripada selectCell di 50/200ms.
           [350, 700].forEach((d) => setTimeout(focusSelectedCell, d));
-          setTimeout(() => dbgActive('AKHIR-harusnya-gridcell'), 1100);
           setTimeout(() => {
             // Bersihkan HANYA kalau masih id kita: jangan wipe fokus yang
             // sudah di-set alur lain (mis. hapus baris) di sela-sela ini.
@@ -1905,7 +1870,6 @@ const GridBiayaExtraHeader = () => {
 
       setIsDataUpdated(false);
     } catch (error) {
-      dbg('!!) onSuccess MELEMPAR -> fokus dibatalkan', error);
       console.error('Error during onSuccess:', error);
       // WAJIB dilepas di sini juga. Kalau GET redis di atas gagal, setTimeout
       // pelepas tak pernah terpasang sehingga ref tersangkut true selamanya dan
@@ -2039,32 +2003,46 @@ const GridBiayaExtraHeader = () => {
     }
   };
 
-  const handleEdit = async () => {
-    if (selectedRow !== null) {
-      const rowData = rows[selectedRow];
+  // `selectedRow` selalu number (default 0), jadi cek `!== null` tidak pernah
+  // menahan apa pun: saat grid kosong dialog tetap terbuka membawa nilai baris
+  // lama. Yang menentukan adalah ada/tidaknya baris di index terpilih.
+  const hasSelectedRow = rows.length > 0 && rows[selectedRow] !== undefined;
 
-      setPopOver(true);
-      setMode('edit');
-    }
+  // Tombol tetap aktif walau grid kosong; guard-nya berupa alert supaya user
+  // tahu alasannya, bukan tombol mati tanpa penjelasan.
+  const alertNoSelectedRow = () => {
+    alert({
+      title: 'HARAP PILIH DATA TERLEBIH DAHULU!',
+      variant: 'danger',
+      submitText: 'OK'
+    });
   };
-  const handleDelete = async () => {
-    if (selectedRow !== null) {
-      const rowData = rows[selectedRow];
 
-      try {
-        setMode('delete');
-        setPopOver(true);
-      } catch (error) {
-        console.error('Error during delete validation:', error);
-      }
+  const handleEdit = () => {
+    if (!hasSelectedRow) {
+      alertNoSelectedRow();
+      return;
     }
+    setPopOver(true);
+    setMode('edit');
+  };
+
+  const handleDelete = () => {
+    if (!hasSelectedRow) {
+      alertNoSelectedRow();
+      return;
+    }
+    setMode('delete');
+    setPopOver(true);
   };
 
   const handleView = () => {
-    if (selectedRow !== null) {
-      setMode('view');
-      setPopOver(true);
+    if (!hasSelectedRow) {
+      alertNoSelectedRow();
+      return;
     }
+    setMode('view');
+    setPopOver(true);
   };
 
   /**
@@ -2092,9 +2070,11 @@ const GridBiayaExtraHeader = () => {
     });
   };
 
+  // Cetak bukti dijalankan di BACKEND (background job + socket). Frontend
+  // hanya mengirim id baris yang dicentang plus nama template .mrt-nya;
+  // pengambilan datanya dan render Stimulsoft semuanya di sana. Progres muncul
+  // di toast, PDF-nya dibuka di modal viewer.
   const handleReport = async () => {
-    const job = start('Biaya Extra Header', 'pdf');
-
     if (checkedRows.size === 0) {
       alert({
         title: 'PILIH DATA YANG INGIN DI CETAK!',
@@ -2113,97 +2093,18 @@ const GridBiayaExtraHeader = () => {
     }
     const rowId = Array.from(checkedRows)[0];
 
-    try {
-      job.fetching();
-
-      dispatch(setProcessing());
-
-      //TANGGAL
-      const now = new Date();
-      const pad = (n: any) => n.toString().padStart(2, '0');
-      const tglcetak = `${pad(now.getDate())}-${pad(
-        now.getMonth() + 1
-      )}-${now.getFullYear()} ${pad(now.getHours())}:${pad(
-        now.getMinutes()
-      )}:${pad(now.getSeconds())}`;
-
-      const { page, limit, ...filtersWithoutLimit } = filters;
-      const response = await getBiayaExtraHeaderByIdFn(rowId);
-      if (!response.data?.length) {
-        alert({
-          title: 'TERJADI KESALAHAN SAAT MEMBUAT LAPORAN!',
-          variant: 'danger',
-          submitText: 'OK'
-        });
-        return;
-      }
-
-      const reportRows = response.data.map((row: any) => ({
-        ...row,
-        judullaporan: 'Laporan Biaya Extra',
-        usercetak: String(session?.user.username || ''),
-        tglcetak,
-        judul: `Bukti Biaya Extra EMKL`
-      }));
-
-      sessionStorage.setItem(
-        'filtersWithoutLimit',
-        JSON.stringify(filtersWithoutLimit)
-      );
-      sessionStorage.setItem('dataId', rowId as unknown as string);
-      job.rendering();
-
-      // Dynamically import Stimulsoft and generate the PDF report
-      await loadStimulsoftScript();
-      const Stimulsoft = (window as any).Stimulsoft;
-      Stimulsoft.Base.StiFontCollection.addOpentypeFontFile(
-        '/fonts/tahoma.ttf',
-        'Tahoma'
-      );
-
-      Stimulsoft.Base.StiFontCollection.addOpentypeFontFile(
-        '/fonts/tahomabd.ttf',
-        'Tahoma'
-      );
-      Stimulsoft.Base.StiLicense.Key =
-        '6vJhGtLLLz2GNviWmUTrhSqnOItdDwjBylQzQcAOiHksEid1Z5nN/hHQewjPL/4/AvyNDbkXgG4Am2U6dyA8Ksinqp' +
-        '6agGqoHp+1KM7oJE6CKQoPaV4cFbxKeYmKyyqjF1F1hZPDg4RXFcnEaYAPj/QLdRHR5ScQUcgxpDkBVw8XpueaSFBs' +
-        'JVQs/daqfpFiipF1qfM9mtX96dlxid+K/2bKp+e5f5hJ8s2CZvvZYXJAGoeRd6iZfota7blbsgoLTeY/sMtPR2yutv' +
-        'gE9TafuTEhj0aszGipI9PgH+A/i5GfSPAQel9kPQaIQiLw4fNblFZTXvcrTUjxsx0oyGYhXslAAogi3PILS/DpymQQ' +
-        '0XskLbikFsk1hxoN5w9X+tq8WR6+T9giI03Wiqey+h8LNz6K35P2NJQ3WLn71mqOEb9YEUoKDReTzMLCA1yJoKia6Y' +
-        'JuDgUf1qamN7rRICPVd0wQpinqLYjPpgNPiVqrkGW0CQPZ2SE2tN4uFRIWw45/IITQl0v9ClCkO/gwUtwtuugegrqs' +
-        'e0EZ5j2V4a1XDmVuJaS33pAVLoUgK0M8RG72';
-      const report = new Stimulsoft.Report.StiReport();
-      const dataSet = new Stimulsoft.System.Data.DataSet('Data');
-      report.loadFile('/reports/LaporanBiayaExtra.mrt');
-      report.dictionary.dataSources.clear();
-      dataSet.readJson({ data: reportRows });
-      report.regData(dataSet.dataSetName, '', dataSet);
-      report.dictionary.synchronize();
-      await new Promise<void>((resolve, reject) => {
-        report.renderAsync(() => {
-          job.exporting();
-          report.exportDocumentAsync((pdfData: any) => {
-            try {
-              const blob = new Blob([new Uint8Array(pdfData)], {
-                type: 'application/pdf'
-              });
-              sessionStorage.setItem('pdfUrl', URL.createObjectURL(blob));
-              job.finish(() =>
-                window.open('/reports/biayaextraheader', '_blank')
-              );
-              resolve();
-            } catch (err) {
-              reject(err);
-            }
-          }, Stimulsoft.Report.StiExportFormat.Pdf);
-        });
-      });
-    } catch (error) {
-      dispatch(setProcessed());
-    } finally {
-      dispatch(setProcessed());
-    }
+    await generateReport({
+      label: 'Biaya Extra',
+      payload: {
+        mrtName: 'LaporanBiayaExtra.mrt',
+        id: String(rowId),
+        judullaporan: 'Laporan Biaya Extra'
+      },
+      apiFn: generateBiayaExtraHeaderReportFn,
+      // Tombol Export di toolbar viewer — memakai filter grid yang sedang
+      // aktif, sama seperti tombol Export di toolbar bawah.
+      onExport: () => handleExportExcel()
+    });
   };
   document.querySelectorAll('.column-headers').forEach((element) => {
     element.classList.remove('c1kqdw7y7-0-0-beta-47');
@@ -2331,7 +2232,6 @@ const GridBiayaExtraHeader = () => {
   }, []);
   useEffect(() => {
     if (isFirstLoad && gridRef.current && rows.length > 0) {
-      dbg('6!) effect isFirstLoad MEMAKSA baris 0 <-- perebut fokus');
       setSelectedRow(0);
       gridRef.current.selectCell({ rowIdx: 0, idx: 1 });
       dispatch(setHeaderData(rows[0]));
@@ -2446,11 +2346,9 @@ const GridBiayaExtraHeader = () => {
         // Combiner, jadi lompatan ke baris 0 di sini harus dilewati.
         // GridAlatbayar (referensi resep ini) memang tidak punya blok ini.
         if (pendingFocusIdRef.current != null || suppressRefetchRef.current) {
-          dbg('5) ekor bulk-fetch DILEWATI (guard aktif)');
           return;
         }
         if (gridRef.current) {
-          dbg('5!) ekor bulk-fetch MEMAKSA baris 0 <-- perebut fokus');
           setSelectedRow(0);
           gridRef.current.scrollToCell({ rowIdx: 0, idx: 1 });
         }
@@ -2570,11 +2468,6 @@ const GridBiayaExtraHeader = () => {
     });
 
     if (combinedRows.length === 0) {
-      dbg('3!) Combiner jalan tapi combinedRows KOSONG -> tidak ada fokus', {
-        visiblePages,
-        cacheKeys: Array.from(pageDataCache.keys()),
-        pendingFocusId: pendingFocusIdRef.current
-      });
     }
 
     if (combinedRows.length > 0) {
@@ -2594,12 +2487,6 @@ const GridBiayaExtraHeader = () => {
         const fidx = combinedRows.findIndex(
           (r) => String(r.id) === String(fid)
         );
-        dbg('3) Combiner cabang FOKUS', {
-          fid,
-          fidx,
-          totalCombined: combinedRows.length,
-          visiblePages
-        });
         if (fidx >= 0) {
           selectedRowRef.current = fidx;
           setSelectedRow(fidx);
@@ -2607,24 +2494,11 @@ const GridBiayaExtraHeader = () => {
             gridRef.current?.scrollToCell?.({ rowIdx: fidx, idx: 1 });
             gridRef.current?.selectCell?.({ rowIdx: fidx, idx: 1 });
             focusSelectedCell();
-            dbg('4) selectCell dipanggil utk rowIdx', fidx);
-            dbgActive('setelah-selectCell');
           }, 50);
         } else {
-          dbg('!! id tidak ketemu di combinedRows', {
-            cari: fid,
-            contohId: combinedRows.slice(0, 5).map((r) => r.id)
-          });
         }
         return;
       }
-      dbg('3x) Combiner JALAN TANPA pendingFocusId', {
-        totalCombined: combinedRows.length,
-        jumpFirst: jumpToFirstRef.current,
-        jumpLast: jumpToLastRef.current,
-        pageTransition: isPageTransitionRef.current,
-        suppress: suppressRefetchRef.current
-      });
 
       if (jumpToFirstRef.current) {
         jumpToFirstRef.current = false;
@@ -2909,7 +2783,6 @@ const GridBiayaExtraHeader = () => {
       debouncedFilterUpdate.cancel();
     };
   }, []);
-  console.log('committed', committed);
 
   return (
     <div className={`flex h-[100%] w-full justify-center`}>
@@ -3012,7 +2885,7 @@ const GridBiayaExtraHeader = () => {
             setSelectedCellKey(args.column.key);
             handleCellClick({ row: args.row });
           }}
-          headerRowHeight={70}
+          headerRowHeight={HEADER_ROW_HEIGHT}
           rowHeight={ROW_HEIGHT}
           className={`${isDark ? 'rdg-dark' : 'rdg-light'} fill-grid`}
           enableVirtualization={false}
@@ -3025,9 +2898,9 @@ const GridBiayaExtraHeader = () => {
         />
         <div className="flex flex-row justify-between border border-x-0 border-b-0 border-border bg-background-grid-header p-2">
           <ActionButton
-            module="PENGELUARAN"
+            module="BIAYA-EXTRA-HEADER"
             onAdd={handleAdd}
-            // checkedRows={checkedRows}
+            checkedRows={checkedRows}
             onDelete={handleDelete}
             onView={handleView}
             onEdit={handleEdit}

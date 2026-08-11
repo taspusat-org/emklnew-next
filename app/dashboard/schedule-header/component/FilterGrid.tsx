@@ -12,9 +12,11 @@ import {
   commitFilter
 } from '@/lib/store/filterSlice/filterSlice';
 import PeriodeValidation from '@/components/custom-ui/PeriodeValidate';
+import { RootState } from '@/lib/store/store';
 
 const FilterGrid = () => {
   const dispatch = useDispatch();
+  const pending = useSelector((state: RootState) => state.filter.pending);
   const [triggerValidation, setTriggerValidation] = useState(false);
   const { onReload } = useSelector((state: any) => state.filter);
   const pending = useSelector((state: RootState) => state.filter.pending);
@@ -49,14 +51,18 @@ const FilterGrid = () => {
             date2={pending.tglSampai}
             onDate1Change={(val) => dispatch(setPending({ tglDari: val }))}
             onDate2Change={(val) => dispatch(setPending({ tglSampai: val }))}
+            date1={pending.tglDari}
+            date2={pending.tglSampai}
+            onDate1Change={(val) => dispatch(setPending({ tglDari: val }))}
+            onDate2Change={(val) => dispatch(setPending({ tglSampai: val }))}
             onValidationChange={handleValidationResult}
             triggerValidation={triggerValidation}
           />
 
           <Button
             variant="default"
-            className="mt-2 flex flex-row items-center justify-center"
-            onClick={onSubmit}
+            className="flex flex-row items-center justify-center"
+            onClick={() => setTriggerValidation(true)}
           >
             <IoMdRefresh />
             <p style={{ fontSize: 12 }} className="font-normal">
@@ -67,15 +73,6 @@ const FilterGrid = () => {
       </div>
     </div>
   );
-};
-
-// Fungsi untuk mengonversi string dd-mm-yyyy menjadi objek Date
-const parseDateFromDDMMYYYY = (dateString: string): Date | undefined => {
-  const parts = dateString.split('-');
-  if (parts.length !== 3) return undefined;
-  const [day, month, year] = parts.map(Number);
-  if (isNaN(day) || isNaN(month) || isNaN(year)) return undefined;
-  return new Date(year, month - 1, day); // Menggunakan month - 1 karena JavaScript Date menganggap bulan dimulai dari 0
 };
 
 export default FilterGrid;

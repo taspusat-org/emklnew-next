@@ -42,7 +42,42 @@ const JUMLAH_KOLOM_TREE = 9;
 const TINGGI_BARIS_DETAIL = 55;
 const TINGGI_TAB_RINCIAN = 32;
 const TINGGI_HEADER_RINCIAN = 27;
-const TINGGI_BARIS_RINCIAN = 34;
+const TINGGI_BARIS_RINCIAN = 40;
+/** <DataGrid> memakai box-sizing: border-box + border 1px atas & bawah. */
+const TINGGI_BORDER_GRID_RINCIAN = 2;
+/** Sisa tinggi baris tree di luar grid rincian: padding & border pembungkus. */
+const TINGGI_PEMBUNGKUS_RINCIAN = 14;
+
+/**
+ * Dipakai bersama kolom detail dan kolom rincian supaya pola selnya sama:
+ * kontrol di tengah sel, pesan error menempel tepat di bawahnya.
+ */
+const cellWithError = (
+  value: string,
+  error: string | undefined,
+  control: React.ReactNode
+) => (
+  <div
+    className="flex h-full w-full flex-col justify-center"
+    title={error ?? value}
+  >
+    {control}
+    {error && (
+      <p className="truncate px-1 pt-[2px] text-[10px] leading-tight text-destructive">
+        {error}
+      </p>
+    )}
+  </div>
+);
+
+const headerCell = (label: string) => (
+  <div
+    className="flex h-full flex-col items-center justify-center gap-1"
+    title={label.toUpperCase()}
+  >
+    <p className="text-sm">{label}</p>
+  </div>
+);
 
 const FormShippingInstruction = ({
   popOver,
@@ -357,10 +392,14 @@ const FormShippingInstruction = ({
       });
 
       if (expandedDetailIdx.has(detailIdx)) {
+        // detailIdx & rincianIdx ditempel ke tiap baris supaya renderCell grid
+        // rincian bisa berdiri sendiri (tidak perlu closure per baris).
         flattened.push({
           isTreeType: 'rincianBlock',
           detailIdx,
-          rincianRows: rincianByIndex[detailIdx] ?? []
+          rincianRows: (rincianByIndex[detailIdx] ?? []).map(
+            (r: any, rincianIdx: number) => ({ ...r, detailIdx, rincianIdx })
+          )
         });
       }
     });
@@ -375,6 +414,124 @@ const FormShippingInstruction = ({
 
   const detailErrors = forms.formState.errors?.details as any[] | undefined;
 
+  /**
+   * Kolom grid rincian (tab "Shipping") yang tampil di dalam baris tree.
+   * Tiap baris rincian sudah membawa detailIdx & rincianIdx dari treeRows.
+   */
+  const rincianColumns = useMemo((): Column<any>[] => {
+    const isReadOnly = mode === 'delete' || mode === 'view';
+
+    const rincianError = (row: any, field: string) =>
+      (
+        (detailErrors?.[row.detailIdx] as any)?.detailsrincian?.[
+          row.rincianIdx
+        ] as any
+      )?.[field]?.message as string | undefined;
+
+    const rincianText = (row: any, field: string) => {
+      const value = String(row[field] ?? '');
+
+      return cellWithError(
+        value,
+        rincianError(row, field),
+        <p className="truncate px-1 text-xs">{value}</p>
+      );
+    };
+
+    const rincianInput = (row: any, field: string) => {
+      const value = String(row[field] ?? '');
+      const error = rincianError(row, field);
+
+      return cellWithError(
+        value,
+        error,
+        <Input
+          type="text"
+          value={value}
+          title={value}
+          readOnly={isReadOnly}
+          onKeyDown={inputStopPropagation}
+          onClick={(e) => e.stopPropagation()}
+          onChange={(e) =>
+            handleRincianChange(
+              row.detailIdx,
+              row.rincianIdx,
+              field,
+              e.target.value
+            )
+          }
+          className={`h-7 min-h-7 w-full rounded border text-xs ${
+            error ? 'border-destructive' : 'border-gray-300'
+          }`}
+        />
+      );
+    };
+
+    return [
+      {
+        key: 'orderanmuatan_nobukti',
+        name: 'job',
+        headerCellClass: 'column-headers',
+        cellClass: 'form-input',
+        resizable: true,
+        draggable: true,
+        width: '1fr',
+        minWidth: 160,
+        renderHeaderCell: () => headerCell('job'),
+        renderCell: (props: any) =>
+          rincianText(props.row, 'orderanmuatan_nobukti')
+      },
+      {
+        key: 'comodity',
+        name: 'comodity',
+        headerCellClass: 'column-headers',
+        cellClass: 'form-input',
+        resizable: true,
+        draggable: true,
+        width: '1fr',
+        minWidth: 160,
+        renderHeaderCell: () => headerCell('comodity'),
+        renderCell: (props: any) => rincianInput(props.row, 'comodity')
+      },
+      {
+        key: 'nocontainer',
+        name: 'no container',
+        headerCellClass: 'column-headers',
+        cellClass: 'form-input',
+        resizable: true,
+        draggable: true,
+        width: '1fr',
+        minWidth: 160,
+        renderHeaderCell: () => headerCell('no container'),
+        renderCell: (props: any) => rincianText(props.row, 'nocontainer')
+      },
+      {
+        key: 'noseal',
+        name: 'no seal',
+        headerCellClass: 'column-headers',
+        cellClass: 'form-input',
+        resizable: true,
+        draggable: true,
+        width: '1fr',
+        minWidth: 140,
+        renderHeaderCell: () => headerCell('no seal'),
+        renderCell: (props: any) => rincianText(props.row, 'noseal')
+      },
+      {
+        key: 'shipper_nama',
+        name: 'nama shipper',
+        headerCellClass: 'column-headers',
+        cellClass: 'form-input',
+        resizable: true,
+        draggable: true,
+        width: '1fr',
+        minWidth: 160,
+        renderHeaderCell: () => headerCell('nama shipper'),
+        renderCell: (props: any) => rincianText(props.row, 'shipper_nama')
+      }
+    ];
+  }, [mode, detailErrors]);
+
   const columns = useMemo((): Column<ShippingInstructionDetail>[] => {
     const isReadOnly = mode === 'delete' || mode === 'view';
 
@@ -382,24 +539,6 @@ const FormShippingInstruction = ({
       (detailErrors?.[row.detailIdx] as any)?.[field]?.message as
         | string
         | undefined;
-
-    const cellWithError = (
-      value: string,
-      error: string | undefined,
-      control: React.ReactNode
-    ) => (
-      <div
-        className="flex h-full w-full flex-col justify-center"
-        title={error ?? value}
-      >
-        {control}
-        {error && (
-          <p className="truncate px-1 pt-[2px] text-[10px] leading-tight text-destructive">
-            {error}
-          </p>
-        )}
-      </div>
-    );
 
     const detailInput = (row: any, field: string) => {
       const value = String(row[field] ?? '');
@@ -445,17 +584,9 @@ const FormShippingInstruction = ({
       );
     };
 
-    const headerCell = (label: string) => (
-      <div
-        className="flex h-full flex-col items-center justify-center gap-1"
-        title={label.toUpperCase()}
-      >
-        <p className="text-sm">{label}</p>
-      </div>
-    );
-
     const rincianBlock = (row: any) => {
       const rincianRows: any[] = row.rincianRows ?? [];
+      const jumlahBaris = Math.max(1, rincianRows.length);
 
       return (
         <div className="w-full bg-background py-1 pl-10 pr-3 text-foreground">
@@ -465,117 +596,32 @@ const FormShippingInstruction = ({
             </div>
           </div>
 
-          <div className="overflow-x-auto rounded-b-sm border border-border bg-background text-foreground">
-            <table className="w-full table-fixed border-collapse text-xs">
-              <thead>
-                <tr className="bg-background-grid-header">
-                  {[
-                    'Job',
-                    'Comodity',
-                    'No Container',
-                    'No Seal',
-                    'Nama Shipper'
-                  ].map((judul) => (
-                    <th
-                      key={judul}
-                      title={judul.toUpperCase()}
-                      className="border border-border px-2 py-1 text-left text-[11px] font-bold uppercase"
-                    >
-                      {judul}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {rincianRows.length === 0 ? (
-                  <tr>
-                    <td
-                      colSpan={5}
-                      className="border border-border px-2 py-2 text-center text-zinc-400"
-                    >
-                      TIDAK ADA RINCIAN
-                    </td>
-                  </tr>
-                ) : (
-                  rincianRows.map((r: any, rincianIdx: number) => {
-                    const rincianError = (field: string) =>
-                      (
-                        (detailErrors?.[row.detailIdx] as any)
-                          ?.detailsrincian?.[rincianIdx] as any
-                      )?.[field]?.message as string | undefined;
-
-                    const errJob = rincianError('orderanmuatan_nobukti');
-                    const errComodity = rincianError('comodity');
-                    const comodityValue = String(r.comodity ?? '');
-
-                    return (
-                      <tr key={`${row.detailIdx}-${rincianIdx}`}>
-                        <td
-                          className="border border-border px-2 py-1"
-                          title={errJob ?? (r.orderanmuatan_nobukti || '')}
-                        >
-                          {r.orderanmuatan_nobukti ?? ''}
-                          {errJob && (
-                            <p className="text-[10px] leading-tight text-destructive">
-                              {errJob}
-                            </p>
-                          )}
-                        </td>
-                        <td
-                          className="border border-border px-1 py-1"
-                          title={errComodity ?? comodityValue}
-                        >
-                          <Input
-                            type="text"
-                            value={comodityValue}
-                            title={comodityValue}
-                            readOnly={isReadOnly}
-                            onKeyDown={inputStopPropagation}
-                            onClick={(e) => e.stopPropagation()}
-                            onChange={(e) =>
-                              handleRincianChange(
-                                row.detailIdx,
-                                rincianIdx,
-                                'comodity',
-                                e.target.value
-                              )
-                            }
-                            className={`h-7 min-h-7 w-full rounded border text-xs ${
-                              errComodity
-                                ? 'border-destructive'
-                                : 'border-gray-300'
-                            }`}
-                          />
-                          {errComodity && (
-                            <p className="text-[10px] leading-tight text-destructive">
-                              {errComodity}
-                            </p>
-                          )}
-                        </td>
-                        <td
-                          className="border border-border px-2 py-1"
-                          title={r.nocontainer ?? ''}
-                        >
-                          {r.nocontainer ?? ''}
-                        </td>
-                        <td
-                          className="border border-border px-2 py-1"
-                          title={r.noseal ?? ''}
-                        >
-                          {r.noseal ?? ''}
-                        </td>
-                        <td
-                          className="border border-border px-2 py-1"
-                          title={r.shipper_nama ?? ''}
-                        >
-                          {r.shipper_nama ?? ''}
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
+          {/* Klik & tombol di dalam grid rincian tidak diteruskan ke grid
+              induk supaya seleksi sel dan navigasi keyboard tidak dobel. */}
+          <div
+            className="overflow-hidden rounded-b-sm bg-background text-foreground"
+            style={{
+              height:
+                TINGGI_HEADER_RINCIAN +
+                jumlahBaris * TINGGI_BARIS_RINCIAN +
+                TINGGI_BORDER_GRID_RINCIAN
+            }}
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => e.stopPropagation()}
+          >
+            <DataGrid
+              columns={rincianColumns as any[]}
+              defaultColumnOptions={{ sortable: false, resizable: true }}
+              rows={rincianRows}
+              rowKeyGetter={(r: any) => `${r.detailIdx}-${r.rincianIdx}`}
+              rowHeight={TINGGI_BARIS_RINCIAN}
+              headerRowHeight={TINGGI_HEADER_RINCIAN}
+              renderers={{ noRowsFallback: <EmptyRowsRenderer /> }}
+              className={`${
+                isDark ? 'rdg-dark' : 'rdg-light'
+              } fill-grid text-xs`}
+              enableVirtualization={false}
+            />
           </div>
         </div>
       );
@@ -724,7 +770,14 @@ const FormShippingInstruction = ({
         renderCell: (props: any) => detailInput(props.row, 'totalgw')
       }
     ];
-  }, [mode, expandedDetailIdx, rincianByIndex, detailErrors]);
+  }, [
+    mode,
+    expandedDetailIdx,
+    rincianByIndex,
+    detailErrors,
+    rincianColumns,
+    isDark
+  ]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -947,45 +1000,56 @@ const FormShippingInstruction = ({
     }
   }, [popOver, mode]);
 
-  // Shift + scroll = geser grid detail/rincian ke kiri-kanan.
-  //
-  // Di grid utama (GridShippingInstruction) perilaku ini datang gratis dari
-  // browser. Grid yang ini beda: dia hidup di dalam Dialog (Radix), yang
-  // memasang scroll-lock `react-remove-scroll`. Scroll-lock tersebut menilai
-  // arah tiap event wheel HANYA dari deltaX/deltaY — shiftKey tidak dilihat
-  // sama sekali — lalu memanggil preventDefault untuk event yang dianggap
-  // tidak punya ruang scroll. Itu yang menelan Shift+wheel di sini sehingga
-  // geser horizontal cuma bisa lewat scrollbar. Jadi wheel-nya ditangani
-  // sendiri: listener non-passive (supaya preventDefault benar-benar berlaku)
-  // yang menerjemahkan delta ke scrollLeft milik elemen grid.
   useEffect(() => {
-    const gridElement = gridRef.current?.element;
-    if (!gridElement) return;
+    if (!popOver) return;
+
+    const cariScrollerHorizontal = (mulai: HTMLElement | null) => {
+      let node: HTMLElement | null = mulai;
+
+      while (node && node !== document.body) {
+        const { overflowX } = window.getComputedStyle(node);
+        const bolehScroll = overflowX === 'auto' || overflowX === 'scroll';
+
+        if (bolehScroll && node.scrollWidth - node.clientWidth > 1) {
+          return node;
+        }
+        node = node.parentElement;
+      }
+
+      return null;
+    };
 
     const handleShiftWheel = (event: WheelEvent) => {
-      if (!event.shiftKey) return;
+      if (!event.shiftKey || event.ctrlKey) return;
 
-      const maxScrollLeft = gridElement.scrollWidth - gridElement.clientWidth;
-      if (maxScrollLeft <= 0) return;
-
-      // Sumbu delta saat Shift ditahan beda-beda antar browser (sebagian
-      // menukar ke deltaX, sebagian tetap deltaY), jadi keduanya diakomodasi.
       const delta = event.deltaX !== 0 ? event.deltaX : event.deltaY;
       if (delta === 0) return;
 
+      const scroller = cariScrollerHorizontal(
+        event.target as HTMLElement | null
+      );
+      if (!scroller) return;
+
+      const maxScrollLeft = scroller.scrollWidth - scroller.clientWidth;
       const nextScrollLeft = Math.min(
-        Math.max(gridElement.scrollLeft + delta, 0),
+        Math.max(scroller.scrollLeft + delta, 0),
         maxScrollLeft
       );
-      if (nextScrollLeft === gridElement.scrollLeft) return;
+      if (nextScrollLeft === scroller.scrollLeft) return;
 
       event.preventDefault();
-      gridElement.scrollLeft = nextScrollLeft;
+      scroller.scrollLeft = nextScrollLeft;
     };
 
-    gridElement.addEventListener('wheel', handleShiftWheel, { passive: false });
-    return () => gridElement.removeEventListener('wheel', handleShiftWheel);
-  }, [popOver, reloadForm, dataGridKey]);
+    document.addEventListener('wheel', handleShiftWheel, {
+      passive: false,
+      capture: true
+    });
+    return () =>
+      document.removeEventListener('wheel', handleShiftWheel, {
+        capture: true
+      });
+  }, [popOver]);
 
   return (
     <Dialog open={popOver} onOpenChange={setPopOver}>
@@ -1309,7 +1373,8 @@ const FormShippingInstruction = ({
                                 TINGGI_HEADER_RINCIAN +
                                 Math.max(1, (row.rincianRows ?? []).length) *
                                   TINGGI_BARIS_RINCIAN +
-                                14
+                                TINGGI_BORDER_GRID_RINCIAN +
+                                TINGGI_PEMBUNGKUS_RINCIAN
                               : TINGGI_BARIS_DETAIL
                           }
                           headerRowHeight={40}

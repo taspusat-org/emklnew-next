@@ -19,12 +19,16 @@ export interface KasGantungHeader {
   nowarkat: string | null;
   tgljatuhtempo: string | null; // Nullable date field
   gantungorderan_nobukti: string | null;
+  statusformat: string | null;
   info: string | null;
   modifiedby: string | null;
   editing_by: string | null;
   editing_at: string | null; // Nullable datetime field
   created_at: string;
   updated_at: string;
+  // Anchor HTML ke bukti pengeluaran, dirakit di SELECT backend dan dirender
+  // lewat JsxParser di kolom pengeluaran_nobukti.
+  link: string;
 }
 export interface KasGantungDetail {
   id: number | string;
@@ -39,6 +43,7 @@ export interface KasGantungDetail {
   created_at: string;
   updated_at: string;
   pengeluarandetail_id: number;
+  link: string;
   [key: string]: string | number | boolean | null | undefined;
 }
 export interface IAllKasGantungHeader {
@@ -49,23 +54,22 @@ export interface IAllKasGantungDetail {
   data: KasGantungDetail[];
   pagination: IMeta;
 }
+// Semua nilai string kosong (bukan null): `filters` dipakai sebagai state yang
+// tiap key-nya diisi teks dari FilterInput, jadi typeof-nya harus string.
 export const filterKasGantung = {
   nobukti: '',
   tglbukti: '',
-  bank_nama: '',
+  keterangan: '',
+  bank_id: '',
   relasi_nama: '',
   alatbayar_nama: '',
-  keterangan: null,
-  bank_id: null,
   pengeluaran_nobukti: '',
   coakaskeluar: '',
-  relasi_id: null,
-  nominal: '',
   dibayarke: '',
   nowarkat: '',
   tgljatuhtempo: '',
   gantungorderan_nobukti: '',
-  modifiedby: null,
+  modifiedby: '',
   created_at: '',
   updated_at: '',
   tglDari: '',

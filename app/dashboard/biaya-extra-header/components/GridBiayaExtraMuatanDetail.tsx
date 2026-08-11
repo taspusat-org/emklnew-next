@@ -42,6 +42,7 @@ import {
 } from '@/lib/types/biayaextraheader.type';
 import { useGetBiayaExtraMuatanDetail } from '@/lib/server/useBiayaExtraHeader';
 import { getBiayaExtraMuatanDetailFn } from '@/lib/apis/biayaextraheader.api';
+import { HEADER_ROW_HEIGHT, LIMIT, ROW_HEIGHT } from '@/constants/constant';
 
 interface Filter {
   page: number;
@@ -60,7 +61,7 @@ const GridBiayaExtraMuatanDetail = () => {
 
   const [filters, setFilters] = useState<Filter>({
     page: 1,
-    limit: 30,
+    limit: LIMIT,
     filters: filterBiayaExtraMuatanDetail,
     search: '',
     sortBy: 'id',
@@ -74,7 +75,6 @@ const GridBiayaExtraMuatanDetail = () => {
   // ambang batas, data sudah ada dan window bergeser tanpa spinner.
   const WINDOW_SIZE = 5;
   const STREAM_BUFFER_SIZE = 5;
-  const ROW_HEIGHT = 30; // harus sama dengan prop rowHeight DataGrid di bawah
 
   const [shouldBulkFetch, setShouldBulkFetch] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
@@ -1573,7 +1573,7 @@ const GridBiayaExtraMuatanDetail = () => {
             handleCellClick({ row: args.row });
           }}
           rowKeyGetter={rowKeyGetter}
-          headerRowHeight={70}
+          headerRowHeight={HEADER_ROW_HEIGHT}
           onCellKeyDown={handleKeyDown}
           rowHeight={ROW_HEIGHT}
           onScroll={handleScroll}

@@ -6,6 +6,11 @@ import {
 import { buildQueryParams } from '../utils';
 import { api2 } from '../utils/AxiosInstance';
 import { KasGantungHeaderInput } from '../validations/kasgantung.validation';
+import {
+  BuktiJobPayload,
+  ExportBuktiJobPayload,
+  ReportJobResponse
+} from './report.api';
 interface UpdateParams {
   id: string;
   fields: KasGantungHeaderInput;
@@ -15,17 +20,22 @@ interface validationFields {
   value: number | string;
 }
 export const getKasGantungHeaderFn = async (
-  filters: GetParams = {}
+  filters: GetParams = {},
+  signal?: AbortSignal
 ): Promise<IAllKasGantungHeader> => {
   try {
     const queryParams = buildQueryParams(filters);
 
     const response = await api2.get('/kasgantungheader', {
-      params: queryParams
+      params: queryParams,
+      signal
     });
 
     return response.data;
   } catch (error) {
+    if (signal?.aborted) {
+      throw new Error('Request was cancelled');
+    }
     console.error('Error:', error);
     throw new Error('Failed');
   }
@@ -45,11 +55,13 @@ export const getKasGantungHeaderByIdFn = async (
 };
 
 export const getKasGantungDetailFn = async (
-  filters: GetParams = {}
+  filters: GetParams = {},
+  signal?: AbortSignal
 ): Promise<IAllKasGantungDetail> => {
   const queryParams = buildQueryParams(filters);
   const response = await api2.get(`/kasgantungdetail`, {
-    params: queryParams
+    params: queryParams,
+    signal
   });
   return response.data;
 };
@@ -127,4 +139,17 @@ export const exportKasGantungFn = async (
     console.error('Error exporting data kas gantung:', error);
     throw new Error('Failed to export data kas gantung');
   }
+};
+export const generateKasGantungHeaderReportFn = async (
+  payload: BuktiJobPayload
+): Promise<ReportJobResponse> => {
+  const response = await api2.post('/kasgantungheader/report', payload);
+  return response.data;
+};
+/** Export Excel satu bukti kas gantung + rinciannya (background job). */
+export const generateKasGantungHeaderExportFn = async (
+  payload: ExportBuktiJobPayload
+): Promise<ReportJobResponse> => {
+  const response = await api2.post('/kasgantungheader/export', payload);
+  return response.data;
 };

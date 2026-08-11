@@ -107,19 +107,12 @@ import {
 } from '@/lib/utils';
 import DraggableColumn from '@/components/custom-ui/DraggableColumns';
 import { highlightText } from '@/components/custom-ui/HighlightText';
-// Kolom hutang memakai Tooltip (mis. keterangan panjang) — modul pengeluaran
-// tidak, jadi import ini tidak ikut terbawa saat mesin grid-nya diadopsi.
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger
-} from '@/components/ui/tooltip';
 import { useTheme } from 'next-themes';
 import { LoadRowsRenderer } from '@/components/LoadRows';
 import { EmptyRowsRenderer } from '@/components/EmptyRows';
 import { useSession } from 'next-auth/react';
 import { clearOnReload } from '@/lib/store/filterSlice/filterSlice';
+import { HEADER_ROW_HEIGHT, LIMIT, ROW_HEIGHT } from '@/constants/constant';
 
 interface Filter {
   page: number;
@@ -152,12 +145,15 @@ const GridHutangHeader = () => {
   const [inputValue, setInputValue] = useState<string>('');
   const [hasMore, setHasMore] = useState(true);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const lastDispatchedId = useRef<string | null>(null);
+  const headerClearedRef = useRef(false);
   const { mutateAsync: deleteHutang, isLoading: isLoadingDelete } =
     useDeleteHutang();
   const [columnsOrder, setColumnsOrder] = useState<readonly number[]>([]);
   const [columnsWidth, setColumnsWidth] = useState<{ [key: string]: number }>(
     {}
   );
+  const [bulkStartPage, setBulkStartPage] = useState(1);
 
   const [mode, setMode] = useState<string>('');
 
@@ -207,29 +203,12 @@ const GridHutangHeader = () => {
 
   const STREAM_BUFFER_SIZE = 5;
   const WINDOW_SIZE = 5;
-  const ROW_HEIGHT = 27;
   const jumpToFirstRef = useRef(false);
   const jumpToLastRef = useRef(false);
-  // Id baris yang harus difokuskan Row Combiner setelah window settle pasca
-  // simpan. Fokus by-id lebih andal daripada selectCell by-index: index bisa
-  // meleset karena window pagination ikut bergeser saat re-render. Selama ref
-  // ini ter-set, Combiner TIDAK menjalankan cabang else (scroll ke row 0).
   const pendingFocusIdRef = useRef<string | null>(null);
-  // Diset true selama window settle pasca-mutasi (add/edit) untuk memblokir
-  // kedua data-effect memproses ulang hasil refetch — yang kalau tidak diblokir
-  // menimpa fokus ke baris 1. Ref (bukan state) supaya resetnya tidak memicu
-  // effect lagi. Pola ini disalin dari GridAlatbayar.
   const suppressRefetchRef = useRef(false);
-  // react-data-grid menandai sel yang sedang terpilih dengan tabindex=0 (sel lain
-  // -1). `selectCell()` sudah menetapkan sel terpilih -- highlight baris benar --
-  // tapi fokus DOM-nya belum tentu ikut: saat form ditutup pasca-simpan, Radix
-  // Dialog mengembalikan fokus ke tombol pemicu dan menimpa fokus sel. Karena
-  // onCloseAutoFocus di FormHutang kini mematikan pengembalian itu, fokus
-  // tertinggal di <body>, jadi grid harus mengklaimnya sendiri di sini.
   const focusSelectedCell = () => {
     const active = document.activeElement as HTMLElement | null;
-    // Jangan rebut fokus kalau user sudah sengaja pindah ke input (mis. kolom
-    // filter atau search) selama jendela settle pasca-simpan.
     if (
       active &&
       (active.tagName === 'INPUT' ||
@@ -243,51 +222,41 @@ const GridHutangHeader = () => {
     );
     cell?.focus({ preventScroll: true });
   };
-  // ⚠️ DIAGNOSTIK SEMENTARA — hapus setelah bug fokus pasca-save selesai.
-  // Filter console dengan "[FOKUS]" untuk melihat seluruh rantainya.
-  const dbg = (...a: any[]) => console.log('[FOKUS]', ...a);
-  const dbgActive = (tag: string) =>
-    setTimeout(() => {
-      const el = document.activeElement as HTMLElement | null;
-      dbg(`activeElement@${tag}:`, el?.tagName, el?.className?.slice?.(0, 60));
-    }, 0);
-  // Index display kolom yang akan di-focus setelah re-fetch (sort/filter).
-  // Default 1 = lewati kolom 'nomor' (idx 0).
   const pendingSelectIdxRef = useRef<number>(1);
   // Filter input yang sedang fokus -- agar focus tetap di sana setelah re-fetch
   // (Row Combiner mengembalikan focus + caret).
   const activeFilterInputRef = useRef<HTMLElement | null>(null);
-  // Versi ref dari isScrolling: di-set sinkron agar pengecekan di dalam
-  // handleScroll yang sama langsung melihat nilai terbaru. State `isScrolling`
-  // bersifat async, sehingga pada navigasi keyboard (hanya 1 event scroll per
-  // tekan PageUp/PageDown) closure-nya masih `false` dan pemicu fetch halaman
-  // berikutnya tidak pernah jalan. Ref ini mencegah masalah tsb.
   const isScrollingRef = useRef(false);
-  // Modalitas input terakhir: 'keyboard' (Arrow/Page) atau 'pointer' (wheel/drag
-  // scrollbar). Dipakai utk menentukan apakah selectCell harus di-re-anchor
-  // ke baris data yg sama setelah window-shift.
   const interactionModeRef = useRef<'keyboard' | 'pointer'>('pointer');
-  // Diset saat window benar-benar bergeser (shiftSelectionForWindow). Menandai
-  // apakah pergeseran itu dari keyboard, sehingga useLayoutEffect tahu apakah
-  // perlu re-anchor selectCell. Mouse scroll TIDAK boleh memindahkan sel aktif.
-  const reanchorFromKeyboardRef = useRef(false);
-  // Menandai bahwa sedang ada transisi halaman (window-shift) agar Row Combiner
-  // tahu harus commit selectedRow bersamaan dengan setRows.
-  const isPageTransitionRef = useRef(false);
+  const gridCellHadFocusRef = useRef(false);
 
-  // Saat window pagination bergeser (halaman atas/bawah keluar dari window),
-  // index setiap baris di array `rows` ikut bergeser sebanyak filters.limit.
-  // Fungsi ini menjaga agar baris DATA yang sama tetap ter-select dengan HANYA
-  // menggeser index (selectedRowRef) -- highlight digambar via getRowClass.
-  // CATATAN: setSelectedRow TIDAK dipanggil di sini -- ditunda ke Row Combiner
-  // agar commit bersamaan dengan setRows. Jika selectedRow di-update sekarang,
-  // akan ada 1 frame di mana selectedRow sudah bergeser tapi `rows` belum
-  // -> highlight kuning "berkedip".
+  const reanchorFromKeyboardRef = useRef(false);
+  const getSelectedGridCell = (): HTMLElement | null =>
+    gridRef.current?.element?.querySelector<HTMLElement>(
+      ':scope > [role="row"] > [role="gridcell"][tabindex="0"]'
+    ) ?? null;
+  const isPageTransitionRef = useRef(false);
+  const isSelectedGridCellFocused = () => {
+    const cell = getSelectedGridCell();
+    return cell !== null && cell === document.activeElement;
+  };
+
+  const restoreGridCellFocus = () => {
+    if (!gridCellHadFocusRef.current) return;
+    gridCellHadFocusRef.current = false;
+    getSelectedGridCell()?.focus({ preventScroll: true });
+  };
   const shiftSelectionForWindow = (deltaRows: number) => {
+    const fromKeyboard = interactionModeRef.current === 'keyboard';
+    reanchorFromKeyboardRef.current = fromKeyboard;
+
+    gridCellHadFocusRef.current = isSelectedGridCellFocused();
+    if (!fromKeyboard) return;
+
     const next = Math.max(0, selectedRowRef.current + deltaRows);
     selectedRowRef.current = next;
-    reanchorFromKeyboardRef.current = interactionModeRef.current === 'keyboard';
   };
+
   const forms = useForm<HutangHeaderInput>({
     resolver: mode === 'delete' ? undefined : zodResolver(hutangHeaderSchema),
     mode: 'onSubmit',
@@ -316,7 +285,7 @@ const GridHutangHeader = () => {
 
   const [filters, setFilters] = useState<Filter>({
     page: 1,
-    limit: 50,
+    limit: LIMIT,
     filters: {
       ...filterHutang,
       tglDari: committed.tglDari,
@@ -355,13 +324,13 @@ const GridHutangHeader = () => {
   const startRow = (currentMinPage - 1) * filters.limit + 1;
   const resetBufferingCache = () => {
     setShouldBulkFetch(true);
+    setBulkStartPage(1);
     setPageDataCache(new Map());
     setVisiblePages([1, 2, 3, 4, 5]);
     setIsFetching(false);
     streamBufferRef.current = new Map();
     prefetchingPagesRef.current = new Set();
   };
-
   const debouncedFilterUpdate = useRef(
     debounce((updates: Record<string, string>) => {
       setFilters((prev) => ({
@@ -473,7 +442,10 @@ const GridHutangHeader = () => {
         width: 300,
         headerCellClass: 'column-headers',
         renderHeaderCell: (column: any) => (
-          <div className="flex h-full cursor-pointer flex-col items-center gap-1">
+          <div
+            title="NO BUKTI"
+            className="flex h-full cursor-pointer flex-col items-center gap-1"
+          >
             <div
               className="headers-cell h-[50%] px-8"
               onClick={() => handleSort('nobukti')}
@@ -522,25 +494,16 @@ const GridHutangHeader = () => {
           };
 
           return (
-            <TooltipProvider delayDuration={0}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="m-0 flex h-full cursor-pointer items-center p-0 text-sm">
-                    <JsxParser
-                      components={{ HighlightWrapper }}
-                      jsx={props.row.link}
-                      renderInWrapper={false}
-                    />
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent
-                  side="right"
-                  className="rounded-none border border-zinc-400 bg-white text-sm text-zinc-900"
-                >
-                  <p>{value}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <div
+              title={value}
+              className="m-0 flex h-full cursor-pointer items-center p-0 text-sm"
+            >
+              <JsxParser
+                components={{ HighlightWrapper }}
+                jsx={props.row.link}
+                renderInWrapper={false}
+              />
+            </div>
           );
         }
       },
@@ -552,7 +515,10 @@ const GridHutangHeader = () => {
         headerCellClass: 'column-headers',
         width: 250,
         renderHeaderCell: (column: any) => (
-          <div className="flex h-full cursor-pointer flex-col items-center gap-1">
+          <div
+            title="TGL BUKTI"
+            className="flex h-full cursor-pointer flex-col items-center gap-1"
+          >
             <div
               className="headers-cell h-[50%]"
               onClick={() => handleSort('tglbukti')}
@@ -597,21 +563,12 @@ const GridHutangHeader = () => {
           const columnFilter = filters.filters.tglbukti || '';
           const cellValue = props.row.tglbukti || '';
           return (
-            <TooltipProvider delayDuration={0}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="m-0 flex h-full cursor-pointer items-center p-0 text-sm">
-                    {highlightText(cellValue, filters.search, columnFilter)}
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent
-                  side="right"
-                  className="rounded-none border border-zinc-400 bg-white text-sm text-zinc-900"
-                >
-                  <p>{cellValue}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <div
+              title={cellValue}
+              className="m-0 flex h-full cursor-pointer items-center p-0 text-sm"
+            >
+              {highlightText(cellValue, filters.search, columnFilter)}
+            </div>
           );
         }
       },
@@ -623,7 +580,10 @@ const GridHutangHeader = () => {
         headerCellClass: 'column-headers',
         width: 250,
         renderHeaderCell: (column: any) => (
-          <div className="flex h-full cursor-pointer flex-col items-center gap-1">
+          <div
+            title="TGL JATUH TEMPO"
+            className="flex h-full cursor-pointer flex-col items-center gap-1"
+          >
             <div
               className="headers-cell h-[50%]"
               onClick={() => handleSort('tgljatuhtempo')}
@@ -672,21 +632,12 @@ const GridHutangHeader = () => {
           const columnFilter = filters.filters.tgljatuhtempo || '';
           const cellValue = props.row.tgljatuhtempo || '';
           return (
-            <TooltipProvider delayDuration={0}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="m-0 flex h-full cursor-pointer items-center p-0 text-sm">
-                    {highlightText(cellValue, filters.search, columnFilter)}
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent
-                  side="right"
-                  className="rounded-none border border-zinc-400 bg-white text-sm text-zinc-900"
-                >
-                  <p>{cellValue}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <div
+              title={cellValue}
+              className="m-0 flex h-full cursor-pointer items-center p-0 text-sm"
+            >
+              {highlightText(cellValue, filters.search, columnFilter)}
+            </div>
           );
         }
       },
@@ -698,7 +649,10 @@ const GridHutangHeader = () => {
         headerCellClass: 'column-headers',
         width: 250,
         renderHeaderCell: (column: any) => (
-          <div className="flex h-full cursor-pointer flex-col items-center gap-1">
+          <div
+            title="KETERANGAN"
+            className="flex h-full cursor-pointer flex-col items-center gap-1"
+          >
             <div
               className="headers-cell h-[50%]"
               onClick={() => handleSort('keterangan')}
@@ -745,21 +699,12 @@ const GridHutangHeader = () => {
           const columnFilter = filters.filters.keterangan || '';
           const cellValue = props.row.keterangan || '';
           return (
-            <TooltipProvider delayDuration={0}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="m-0 flex h-full cursor-pointer items-center p-0 text-sm">
-                    {highlightText(cellValue, filters.search, columnFilter)}
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent
-                  side="right"
-                  className="rounded-none border border-zinc-400 bg-white text-sm text-zinc-900"
-                >
-                  <p>{cellValue}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <div
+              title={cellValue}
+              className="m-0 flex h-full cursor-pointer items-center p-0 text-sm"
+            >
+              {highlightText(cellValue, filters.search, columnFilter)}
+            </div>
           );
         }
       },
@@ -771,7 +716,10 @@ const GridHutangHeader = () => {
         headerCellClass: 'column-headers',
         width: 250,
         renderHeaderCell: (column: any) => (
-          <div className="flex h-full cursor-pointer flex-col items-center gap-1">
+          <div
+            title="RELASI"
+            className="flex h-full cursor-pointer flex-col items-center gap-1"
+          >
             <div
               className="headers-cell h-[50%]"
               onClick={() => handleSort('relasi_id')}
@@ -818,21 +766,12 @@ const GridHutangHeader = () => {
           const columnFilter = filters.filters.relasi_text || '';
           const cellValue = props.row.relasi_text || '';
           return (
-            <TooltipProvider delayDuration={0}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="m-0 flex h-full cursor-pointer items-center p-0 text-sm">
-                    {highlightText(cellValue, filters.search, columnFilter)}
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent
-                  side="right"
-                  className="rounded-none border border-zinc-400 bg-white text-sm text-zinc-900"
-                >
-                  <p>{cellValue}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <div
+              title={cellValue}
+              className="m-0 flex h-full cursor-pointer items-center p-0 text-sm"
+            >
+              {highlightText(cellValue, filters.search, columnFilter)}
+            </div>
           );
         }
       },
@@ -844,7 +783,10 @@ const GridHutangHeader = () => {
         headerCellClass: 'column-headers',
         width: 250,
         renderHeaderCell: (column: any) => (
-          <div className="flex h-full cursor-pointer flex-col items-center gap-1">
+          <div
+            title="COA"
+            className="flex h-full cursor-pointer flex-col items-center gap-1"
+          >
             <div
               className="headers-cell h-[50%]"
               onClick={() => handleSort('coa')}
@@ -888,21 +830,12 @@ const GridHutangHeader = () => {
           const columnFilter = filters.filters.coa_text || '';
           const cellValue = props.row.coa_text || '';
           return (
-            <TooltipProvider delayDuration={0}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="m-0 flex h-full cursor-pointer items-center p-0 text-sm">
-                    {highlightText(cellValue, filters.search, columnFilter)}
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent
-                  side="right"
-                  className="rounded-none border border-zinc-400 bg-white text-sm text-zinc-900"
-                >
-                  <p>{cellValue}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <div
+              title={cellValue}
+              className="m-0 flex h-full cursor-pointer items-center p-0 text-sm"
+            >
+              {highlightText(cellValue, filters.search, columnFilter)}
+            </div>
           );
         }
       },
@@ -914,7 +847,10 @@ const GridHutangHeader = () => {
         headerCellClass: 'column-headers',
         width: 250,
         renderHeaderCell: (column: any) => (
-          <div className="flex h-full cursor-pointer flex-col items-center gap-1">
+          <div
+            title="MODIFIED BY"
+            className="flex h-full cursor-pointer flex-col items-center gap-1"
+          >
             <div
               className="headers-cell h-[50%]"
               onClick={() => handleSort('modifiedby')}
@@ -961,21 +897,12 @@ const GridHutangHeader = () => {
           const columnFilter = filters.filters.modifiedby || '';
           const cellValue = props.row.modifiedby || '';
           return (
-            <TooltipProvider delayDuration={0}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="m-0 flex h-full cursor-pointer items-center p-0 text-sm">
-                    {highlightText(cellValue, filters.search, columnFilter)}
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent
-                  side="right"
-                  className="rounded-none border border-zinc-400 bg-white text-sm text-zinc-900"
-                >
-                  <p>{cellValue}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <div
+              title={cellValue}
+              className="m-0 flex h-full cursor-pointer items-center p-0 text-sm"
+            >
+              {highlightText(cellValue, filters.search, columnFilter)}
+            </div>
           );
         }
       },
@@ -987,7 +914,10 @@ const GridHutangHeader = () => {
         headerCellClass: 'column-headers',
         width: 250,
         renderHeaderCell: (column: any) => (
-          <div className="flex h-full cursor-pointer flex-col items-center gap-1">
+          <div
+            title="CREATED AT"
+            className="flex h-full cursor-pointer flex-col items-center gap-1"
+          >
             <div
               className="headers-cell h-[50%]"
               onClick={() => handleSort('created_at')}
@@ -1034,21 +964,12 @@ const GridHutangHeader = () => {
           const columnFilter = filters.filters.created_at || '';
           const cellValue = props.row.created_at || '';
           return (
-            <TooltipProvider delayDuration={0}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="m-0 flex h-full cursor-pointer items-center p-0 text-sm">
-                    {highlightText(cellValue, filters.search, columnFilter)}
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent
-                  side="right"
-                  className="rounded-none border border-zinc-400 bg-white text-sm text-zinc-900"
-                >
-                  <p>{cellValue}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <div
+              title={cellValue}
+              className="m-0 flex h-full cursor-pointer items-center p-0 text-sm"
+            >
+              {highlightText(cellValue, filters.search, columnFilter)}
+            </div>
           );
         }
       },
@@ -1062,7 +983,10 @@ const GridHutangHeader = () => {
 
         width: 250,
         renderHeaderCell: (column: any) => (
-          <div className="flex h-full cursor-pointer flex-col items-center gap-1">
+          <div
+            title="UPDATED AT"
+            className="flex h-full cursor-pointer flex-col items-center gap-1"
+          >
             <div
               className="headers-cell h-[50%]"
               onClick={() => handleSort('updated_at')}
@@ -1109,21 +1033,12 @@ const GridHutangHeader = () => {
           const columnFilter = filters.filters.updated_at || '';
           const cellValue = props.row.updated_at || '';
           return (
-            <TooltipProvider delayDuration={0}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="m-0 flex h-full cursor-pointer items-center p-0 text-sm">
-                    {highlightText(cellValue, filters.search, columnFilter)}
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent
-                  side="right"
-                  className="rounded-none border border-zinc-400 bg-white text-sm text-zinc-900"
-                >
-                  <p>{cellValue}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <div
+              title={cellValue}
+              className="m-0 flex h-full cursor-pointer items-center p-0 text-sm"
+            >
+              {highlightText(cellValue, filters.search, columnFilter)}
+            </div>
           );
         }
       }
@@ -1733,18 +1648,14 @@ const GridHutangHeader = () => {
     jumpToLastRef.current = true;
     setRows([]);
 
-    // Jika total halaman <= WINDOW_SIZE, semua halaman muat di satu bulk window
-    // pertama — pakai bulk-fetch normal.
     if (totalPages <= WINDOW_SIZE) {
       resetBufferingCache();
       return;
     }
 
-    // Kasus umum: WINDOW_SIZE halaman terakhir TIDAK selalu sejajar dengan
-    // batas bulk block. Fetch tiap halaman terakhir secara langsung lalu
-    // rakit cache & window.
     setIsFetching(true);
     setShouldBulkFetch(false);
+    setBulkStartPage(1);
     setPageDataCache(new Map());
     streamBufferRef.current = new Map();
     prefetchingPagesRef.current = new Set();
@@ -1758,11 +1669,7 @@ const GridHutangHeader = () => {
     try {
       const results = await Promise.all(
         pagesToFetch.map((p) =>
-          getHutangHeaderFn({
-            ...filters,
-            page: p,
-            limit: filters.limit
-          })
+          getHutangHeaderFn({ ...filters, page: p, limit: filters.limit })
         )
       );
 
@@ -1874,19 +1781,6 @@ const GridHutangHeader = () => {
     dispatch(setClearLookup(true));
     clearError();
     setIsFetchingManually(true);
-    dbg('1) onSuccess masuk', {
-      mode,
-      keepOpenModal,
-      dialogTetapTerbuka: keepOpenModal,
-      focusId,
-      indexOnPage,
-      pageNumber,
-      fetchedPages,
-      pagedDataKeys: Object.keys(pagedData ?? {}),
-      pagedDataCounts: Object.entries(pagedData ?? {}).map(
-        ([k, v]) => `${k}:${(v as any[])?.length}`
-      )
-    });
     // Tandai baris yang baru disimpan agar Row Combiner memfokuskannya by-id
     // setelah data window settle (lihat pendingFocusIdRef).
     pendingFocusIdRef.current = focusId ?? null;
@@ -1924,16 +1818,6 @@ const GridHutangHeader = () => {
             ? loadedRows.findIndex((r) => String(r.id) === String(focusId))
             : -1;
         const targetIndex = focusIdx >= 0 ? focusIdx : indexOnPage;
-        dbg('2) hasil GET redis', {
-          isArray: Array.isArray(response.data),
-          len: Array.isArray(response.data) ? response.data.length : null,
-          rawJikaBukanArray: Array.isArray(response.data)
-            ? undefined
-            : response.data,
-          focusIdx,
-          targetIndex,
-          idBarisTermuat: loadedRows.slice(0, 5).map((r) => r.id)
-        });
 
         setSelectedRow(targetIndex);
         setPageDataCache(
@@ -1976,7 +1860,6 @@ const GridHutangHeader = () => {
           // dialog (dan sempat menggeser fokus) setelah animasi tutup selesai,
           // yang bisa mendarat belakangan daripada selectCell di 50/200ms.
           [350, 700].forEach((d) => setTimeout(focusSelectedCell, d));
-          setTimeout(() => dbgActive('AKHIR-harusnya-gridcell'), 1100);
           setTimeout(() => {
             // Bersihkan HANYA kalau masih id kita: jangan wipe fokus yang
             // sudah di-set alur lain (mis. hapus baris) di sela-sela ini.
@@ -1996,7 +1879,6 @@ const GridHutangHeader = () => {
 
       setIsDataUpdated(false);
     } catch (error) {
-      dbg('!!) onSuccess MELEMPAR -> fokus dibatalkan', error);
       console.error('Error during onSuccess:', error);
       // WAJIB dilepas di sini juga. Kalau GET redis di atas gagal, setTimeout
       // pelepas tak pernah terpasang sehingga ref tersangkut true selamanya dan
@@ -2142,32 +2024,46 @@ const GridHutangHeader = () => {
     }
   };
 
-  const handleEdit = async () => {
-    if (selectedRow !== null) {
-      const rowData = rows[selectedRow];
+  // `selectedRow` selalu number (default 0), jadi cek `!== null` tidak pernah
+  // menahan apa pun: saat grid kosong dialog tetap terbuka membawa nilai baris
+  // lama. Yang menentukan adalah ada/tidaknya baris di index terpilih.
+  const hasSelectedRow = rows.length > 0 && rows[selectedRow] !== undefined;
 
-      setPopOver(true);
-      setMode('edit');
-    }
+  // Tombol tetap aktif walau grid kosong; guard-nya berupa alert supaya user
+  // tahu alasannya, bukan tombol mati tanpa penjelasan.
+  const alertNoSelectedRow = () => {
+    alert({
+      title: 'HARAP PILIH DATA TERLEBIH DAHULU!',
+      variant: 'danger',
+      submitText: 'OK'
+    });
   };
-  const handleDelete = async () => {
-    if (selectedRow !== null) {
-      const rowData = rows[selectedRow];
 
-      try {
-        setMode('delete');
-        setPopOver(true);
-      } catch (error) {
-        console.error('Error during delete validation:', error);
-      }
+  const handleEdit = () => {
+    if (!hasSelectedRow) {
+      alertNoSelectedRow();
+      return;
     }
+    setPopOver(true);
+    setMode('edit');
+  };
+
+  const handleDelete = () => {
+    if (!hasSelectedRow) {
+      alertNoSelectedRow();
+      return;
+    }
+    setMode('delete');
+    setPopOver(true);
   };
 
   const handleView = () => {
-    if (selectedRow !== null) {
-      setMode('view');
-      setPopOver(true);
+    if (!hasSelectedRow) {
+      alertNoSelectedRow();
+      return;
     }
+    setMode('view');
+    setPopOver(true);
   };
 
   // Cetak bukti dijalankan di BACKEND (background job + socket). Frontend
@@ -2249,15 +2145,6 @@ const GridHutangHeader = () => {
       forms.reset();
     } catch (error) {
       console.error('Error syncing ACOS:', error);
-    }
-  };
-
-  const handleClickOutside = (event: MouseEvent) => {
-    if (
-      contextMenuRef.current &&
-      !contextMenuRef.current.contains(event.target as Node)
-    ) {
-      setContextMenu(null);
     }
   };
 
@@ -2347,7 +2234,6 @@ const GridHutangHeader = () => {
   }, []);
   useEffect(() => {
     if (isFirstLoad && gridRef.current && rows.length > 0) {
-      dbg('6!) effect isFirstLoad MEMAKSA baris 0 <-- perebut fokus');
       setSelectedRow(0);
       gridRef.current.selectCell({ rowIdx: 0, idx: 1 });
       dispatch(setHeaderData(rows[0]));
@@ -2406,22 +2292,46 @@ const GridHutangHeader = () => {
         !allData ||
         isDataUpdated ||
         isAfterMutation ||
-        // Selama settle pasca-simpan, jangan biarkan hasil refetch membangun
-        // ulang cache — kalau tidak, Row Combiner jalan lagi setelah
-        // pendingFocusIdRef dikonsumsi dan fokus loncat ke baris 1.
+        // Selama settle pasca-mutasi (add/edit), jangan biarkan hasil refetch
+        // membangun ulang cache — kalau tidak, Row Combiner jalan lagi setelah
+        // pendingFocusIdRef dikonsumsi & fokus loncat ke baris 1. Effect #2
+        // (Pagination Fetch) sudah punya guard yang sama.
         suppressRefetchRef.current
       ) {
         return;
       }
 
       const bulkData = allData.data || [];
-      if (bulkData.length === 0) return;
-
-      const pageSize = filters.limit; // default 20
+      const pageSize = filters.limit;
       const newCache = new Map<number, HutangHeader[]>();
+      const wasJumpingToLast = jumpToLastRef.current;
 
-      for (let i = 0; i < 5; i++) {
-        const pageNum = i + 1;
+      const logicalStartPage = (bulkStartPage - 1) * WINDOW_SIZE + 1;
+
+      // Hasil filter kosong tetap harus mematikan shouldBulkFetch. Dulu effect
+      // ini early-return, jadi flag bulk nyangkut di true -> grid selamanya
+      // dianggap "sedang memuat" sehingga headerData tidak pernah dikosongkan
+      // dan grid detail masih menampilkan bukti yang sudah tidak ada di header.
+      if (bulkData.length === 0) {
+        setPageDataCache(new Map());
+        setVisiblePages(
+          Array.from({ length: WINDOW_SIZE }, (_, i) => logicalStartPage + i)
+        );
+        setRows([]);
+        setSelectedRow(0);
+        selectedRowRef.current = 0;
+        setTotalPages(1);
+        setHasMore(false);
+        setShouldBulkFetch(false);
+        setIsFirstLoad(false);
+        setIsFetching(false);
+        jumpToLastRef.current = false;
+        jumpToFirstRef.current = false;
+        return;
+      }
+
+      for (let i = 0; i < WINDOW_SIZE; i++) {
+        const pageNum = logicalStartPage + i;
         const startIdx = i * pageSize;
         const endIdx = startIdx + pageSize;
         const pageData = bulkData.slice(startIdx, endIdx);
@@ -2432,46 +2342,45 @@ const GridHutangHeader = () => {
       }
 
       setPageDataCache(newCache);
-      setVisiblePages([1, 2, 3, 4, 5]);
+      setVisiblePages(
+        Array.from({ length: WINDOW_SIZE }, (_, i) => logicalStartPage + i)
+      );
+
       const totalItems = allData.pagination?.totalItems || 0;
       const totalPgs = Math.ceil(totalItems / filters.limit) || 1;
-      setTotalPages(totalPgs); // Set state totalPages yang benar
-      setHasMore(bulkData.length === filters.limit * 5); // misal 100
-      setShouldBulkFetch(false);
 
+      setTotalPages(totalPgs);
+      setHasMore(bulkData.length === filters.limit * WINDOW_SIZE);
+      setShouldBulkFetch(false);
       setIsFirstLoad(false);
       setIsFetching(false);
+
+      const lastLogicalPage = Math.min(
+        logicalStartPage + WINDOW_SIZE - 1,
+        totalPgs
+      );
       const initialPrefetch = Array.from(
         { length: STREAM_BUFFER_SIZE },
-        (_, i) => 6 + i
+        (_, i) => lastLogicalPage + 1 + i
       ).filter((p) => p <= totalPgs);
 
       if (initialPrefetch.length > 0) {
-        // Pass newCache DAN totalPgs langsung — keduanya belum committed ke state saat ini
         prefetchPages(initialPrefetch, newCache, totalPgs);
       }
-      setTimeout(() => {
-        // JANGAN rebut fokus pasca-simpan. Guard `suppressRefetchRef` di atas
-        // hanya dievaluasi saat effect MASUK, sedangkan setTimeout ini menyala
-        // 100ms kemudian tanpa syarat -- itulah yang membuat grid balik ke baris
-        // 1 setelah SAVE meski resep fokus by-id sudah lengkap. Selama masih ada
-        // baris target pasca-simpan (pendingFocusIdRef) atau window belum settle
-        // (suppressRefetchRef), posisi baris sudah ditentukan onSuccess + Row
-        // Combiner, jadi lompatan ke baris 0 di sini harus dilewati.
-        // GridAlatbayar (referensi resep ini) memang tidak punya blok ini.
-        if (pendingFocusIdRef.current != null || suppressRefetchRef.current) {
-          dbg('5) ekor bulk-fetch DILEWATI (guard aktif)');
-          return;
-        }
-        if (gridRef.current) {
-          dbg('5!) ekor bulk-fetch MEMAKSA baris 0 <-- perebut fokus');
-          setSelectedRow(0);
-          gridRef.current.scrollToCell({ rowIdx: 0, idx: 1 });
-        }
-      }, 100);
+
+      if (wasJumpingToLast) {
+        setCurrentPage(lastLogicalPage);
+      }
     };
     handleBulkFetch();
-  }, [allData, shouldBulkFetch, isDataUpdated, isAfterMutation, filters.limit]);
+  }, [
+    allData,
+    shouldBulkFetch,
+    isDataUpdated,
+    isAfterMutation,
+    filters.limit,
+    bulkStartPage
+  ]);
   useEffect(() => {
     if (
       shouldBulkFetch ||
@@ -2486,15 +2395,6 @@ const GridHutangHeader = () => {
 
     const newRows = allData.data || [];
 
-    const scrollContainer = scrollContainerRef.current;
-    const scrollBeforeUpdate = scrollContainer
-      ? {
-          scrollTop: scrollContainer.scrollTop,
-          scrollHeight: scrollContainer.scrollHeight,
-          clientHeight: scrollContainer.clientHeight
-        }
-      : null;
-
     setPageDataCache((prevCache) => {
       const newCache = new Map(prevCache);
       newCache.set(currentPage, newRows);
@@ -2506,10 +2406,10 @@ const GridHutangHeader = () => {
     const minVisible = Math.min(...visiblePages);
 
     // --- SCROLL KE BAWAH ---
-    if (currentPage > maxVisible) {
+    if (currentPage > maxVisible && currentPage <= maxVisible + 1) {
       const removedPage = visiblePages[0];
       pendingScrollAdjustment.current = -(filters.limit * ROW_HEIGHT);
-      // --- TAMBAHAN: Geser index selected ke atas agar data tetap menunjuk ke item yg sama ---
+      // --- Geser index selected ke atas agar data tetap menunjuk ke item yg sama ---
       shiftSelectionForWindow(-filters.limit);
 
       setPageDataCache((prev) => {
@@ -2518,11 +2418,11 @@ const GridHutangHeader = () => {
         return updated;
       });
       setVisiblePages((prevVisible) => [...prevVisible.slice(1), currentPage]);
-    } else if (currentPage < minVisible) {
+    } else if (currentPage < minVisible && currentPage >= minVisible - 1) {
       // --- SCROLL KE ATAS ---
       const removedPage = visiblePages[visiblePages.length - 1];
       pendingScrollAdjustment.current = filters.limit * ROW_HEIGHT;
-      // --- TAMBAHAN: Geser index selected ke bawah ---
+      // --- Geser index selected ke bawah ---
       shiftSelectionForWindow(filters.limit);
 
       setPageDataCache((prev) => {
@@ -2547,7 +2447,6 @@ const GridHutangHeader = () => {
       setIsTransitioning(false);
       setIsFetching(false);
       const maxVis = Math.max(...visiblePages);
-      const minVis = Math.min(...visiblePages);
 
       // Tentukan arah: jika currentPage > maxVisible sebelumnya = scroll down, sebaliknya up
       const isScrollDown = currentPage >= maxVis;
@@ -2573,6 +2472,7 @@ const GridHutangHeader = () => {
     shouldBulkFetch,
     isAfterMutation
   ]);
+
   useEffect(() => {
     const combinedRows: HutangHeader[] = [];
 
@@ -2584,11 +2484,6 @@ const GridHutangHeader = () => {
     });
 
     if (combinedRows.length === 0) {
-      dbg('3!) Combiner jalan tapi combinedRows KOSONG -> tidak ada fokus', {
-        visiblePages,
-        cacheKeys: Array.from(pageDataCache.keys()),
-        pendingFocusId: pendingFocusIdRef.current
-      });
     }
 
     if (combinedRows.length > 0) {
@@ -2608,12 +2503,6 @@ const GridHutangHeader = () => {
         const fidx = combinedRows.findIndex(
           (r) => String(r.id) === String(fid)
         );
-        dbg('3) Combiner cabang FOKUS', {
-          fid,
-          fidx,
-          totalCombined: combinedRows.length,
-          visiblePages
-        });
         if (fidx >= 0) {
           selectedRowRef.current = fidx;
           setSelectedRow(fidx);
@@ -2621,24 +2510,11 @@ const GridHutangHeader = () => {
             gridRef.current?.scrollToCell?.({ rowIdx: fidx, idx: 1 });
             gridRef.current?.selectCell?.({ rowIdx: fidx, idx: 1 });
             focusSelectedCell();
-            dbg('4) selectCell dipanggil utk rowIdx', fidx);
-            dbgActive('setelah-selectCell');
           }, 50);
         } else {
-          dbg('!! id tidak ketemu di combinedRows', {
-            cari: fid,
-            contohId: combinedRows.slice(0, 5).map((r) => r.id)
-          });
         }
         return;
       }
-      dbg('3x) Combiner JALAN TANPA pendingFocusId', {
-        totalCombined: combinedRows.length,
-        jumpFirst: jumpToFirstRef.current,
-        jumpLast: jumpToLastRef.current,
-        pageTransition: isPageTransitionRef.current,
-        suppress: suppressRefetchRef.current
-      });
 
       if (jumpToFirstRef.current) {
         jumpToFirstRef.current = false;
@@ -2712,13 +2588,6 @@ const GridHutangHeader = () => {
 
       // Reset
       pendingScrollAdjustment.current = 0;
-
-      // Re-anchor selected cell react-data-grid ke index baris yang sudah
-      // digeser -- HANYA jika window-shift dipicu navigasi keyboard. Saat mouse
-      // scroll, user tidak sedang menavigasi sel, jadi sel aktif tidak boleh
-      // ikut pindah. Karena scrollTop sudah dikompensasi di atas, baris target
-      // berada di posisi visual yang sama -> selectCell TIDAK memicu scroll
-      // tambahan (cell sudah di viewport), jadi tampilan tidak loncat.
       if (reanchorFromKeyboardRef.current) {
         const targetRow = selectedRowRef.current;
         const idxFromKey = finalColumns.findIndex(
@@ -2726,68 +2595,39 @@ const GridHutangHeader = () => {
         );
         const idx = idxFromKey >= 0 ? idxFromKey : 1;
         gridRef.current?.selectCell?.({ rowIdx: targetRow, idx });
+        // selectCell sudah memindahkan DOM focus ke sel target.
+        gridCellHadFocusRef.current = false;
+      } else {
+        restoreGridCellFocus();
       }
       reanchorFromKeyboardRef.current = false;
     }
   }, [rows]);
 
   useEffect(() => {
-    // Selama lazy loading masih bergerak, `rows` boleh kosong sesaat dan
-    // `selectedRow` boleh menunjuk ke index yang barisnya belum/sudah tidak ada.
-    // Semua itu keadaan SEMENTARA, bukan "user membatalkan pilihan".
+    if (rows.length > 0 && selectedRow !== null) {
+      const selectedRowData = rows[selectedRow];
+      if (selectedRowData?.id !== lastDispatchedId.current) {
+        dispatch(setHeaderData(selectedRowData));
+        lastDispatchedId.current = selectedRowData?.id;
+      }
+      headerClearedRef.current = false;
+      return;
+    }
+
+    // Grid master-detail: kalau header benar-benar kosong (bukan sekadar sedang
+    // memuat), detail harus ikut kosong — kalau tidak, detail bukti sebelumnya
+    // tetap tampil di bawah grid yang sudah tidak punya baris.
     const sedangMuat =
       isLoadingData || isFetching || isTransitioning || shouldBulkFetch;
-
-    if (rows.length === 0) {
-      // Kosong sementara (Ctrl+End, ganti window, refetch) -> pertahankan
-      // pilihan lama. Dulu di sini id-nya ikut dibuang, jadi begitu data balik
-      // tidak ada lagi acuan untuk memulihkan pilihan dan detail ikut kosong.
-      if (sedangMuat) return;
-
-      // Benar-benar tidak ada data (filter tidak ketemu / periode kosong).
-      selectedHeaderIdRef.current = null;
+    if (rows.length === 0 && !sedangMuat && !headerClearedRef.current) {
+      // Pakai flag sendiri, bukan `lastDispatchedId !== null`: headerData di
+      // redux bisa masih terisi dari kunjungan sebelumnya walau komponen ini
+      // baru mount (lastDispatchedId masih null), dan detail ikut ketinggalan.
+      headerClearedRef.current = true;
+      lastDispatchedId.current = null;
       dispatch(setHeaderData({}));
-      return;
     }
-
-    // ID yang menang, BUKAN index. `selectedRow` digeser sebanyak filters.limit
-    // tiap kali window bergeser, jadi nilainya tidak bisa dipercaya sebagai
-    // penunjuk "baris yang dipilih user". Id dicatat hanya di handleCellClick
-    // (pemilihan yang disengaja), sehingga dia tetap menunjuk bukti yang sama
-    // sepanjang user scroll.
-    const idById = selectedHeaderIdRef.current;
-    const idxById = idById
-      ? rows.findIndex((r) => String(r.id) === String(idById))
-      : -1;
-
-    if (idxById >= 0) {
-      if (idxById !== selectedRow) {
-        // Barisnya masih di window tapi pindah index -> samakan lagi supaya
-        // highlight (getRowClass) muncul di baris yang benar.
-        selectedRowRef.current = idxById;
-        setSelectedRow(idxById);
-      }
-      dispatch(setHeaderData(rows[idxById]));
-      return;
-    }
-
-    if (!idById) {
-      // Belum pernah ada pilihan (load pertama) -> pakai index apa adanya.
-      const selectedRowData = rows[selectedRow] ?? rows[0];
-      if (selectedRowData) {
-        selectedHeaderIdRef.current = String(selectedRowData.id);
-        dispatch(setHeaderData(selectedRowData));
-      }
-      return;
-    }
-
-    // Ada pilihan, tapi halamannya sudah keluar dari window (user scroll jauh).
-    // Sengaja TIDAK dispatch apa pun: headerData dibiarkan menunjuk bukti yang
-    // dipilih user, jadi grid detail tetap terisi. Kalau di sini di-dispatch
-    // undefined/{}, detail akan mengosongkan diri DAN mematikan query-nya
-    // (enabled: !!nobukti) sehingga tampak kosong padahal headernya ada isinya.
-    // Ref-nya juga dipertahankan supaya pilihan otomatis pulih saat user
-    // scroll balik ke halaman itu.
   }, [
     rows,
     selectedRow,
@@ -2798,18 +2638,30 @@ const GridHutangHeader = () => {
     shouldBulkFetch
   ]);
   useEffect(() => {
-    if (gridRef.current && dataGridKey) {
-      setTimeout(() => {
-        gridRef.current?.selectCell({ rowIdx: 0, idx: 1 });
-        setIsFirstLoad(false);
-      }, 0);
-    }
-  }, [dataGridKey]);
-  useEffect(() => {
-    const headerCells = document.querySelectorAll('.rdg-header-row .rdg-cell');
-    headerCells.forEach((cell) => {
-      cell.setAttribute('tabindex', '-1');
-    });
+    const filterHandler = (e: any) => {
+      const keterangan = e.detail;
+
+      setFilters((prev) => ({
+        ...prev,
+        filters: { ...prev.filters, keterangan },
+        page: 1
+      }));
+      setRows([]);
+      setCurrentPage(1);
+      resetBufferingCache();
+    };
+
+    const printHandler = () => {
+      handleReport();
+    };
+
+    window.addEventListener('AI_FILTER_Comodity', filterHandler);
+    window.addEventListener('AI_PRINT', printHandler);
+
+    return () => {
+      window.removeEventListener('AI_FILTER_Comodity', filterHandler);
+      window.removeEventListener('AI_PRINT', printHandler);
+    };
   }, []);
   useEffect(() => {
     const preventScrollOnSpace = (event: KeyboardEvent) => {
@@ -2833,7 +2685,14 @@ const GridHutangHeader = () => {
       document.removeEventListener('keydown', preventScrollOnSpace);
     };
   }, []);
-
+  const handleClickOutside = (event: MouseEvent) => {
+    if (
+      contextMenuRef.current &&
+      !contextMenuRef.current.contains(event.target as Node)
+    ) {
+      setContextMenu(null);
+    }
+  };
   useEffect(() => {
     window.addEventListener('mousedown', handleClickOutside);
     return () => {
@@ -2841,6 +2700,20 @@ const GridHutangHeader = () => {
     };
   }, []);
 
+  useEffect(() => {
+    const headerCells = document.querySelectorAll('.rdg-header-row .rdg-cell');
+    headerCells.forEach((cell) => {
+      cell.setAttribute('tabindex', '-1');
+    });
+  }, []);
+  useEffect(() => {
+    if (gridRef.current && dataGridKey) {
+      setTimeout(() => {
+        gridRef.current?.selectCell({ rowIdx: 0, idx: 1 });
+        setIsFirstLoad(false);
+      }, 0);
+    }
+  }, [dataGridKey]);
   useEffect(() => {
     if (!isTransitioning && !isFetching) {
       setTimeout(() => {
@@ -2900,7 +2773,6 @@ const GridHutangHeader = () => {
       debouncedFilterUpdate.cancel();
     };
   }, []);
-  console.log('committed', committed);
 
   return (
     <div className={`flex h-[100%] w-full justify-center`}>
@@ -3003,9 +2875,16 @@ const GridHutangHeader = () => {
             setSelectedCellKey(args.column.key);
             handleCellClick({ row: args.row });
           }}
-          headerRowHeight={70}
-          rowHeight={27}
+          headerRowHeight={HEADER_ROW_HEIGHT}
+          rowHeight={ROW_HEIGHT}
           className={`${isDark ? 'rdg-dark' : 'rdg-light'} fill-grid`}
+          // WAJIB false (sama seperti GridCuti). Dengan virtualization aktif,
+          // RDG hanya me-render baris di viewport (+4 overscan) -- begitu sel
+          // aktif ter-scroll keluar layar elemennya ter-unmount, DOM focus jatuh
+          // ke <body>, dan Arrow/PageUp/PageDown tidak lagi sampai ke grid.
+          // Dengan false, sel aktif tetap ter-mount walau tidak terlihat,
+          // sehingga tombol navigasi langsung menarik pandangan kembali ke sel
+          // yang ter-select.
           enableVirtualization={false}
           onColumnResize={onColumnResize}
           onColumnsReorder={onColumnsReorder}
@@ -3018,7 +2897,7 @@ const GridHutangHeader = () => {
           <ActionButton
             module="HUTANG"
             onAdd={handleAdd}
-            // checkedRows={checkedRows}
+            checkedRows={checkedRows}
             onDelete={handleDelete}
             onView={handleView}
             onEdit={handleEdit}

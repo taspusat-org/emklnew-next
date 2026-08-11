@@ -4,9 +4,9 @@ export interface PindahBuku {
   id: string;
   nobukti: string;
   tglbukti: string;
-  bankdari_id: number;
+  bankdari_id: string;
   bankdari_nama: string | null;
-  bankke_id: number;
+  bankke_id: string;
   bankke_nama: string | null;
   coadebet: string;
   coadebet_nama: string | null;

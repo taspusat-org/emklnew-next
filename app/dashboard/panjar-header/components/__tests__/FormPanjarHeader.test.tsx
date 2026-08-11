@@ -5,6 +5,7 @@ import {
   renderForm,
   getBtn,
   saveButton,
+  screen,
   userEvent,
   buildValidObject
 } from '@/lib/test-utils/formHarness';
@@ -69,8 +70,21 @@ describe('FormPanjarHeader', () => {
   });
 
   test('cancel triggers handleClose', async () => {
-    const { handleClose } = renderForm(Form, { schema, defaultValues: validData });
+    const { handleClose } = renderForm(Form, {
+      schema,
+      defaultValues: validData
+    });
     await userEvent.click(getBtn('Cancel'));
     expect(handleClose).toHaveBeenCalled();
+  });
+
+  // Mode add tidak punya panjar terpilih, jadi query detail disabled dan
+  // datanya undefined. Grid detail tetap harus terisi satu baris input plus
+  // baris tombol tambah — bukan "NO ROWS DATA FOUND".
+  test('initializes the detail grid with an input row and the add-row button in add mode', () => {
+    renderForm(Form, { schema, mode: 'add' });
+    expect(screen.queryByText(/no rows data found/i)).not.toBeInTheDocument();
+    // Baris "add row" merender "TOTAL :" di kolom nomor dan tombol tambah di kolom aksi.
+    expect(screen.getByText('TOTAL :')).toBeInTheDocument();
   });
 });

@@ -3,7 +3,12 @@ import { useDispatch } from 'react-redux';
 import { useAlert } from '../store/client/useAlert';
 import { IErrorResponse } from '../types/blheader.type';
 import { useFormError } from '../hooks/formErrorContext';
-import { useMutation, useQuery, useQueryClient } from 'react-query';
+import {
+  QueryClient,
+  useMutation,
+  useQuery,
+  useQueryClient
+} from 'react-query';
 import {
   setProcessed,
   setProcessing
@@ -16,6 +21,17 @@ import {
   storePanjarHeaderFn,
   updatePanjarHeaderFn
 } from '../apis/panjarheader.api';
+
+/**
+ * Header & detail punya prefix key masing-masing supaya cache-nya tidak saling
+ * menimpa. Konsekuensinya simpan/hapus harus membatalkan keduanya secara
+ * eksplisit — satu `invalidateQueries('panjarheader')` tidak lagi menjangkau
+ * detail.
+ */
+const invalidatePanjar = (queryClient: QueryClient) => {
+  void queryClient.invalidateQueries('panjarheader');
+  void queryClient.invalidateQueries('panjarmuatandetail');
+};
 
 export const useGetAllPanjarHeader = (
   filters: {
@@ -72,7 +88,21 @@ export const useGetAllPanjarHeader = (
           dispatch(setProcessed());
         }
       },
-      enabled: !signal?.aborted
+      // Guard page >= 1 disamakan dengan useGetAlatbayar/useGetPengeluaranHeader.
+      // GridPanjarHeader memakai trik setCurrentPage(0) di handleScroll untuk
+      // memaksa effect jalan ulang saat halaman tujuan kebetulan == currentPage
+      // yang basi. Tanpa guard ini fase antara itu benar-benar mengirim request
+      // page=0; controller meng-clamp-nya ke 1 (`Number(page) || 1`), jadi yang
+      // balik adalah data HALAMAN 1 yang tersimpan di cache react-query dengan
+      // key page=0 — satu request sia-sia plus entri cache yang salah halaman.
+      enabled: !signal?.aborted && (filters.page ?? 1) >= 1,
+      // staleTime/cacheTime 0: window pagination dikelola sendiri oleh grid
+      // (pageDataCache + streamBuffer). Cache react-query di atasnya membuat
+      // halaman yang sudah DIBUANG grid dari window tetap dipulangkan dari
+      // memori saat window bergeser balik — grid mengira itu data currentPage
+      // padahal isinya halaman lama.
+      staleTime: 0,
+      cacheTime: 0
     }
   );
 };
@@ -95,11 +125,33 @@ export const useGetPanjarMuatanDetail = (
   } = {},
   signal?: AbortSignal
 ) => {
+  // Key 'panjarmuatandetail', BUKAN 'panjarheader'. Dulu detail memakai prefix
+  // yang sama dengan useGetAllPanjarHeader sehingga cache keduanya saling
+  // menimpa/membatalkan walau isinya tidak terkait.
   return useQuery(
-    ['panjarheader', id, filters],
-    async () => await getPanjarMuatanDetailFn(id!, filters),
+    ['panjarmuatandetail', id, filters],
+    async () => await getPanjarMuatanDetailFn(id!, filters, signal),
     {
-      enabled: !!id || !signal?.aborted // Hanya aktifkan query jika tab aktif adalah "pengalamankerja"
+      // HARUS `&&`. Dengan `||`, `!signal?.aborted` bernilai true saat signal
+      // undefined sehingga query tetap jalan walau id kosong — request jadi
+      // `/panjarmuatandetail/0` dan backend menyaring panjar_id = '0'.
+      //
+      // Guard page >= 1 sama seperti useGetPengeluaranDetail: GridPanjarMuatanDetail
+      // memakai trik setCurrentPage(0) di handleScroll. Tanpa guard ini fase
+      // antara itu mengirim request page=0 yang di-clamp controller ke 1, jadi
+      // data HALAMAN 1 tersimpan di cache dengan key page=0.
+      //
+      // FormPanjarHeader memanggil hook ini tanpa filters (page undefined ->
+      // `?? 1`), jadi tetap enabled dan tetap menarik SELURUH detail.
+      enabled: !!id && !signal?.aborted && (filters.page ?? 1) >= 1,
+      // staleTime/cacheTime 0: window pagination dikelola sendiri oleh grid
+      // (pageDataCache + streamBuffer). Cache react-query di atasnya membuat
+      // halaman yang sudah dibuang grid dari window tetap dipulangkan dari
+      // memori saat window bergeser balik, dan membuat form sempat memakai
+      // daftar detail basi — padahal payload simpan dibangun dari daftar itu
+      // dan baris yang tidak terkirim DIHAPUS backend.
+      staleTime: 0,
+      cacheTime: 0
     }
   );
 };
@@ -144,7 +196,7 @@ export const useCreatePanjarHeader = () => {
     },
     onSuccess: () => {
       // on success, invalidate + clear loading
-      void queryClient.invalidateQueries(['panjarheader']);
+      invalidatePanjar(queryClient);
       dispatch(setProcessed());
     },
     onError: (error: AxiosError) => {
@@ -186,7 +238,7 @@ export const useUpdatePanjarHeader = () => {
       dispatch(setProcessing());
     },
     onSuccess: () => {
-      void queryClient.invalidateQueries('panjarheader');
+      invalidatePanjar(queryClient);
       dispatch(setProcessed());
     },
     onError: (error: AxiosError) => {
@@ -223,7 +275,7 @@ export const useDeletePanjarHeader = () => {
 
   return useMutation(deletePanjarHeaderFn, {
     onSuccess: () => {
-      void queryClient.invalidateQueries('panjarheader');
+      invalidatePanjar(queryClient);
     },
     onError: (error: AxiosError) => {
       const errorResponse = error.response?.data as IErrorResponse;

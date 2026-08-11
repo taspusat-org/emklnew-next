@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import Image from 'next/image';
 import { debounce } from 'lodash';
@@ -7,7 +7,6 @@ import { useForm } from 'react-hook-form';
 import { useSelector } from 'react-redux';
 import { useDispatch } from 'react-redux';
 import IcClose from '@/public/image/x.svg';
-import { useQueryClient } from 'react-query';
 import { Input } from '@/components/ui/input';
 import { RootState } from '@/lib/store/store';
 import { Button } from '@/components/ui/button';
@@ -16,29 +15,40 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useAlert } from '@/lib/store/client/useAlert';
 import { LoadRowsRenderer } from '@/components/LoadRows';
+import { useQueryClient } from 'react-query';
 import { EmptyRowsRenderer } from '@/components/EmptyRows';
 import { useFormError } from '@/lib/hooks/formErrorContext';
 import FilterInput from '@/components/custom-ui/FilterInput';
 import ActionButton from '@/components/custom-ui/ActionButton';
 import { setHeaderData } from '@/lib/store/headerSlice/headerSlice';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { FaPrint, FaSort, FaSortDown, FaSortUp, FaTimes } from 'react-icons/fa';
 import {
-  setProcessed,
-  setProcessing
-} from '@/lib/store/loadingSlice/loadingSlice';
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState
+} from 'react';
+import {
+  FaFileExport,
+  FaPrint,
+  FaSort,
+  FaSortDown,
+  FaSortUp,
+  FaTimes
+} from 'react-icons/fa';
 import {
   clearOpenName,
   setClearLookup
 } from '@/lib/store/lookupSlice/lookupSlice';
 import {
+  setProcessed,
+  setProcessing
+} from '@/lib/store/loadingSlice/loadingSlice';
+import {
   PanjarHeader,
   filterPanjarHeader
 } from '@/lib/types/panjarheader.type';
-import {
-  setDetailDataReport,
-  setReportData
-} from '@/lib/store/reportSlice/reportSlice';
 import DataGrid, {
   CellKeyDownArgs,
   Column,
@@ -52,12 +62,6 @@ import {
   saveGridConfig
 } from '@/lib/utils';
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger
-} from '@/components/ui/tooltip';
-import {
   panjarHeaderInput,
   panjarHeaderSchema
 } from '@/lib/validations/panjarheader.validation';
@@ -70,15 +74,17 @@ import {
 } from '@/lib/server/usePanjarheader';
 import {
   checkValidationPanjarHeaderFn,
-  getPanjarHeaderByIdFn
+  getAllPanjarHeaderFn
 } from '@/lib/apis/panjarheader.api';
-import {
-  JENISORDERMUATAN,
-  JENISORDERMUATANNAMA
-} from '@/constants/biayaextraheader';
 import DraggableColumn from '@/components/custom-ui/DraggableColumns';
 import { highlightText } from '@/components/custom-ui/HighlightText';
+import {
+  generatePanjarHeaderExportFn,
+  generatePanjarHeaderReportFn
+} from '@/lib/apis/report.api';
+import { useReportPdfContext } from '@/hooks/ReportPdfProvider';
 import { useTheme } from 'next-themes';
+import { clearOnReload } from '@/lib/store/filterSlice/filterSlice';
 import {
   Select,
   SelectContent,
@@ -98,37 +104,31 @@ interface Filter {
 }
 
 const GridPanjarHeader = () => {
-  let filtersJenisOrderan;
-  let filtersJenisOrderanNama;
   const { alert } = useAlert();
   const dispatch = useDispatch();
   const queryClient = useQueryClient();
   const { clearError } = useFormError();
-  const { user } = useSelector((state: RootState) => state.auth);
-  const {
-    selectedDate,
-    selectedDate2,
-    selectedJenisOrderan,
-    selectedJenisOrderanNama,
-    onReload
-  } = useSelector((state: RootState) => state.filter);
-  const gridRef = useRef<DataGridHandle>(null);
   const { theme, resolvedTheme } = useTheme();
   const isDark = theme === 'dark' || resolvedTheme === 'dark';
+  const { generateReport, generateExport } = useReportPdfContext();
+  const { user } = useSelector((state: RootState) => state.auth);
+  // `committed` = filter yang SUDAH di-Reload user (FilterGrid memakai pola
+  // pending -> commitFilter). Grid tidak pernah membaca `pending`, jadi
+  // mengetik tanggal / memilih jenis orderan tidak memicu fetch sampai Reload.
+  const { committed, onReload } = useSelector(
+    (state: RootState) => state.filter
+  );
+  const gridRef = useRef<DataGridHandle>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const contextMenuRef = useRef<HTMLDivElement | null>(null);
-  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null); // AbortController untuk cancel request
   const resizeDebounceTimeout = useRef<NodeJS.Timeout | null>(null); // Timer debounce untuk resize
   const inputColRefs = useRef<{ [key: string]: HTMLInputElement | null }>({});
-  const colTimersRef = useRef<
-    Map<keyof Filter['filters'], ReturnType<typeof setTimeout>>
-  >(new Map());
   const [rows, setRows] = useState<PanjarHeader[]>([]);
   const [mode, setMode] = useState<string>('');
   const [hasMore, setHasMore] = useState(true);
-  const [totalPages, setTotalPages] = useState(1);
   const [inputValue, setInputValue] = useState('');
+  const [totalPages, setTotalPages] = useState(1);
   const [dataGridKey, setDataGridKey] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
   const [isFirstLoad, setIsFirstLoad] = useState(true);
@@ -141,7 +141,6 @@ const GridPanjarHeader = () => {
   const [isFetchingManually, setIsFetchingManually] = useState(false);
   const [checkedRows, setCheckedRows] = useState<Set<string>>(new Set());
   const [columnsOrder, setColumnsOrder] = useState<readonly number[]>([]);
-  const [fetchedPages, setFetchedPages] = useState<Set<number>>(new Set([1]));
   const [contextMenu, setContextMenu] = useState<{
     x: number;
     y: number;
@@ -151,27 +150,119 @@ const GridPanjarHeader = () => {
   );
   const [filters, setFilters] = useState<Filter>({
     page: 1,
-    limit: 30,
+    limit: 50,
     search: '',
     sortBy: 'nobukti',
     sortDirection: 'asc',
     filters: {
       ...filterPanjarHeader,
-      tglDari: selectedDate,
-      tglSampai: selectedDate2,
-      jenisOrderan: String(selectedJenisOrderan)
+      tglDari: committed.tglDari,
+      tglSampai: committed.tglSampai,
+      jenisOrderan: committed.jenisOrderan
     }
   });
   const [prevFilters, setPrevFilters] = useState<Filter>(filters);
 
-  const {
-    data: allPanjarHeader,
-    isLoading: isLoadingPanjarHeader,
-    refetch
-  } = useGetAllPanjarHeader(
-    { ...filters, page: currentPage },
-    abortControllerRef.current?.signal
+  const WINDOW_SIZE = 5;
+  const STREAM_BUFFER_SIZE = 5;
+  const ROW_HEIGHT = 30;
+
+  const [shouldBulkFetch, setShouldBulkFetch] = useState(true);
+  const [bulkStartPage, setBulkStartPage] = useState(1);
+  const [isFetching, setIsFetching] = useState(false);
+  const [isTransitioning, setIsTransitioning] = useState(false);
+  const [visiblePages, setVisiblePages] = useState<number[]>([1, 2, 3, 4, 5]);
+  const minVisiblePage = useMemo(
+    () => Math.min(...visiblePages),
+    [visiblePages]
   );
+  const [pageDataCache, setPageDataCache] = useState<
+    Map<number, PanjarHeader[]>
+  >(new Map());
+
+  const streamBufferRef = useRef<Map<number, PanjarHeader[]>>(new Map());
+  const prefetchingPagesRef = useRef<Set<number>>(new Set());
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const scrollPositionRef = useRef<number>(0);
+  const lastScrollTopRef = useRef<number>(0);
+  const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isScrollingRef = useRef(false);
+  const pendingScrollAdjustment = useRef<number>(0);
+  const hasAdjustedScrollRef = useRef<boolean>(false);
+  const isPageTransitionRef = useRef(false);
+  const pendingSelectIdxRef = useRef<number>(1);
+  const selectedRowRef = useRef<number>(0);
+  const lastDispatchedId = useRef<string | null>(null);
+  const pendingInitialFocusRef = useRef(true);
+  // MASTER-DETAIL: id header yang BENAR-BENAR dipilih user (klik, panah, atau
+  // selectCell programatik). Ini acuan grid detail — BUKAN `selectedRow`, yang
+  // ikut digeser tiap window lazy loading bergeser sehingga tidak bisa dipercaya
+  // sebagai penunjuk "baris pilihan user". Pola sama dengan GridPengeluaranHeader.
+  const selectedHeaderIdRef = useRef<string | null>(null);
+  // ID baris yang baru disimpan (add/edit). Dipakai Row Combiner untuk
+  // memfokuskan baris itu BERDASARKAN ID (bukan index) setelah data window
+  // settle — index bisa meleset karena window pagination ikut bergeser saat
+  // re-render.
+  const pendingFocusIdRef = useRef<string | null>(null);
+  // Diset true selama window settle pasca-mutasi (add/edit) untuk memblokir
+  // data-effect memproses ulang hasil refetch (yang menimpa fokus ke baris 0).
+  // Ref (bukan state) supaya reset-nya TIDAK memicu ulang effect.
+  const suppressRefetchRef = useRef(false);
+
+  useEffect(() => {
+    selectedRowRef.current = selectedRow;
+  }, [selectedRow]);
+
+  // Saat window pagination bergeser, index tiap baris di `rows` ikut bergeser
+  // sebanyak filters.limit. Geser juga selectedRowRef supaya baris DATA yang
+  // sama tetap ter-highlight; commit ke state ditunda ke Row Combiner agar
+  // selectedRow & rows berubah di render yang sama (highlight tidak berkedip).
+  const shiftSelectionForWindow = (deltaRows: number) => {
+    selectedRowRef.current = Math.max(0, selectedRowRef.current + deltaRows);
+  };
+
+  const currentMinPage =
+    visiblePages.length > 0 ? Math.min(...visiblePages) : 1;
+  const startRow = (currentMinPage - 1) * filters.limit + 1;
+
+  const effectiveLimit = shouldBulkFetch
+    ? filters.limit * WINDOW_SIZE
+    : filters.limit;
+
+  const { data: allPanjarHeader, isLoading: isLoadingPanjarHeader } =
+    useGetAllPanjarHeader(
+      {
+        ...filters,
+        page: shouldBulkFetch ? bulkStartPage : currentPage,
+        limit: effectiveLimit
+      },
+      abortControllerRef.current?.signal
+    );
+
+  // bulkPage = nomor window (1 = halaman 1..WINDOW_SIZE, 2 = berikutnya, dst).
+  const resetBufferingCache = (bulkPage = 1) => {
+    const logicalStartPage = (bulkPage - 1) * WINDOW_SIZE + 1;
+    setShouldBulkFetch(true);
+    setBulkStartPage(bulkPage);
+    setPageDataCache(new Map());
+    setVisiblePages(
+      Array.from({ length: WINDOW_SIZE }, (_, i) => logicalStartPage + i)
+    );
+    setIsFetching(false);
+    setIsTransitioning(false);
+    streamBufferRef.current = new Map();
+    prefetchingPagesRef.current = new Set();
+  };
+
+  // Dipanggil saat DATASET-nya yang berganti (search / filter kolom / sort /
+  // periode). Beda dengan pergeseran window lazy loading: di sini baris pilihan
+  // lama memang sudah tidak relevan, jadi acuan id dilepas supaya baris pertama
+  // hasil query baru yang dipakai grid detail.
+  const resetSelectionForNewDataset = () => {
+    selectedHeaderIdRef.current = null;
+    selectedRowRef.current = 0;
+    setSelectedRow(0);
+  };
 
   const { mutateAsync: createPanjarHeader, isLoading: isLoadingCreate } =
     useCreatePanjarHeader();
@@ -181,10 +272,11 @@ const GridPanjarHeader = () => {
     useDeletePanjarHeader();
 
   const forms = useForm<panjarHeaderInput>({
-    resolver: zodResolver(panjarHeaderSchema),
+    resolver: mode === 'delete' ? undefined : zodResolver(panjarHeaderSchema),
     mode: 'onSubmit',
     defaultValues: {
-      nobukti: ''
+      nobukti: '',
+      details: []
     }
   });
 
@@ -207,17 +299,15 @@ const GridPanjarHeader = () => {
       setIsAllSelected(false);
       setRows([]);
       setCurrentPage(1);
-    }, 300) // Bisa dikurangi jadi 250-300ms
+      resetSelectionForNewDataset();
+      resetBufferingCache();
+    }, 300)
   ).current;
 
   const handleFilterInputChange = useCallback(
     (colKey: string, value: string) => {
       cancelPreviousRequest(abortControllerRef);
       debouncedFilterUpdate(colKey, value);
-      setTimeout(() => {
-        setSelectedRow(0);
-        gridRef?.current?.selectCell({ rowIdx: 0, idx: 1 });
-      }, 250);
     },
     []
   );
@@ -234,6 +324,8 @@ const GridPanjarHeader = () => {
     setIsAllSelected(false);
     setRows([]);
     setCurrentPage(1);
+    resetSelectionForNewDataset();
+    resetBufferingCache();
   }, []);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -245,7 +337,8 @@ const GridPanjarHeader = () => {
       filters: {
         ...filterPanjarHeader,
         tglDari: prev.filters.tglDari,
-        tglSampai: prev.filters.tglSampai
+        tglSampai: prev.filters.tglSampai,
+        jenisOrderan: prev.filters.jenisOrderan
       },
       search: searchValue,
       page: 1
@@ -262,31 +355,36 @@ const GridPanjarHeader = () => {
       }
     }, 200);
 
-    setSelectedRow(0);
     setCurrentPage(1);
     setRows([]);
+    resetSelectionForNewDataset();
+    // Hasil pencarian = himpunan baris yang berbeda, jadi window & buffer lama
+    // tidak lagi valid.
+    resetBufferingCache();
   };
 
   const handleClearInput = () => {
     setFilters((prev) => ({
       ...prev,
       filters: {
-        ...prev.filters,
-        tglDari: prev.filters.tglDari,
-        tglSampai: prev.filters.tglSampai
+        ...prev.filters
       },
       search: '',
       page: 1
     }));
     setInputValue('');
+    setCurrentPage(1);
+    setRows([]);
+    resetSelectionForNewDataset();
+    resetBufferingCache();
   };
 
   const handleSort = (column: string) => {
     cancelPreviousRequest(abortControllerRef);
     const originalIndex = columns.findIndex((col) => col.key === column);
 
-    // 2. hitung index tampilan berdasar columnsOrder
-    //    jika belum ada reorder (columnsOrder kosong), fallback ke originalIndex
+    // hitung index tampilan berdasar columnsOrder; jika belum ada reorder
+    // (columnsOrder kosong), fallback ke originalIndex
     const displayIndex =
       columnsOrder.length > 0
         ? columnsOrder.findIndex((idx) => idx === originalIndex)
@@ -306,13 +404,14 @@ const GridPanjarHeader = () => {
     setTimeout(() => {
       gridRef?.current?.selectCell({ rowIdx: 0, idx: displayIndex });
     }, 250);
-    setSelectedRow(0);
     setCurrentPage(1);
-    setFetchedPages(new Set([1]));
     setRows([]);
+    resetSelectionForNewDataset();
+    // Sort berubah -> urutan seluruh hasil berubah, halaman lama tidak valid.
+    resetBufferingCache();
   };
 
-  const handleRowSelect = (rowId: number) => {
+  const handleRowSelect = (rowId: string) => {
     setCheckedRows((prev) => {
       const updated = new Set(prev);
       if (updated.has(rowId)) {
@@ -338,8 +437,6 @@ const GridPanjarHeader = () => {
 
   const handleFilterRows = (val: string) => {
     setIsFilteringRows(true);
-    // setLocalSelectedValue(val);
-    // onChange?.(val);
     setTimeout(() => {
       setIsFilteringRows(false);
     }, 1000);
@@ -365,10 +462,15 @@ const GridPanjarHeader = () => {
                   ...filters,
                   search: '',
                   filters: {
-                    ...filterPanjarHeader
+                    ...filterPanjarHeader,
+                    tglDari: filters.filters.tglDari,
+                    tglSampai: filters.filters.tglSampai,
+                    jenisOrderan: filters.filters.jenisOrderan
                   }
                 }),
                   setInputValue('');
+                setRows([]);
+                resetBufferingCache();
                 setTimeout(() => {
                   gridRef?.current?.selectCell({ rowIdx: 0, idx: 1 });
                 }, 0);
@@ -379,10 +481,17 @@ const GridPanjarHeader = () => {
           </div>
         ),
         renderCell: (props: any) => {
-          const rowIndex = rows.findIndex((row) => row.id === props.row.id);
+          // Nomor ABSOLUT (mengikuti posisi baris di seluruh dataset), bukan
+          // index dalam window — kalau tidak, nomor akan mengulang dari 1 tiap
+          // kali window bergeser.
+          const localIndex = rows.findIndex((row) => row.id === props.row.id);
+          const absoluteNumber =
+            localIndex === -1
+              ? '—'
+              : (minVisiblePage - 1) * filters.limit + localIndex + 1;
           return (
             <div className="flex h-full w-full cursor-pointer items-center justify-center text-sm">
-              {rowIndex + 1}
+              {absoluteNumber}
             </div>
           );
         }
@@ -428,7 +537,10 @@ const GridPanjarHeader = () => {
         width: 200,
         headerCellClass: 'column-headers',
         renderHeaderCell: (column: any) => (
-          <div className="flex h-full cursor-pointer flex-col items-center gap-1">
+          <div
+            title="NO BUKTI"
+            className="flex h-full cursor-pointer flex-col items-center gap-1"
+          >
             <div
               className="headers-cell h-[50%] px-8"
               onClick={() => handleSort('nobukti')}
@@ -472,21 +584,12 @@ const GridPanjarHeader = () => {
           const columnFilter = filters.filters.nobukti || '';
           const cellValue = props.row.nobukti || '';
           return (
-            <TooltipProvider delayDuration={0}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="m-0 flex h-full cursor-pointer items-center p-0 text-sm">
-                    {highlightText(cellValue, filters.search, columnFilter)}
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent
-                  side="right"
-                  className="rounded-none border border-zinc-400 bg-white text-sm text-zinc-900"
-                >
-                  <p>{cellValue}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <div
+              title={cellValue}
+              className="m-0 flex h-full cursor-pointer items-center p-0 text-sm"
+            >
+              {highlightText(cellValue, filters.search, columnFilter)}
+            </div>
           );
         }
       },
@@ -498,7 +601,10 @@ const GridPanjarHeader = () => {
         width: 150,
         headerCellClass: 'column-headers',
         renderHeaderCell: (column: any) => (
-          <div className="flex h-full cursor-pointer flex-col items-center gap-1">
+          <div
+            title="TGL BUKTI"
+            className="flex h-full cursor-pointer flex-col items-center gap-1"
+          >
             <div
               className="headers-cell h-[50%] px-8"
               onClick={() => handleSort('tglbukti')}
@@ -542,21 +648,12 @@ const GridPanjarHeader = () => {
           const columnFilter = filters.filters.tglbukti || '';
           const cellValue = props.row.tglbukti || '';
           return (
-            <TooltipProvider delayDuration={0}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="m-0 flex h-full cursor-pointer items-center p-0 text-sm">
-                    {highlightText(cellValue, filters.search, columnFilter)}
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent
-                  side="right"
-                  className="rounded-none border border-zinc-400 bg-white text-sm text-zinc-900"
-                >
-                  <p>{cellValue}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <div
+              title={cellValue}
+              className="m-0 flex h-full cursor-pointer items-center p-0 text-sm"
+            >
+              {highlightText(cellValue, filters.search, columnFilter)}
+            </div>
           );
         }
       },
@@ -568,7 +665,10 @@ const GridPanjarHeader = () => {
         draggable: true,
         width: 150,
         renderHeaderCell: (column: any) => (
-          <div className="flex h-full cursor-pointer flex-col items-center gap-1">
+          <div
+            title="JENIS ORDERAN"
+            className="flex h-full cursor-pointer flex-col items-center gap-1"
+          >
             <div
               className="headers-cell h-[50%] px-8"
               onClick={() => handleSort('jenisorder_text')}
@@ -617,21 +717,12 @@ const GridPanjarHeader = () => {
           const columnFilter = filters.filters.jenisorder_text || '';
           const cellValue = props.row.jenisorder_nama || '';
           return (
-            <TooltipProvider delayDuration={0}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="m-0 flex h-full cursor-pointer items-center p-0 text-sm">
-                    {highlightText(cellValue, filters.search, columnFilter)}
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent
-                  side="right"
-                  className="rounded-none border border-zinc-400 bg-white text-sm text-zinc-900"
-                >
-                  <p>{cellValue}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <div
+              title={cellValue}
+              className="m-0 flex h-full cursor-pointer items-center p-0 text-sm"
+            >
+              {highlightText(cellValue, filters.search, columnFilter)}
+            </div>
           );
         }
       },
@@ -643,7 +734,10 @@ const GridPanjarHeader = () => {
         draggable: true,
         width: 250,
         renderHeaderCell: (column: any) => (
-          <div className="flex h-full cursor-pointer flex-col items-center gap-1">
+          <div
+            title="BIAYA EMKL"
+            className="flex h-full cursor-pointer flex-col items-center gap-1"
+          >
             <div
               className="headers-cell h-[50%] px-8"
               onClick={() => handleSort('biayaemkl_text')}
@@ -692,21 +786,12 @@ const GridPanjarHeader = () => {
           const columnFilter = filters.filters.biayaemkl_text || '';
           const cellValue = props.row.biayaemkl_nama || '';
           return (
-            <TooltipProvider delayDuration={0}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="m-0 flex h-full cursor-pointer items-center p-0 text-sm">
-                    {highlightText(cellValue, filters.search, columnFilter)}
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent
-                  side="right"
-                  className="rounded-none border border-zinc-400 bg-white text-sm text-zinc-900"
-                >
-                  <p>{cellValue}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <div
+              title={cellValue}
+              className="m-0 flex h-full cursor-pointer items-center p-0 text-sm"
+            >
+              {highlightText(cellValue, filters.search, columnFilter)}
+            </div>
           );
         }
       },
@@ -718,7 +803,10 @@ const GridPanjarHeader = () => {
         width: 250,
         headerCellClass: 'column-headers',
         renderHeaderCell: (column: any) => (
-          <div className="flex h-full cursor-pointer flex-col items-center gap-1">
+          <div
+            title="KETERANGAN"
+            className="flex h-full cursor-pointer flex-col items-center gap-1"
+          >
             <div
               className="headers-cell h-[50%] px-8"
               onClick={() => handleSort('keterangan')}
@@ -745,6 +833,7 @@ const GridPanjarHeader = () => {
                 )}
               </div>
             </div>
+
             <div className="relative h-[50%] w-full px-1">
               <FilterInput
                 colKey="keterangan"
@@ -764,35 +853,29 @@ const GridPanjarHeader = () => {
           const columnFilter = filters.filters.keterangan || '';
           const cellValue = props.row.keterangan || '';
           return (
-            <TooltipProvider delayDuration={0}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="m-0 flex h-full cursor-pointer items-center p-0 text-sm">
-                    {highlightText(cellValue, filters.search, columnFilter)}
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent
-                  side="right"
-                  className="rounded-none border border-zinc-400 bg-white text-sm text-zinc-900"
-                >
-                  <p>{cellValue}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <div
+              title={cellValue}
+              className="m-0 flex h-full cursor-pointer items-center p-0 text-sm"
+            >
+              {highlightText(cellValue, filters.search, columnFilter)}
+            </div>
           );
         }
       },
       {
         key: 'modifiedby',
-        name: 'Modified By',
-        width: 150,
+        name: 'modified by',
         resizable: true,
         draggable: true,
+        width: 150,
         headerCellClass: 'column-headers',
         renderHeaderCell: (column: any) => (
-          <div className="flex h-full cursor-pointer flex-col items-center gap-1">
+          <div
+            title="MODIFIED BY"
+            className="flex h-full cursor-pointer flex-col items-center gap-1"
+          >
             <div
-              className="headers-cell h-[50%]"
+              className="headers-cell h-[50%] px-8"
               onClick={() => handleSort('modifiedby')}
               onContextMenu={(event) =>
                 setContextMenu(handleContextMenu(event))
@@ -803,7 +886,7 @@ const GridPanjarHeader = () => {
                   filters.sortBy === 'modifiedby' ? 'font-bold' : 'font-normal'
                 }`}
               >
-                Modified By
+                MODIFIED BY
               </p>
               <div className="ml-2">
                 {filters.sortBy === 'modifiedby' &&
@@ -837,35 +920,29 @@ const GridPanjarHeader = () => {
           const columnFilter = filters.filters.modifiedby || '';
           const cellValue = props.row.modifiedby || '';
           return (
-            <TooltipProvider delayDuration={0}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="m-0 flex h-full cursor-pointer items-center p-0 text-sm">
-                    {highlightText(cellValue, filters.search, columnFilter)}
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent
-                  side="right"
-                  className="rounded-none border border-zinc-400 bg-white text-sm text-zinc-900"
-                >
-                  <p>{cellValue}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <div
+              title={cellValue}
+              className="m-0 flex h-full cursor-pointer items-center p-0 text-sm"
+            >
+              {highlightText(cellValue, filters.search, columnFilter)}
+            </div>
           );
         }
       },
       {
         key: 'created_at',
-        name: 'Created At',
+        name: 'created at',
         resizable: true,
         draggable: true,
+        width: 200,
         headerCellClass: 'column-headers',
-        width: 250,
         renderHeaderCell: (column: any) => (
-          <div className="flex h-full cursor-pointer flex-col items-center gap-1">
+          <div
+            title="CREATED AT"
+            className="flex h-full cursor-pointer flex-col items-center gap-1"
+          >
             <div
-              className="headers-cell h-[50%]"
+              className="headers-cell h-[50%] px-8"
               onClick={() => handleSort('created_at')}
               onContextMenu={(event) =>
                 setContextMenu(handleContextMenu(event))
@@ -876,7 +953,7 @@ const GridPanjarHeader = () => {
                   filters.sortBy === 'created_at' ? 'font-bold' : 'font-normal'
                 }`}
               >
-                Created At
+                CREATED AT
               </p>
               <div className="ml-2">
                 {filters.sortBy === 'created_at' &&
@@ -910,35 +987,29 @@ const GridPanjarHeader = () => {
           const columnFilter = filters.filters.created_at || '';
           const cellValue = props.row.created_at || '';
           return (
-            <TooltipProvider delayDuration={0}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="m-0 flex h-full cursor-pointer items-center p-0 text-sm">
-                    {highlightText(cellValue, filters.search, columnFilter)}
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent
-                  side="right"
-                  className="rounded-none border border-zinc-400 bg-white text-sm text-zinc-900"
-                >
-                  <p>{cellValue}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <div
+              title={cellValue}
+              className="m-0 flex h-full cursor-pointer items-center p-0 text-sm"
+            >
+              {highlightText(cellValue, filters.search, columnFilter)}
+            </div>
           );
         }
       },
       {
         key: 'updated_at',
-        name: 'Updated At',
+        name: 'updated at',
         resizable: true,
         draggable: true,
+        width: 200,
         headerCellClass: 'column-headers',
-        width: 250,
         renderHeaderCell: (column: any) => (
-          <div className="flex h-full cursor-pointer flex-col items-center gap-1">
+          <div
+            title="UPDATED AT"
+            className="flex h-full cursor-pointer flex-col items-center gap-1"
+          >
             <div
-              className="headers-cell h-[50%]"
+              className="headers-cell h-[50%] px-8"
               onClick={() => handleSort('updated_at')}
               onContextMenu={(event) =>
                 setContextMenu(handleContextMenu(event))
@@ -949,7 +1020,7 @@ const GridPanjarHeader = () => {
                   filters.sortBy === 'updated_at' ? 'font-bold' : 'font-normal'
                 }`}
               >
-                Updated At
+                UPDATED AT
               </p>
               <div className="ml-2">
                 {filters.sortBy === 'updated_at' &&
@@ -983,26 +1054,17 @@ const GridPanjarHeader = () => {
           const columnFilter = filters.filters.updated_at || '';
           const cellValue = props.row.updated_at || '';
           return (
-            <TooltipProvider delayDuration={0}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="m-0 flex h-full cursor-pointer items-center p-0 text-sm">
-                    {highlightText(cellValue, filters.search, columnFilter)}
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent
-                  side="right"
-                  className="rounded-none border border-zinc-400 bg-white text-sm text-zinc-900"
-                >
-                  <p>{cellValue}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <div
+              title={cellValue}
+              className="m-0 flex h-full cursor-pointer items-center p-0 text-sm"
+            >
+              {highlightText(cellValue, filters.search, columnFilter)}
+            </div>
           );
         }
       }
     ];
-  }, [filters, rows, filters.filters, checkedRows]);
+  }, [filters, rows, filters.filters, checkedRows, minVisiblePage]);
 
   const orderedColumns = useMemo(() => {
     if (Array.isArray(columnsOrder) && columnsOrder.length > 0) {
@@ -1034,6 +1096,8 @@ const GridPanjarHeader = () => {
   const handleEdit = async () => {
     if (selectedRow !== null) {
       const rowData = rows[selectedRow];
+      if (!rowData) return;
+
       const result = await checkValidationPanjarHeaderFn({
         aksi: 'EDIT',
         value: rowData.id
@@ -1052,11 +1116,11 @@ const GridPanjarHeader = () => {
     }
   };
 
-  const handleMultipleDelete = async (idsToDelete: number[]) => {
+  const handleMultipleDelete = async (idsToDelete: string[]) => {
     try {
       for (const id of idsToDelete) {
         // Hapus data satu per satu
-        await deletePanjarHeader(id as unknown as string);
+        await deletePanjarHeader(id);
       }
 
       setRows(
@@ -1066,6 +1130,16 @@ const GridPanjarHeader = () => {
       );
       setCheckedRows(new Set()); // Reset checked rows
       setIsAllSelected(false);
+
+      // Header yang sedang dipakai grid detail ikut terhapus -> lepas acuannya
+      // supaya effect master-detail memilih ulang dari baris yang tersisa
+      // (kalau tidak, detail bertahan menampilkan panjar yang sudah tidak ada).
+      if (
+        selectedHeaderIdRef.current &&
+        idsToDelete.some((id) => String(id) === selectedHeaderIdRef.current)
+      ) {
+        selectedHeaderIdRef.current = null;
+      }
 
       // Update selected row
       if (selectedRow >= rows.length - idsToDelete.length) {
@@ -1102,6 +1176,7 @@ const GridPanjarHeader = () => {
       if (checkedRows.size === 0) {
         if (selectedRow !== null) {
           const rowData = rows[selectedRow];
+          if (!rowData) return;
 
           const result = await checkValidationPanjarHeaderFn({
             aksi: 'DELETE',
@@ -1143,10 +1218,6 @@ const GridPanjarHeader = () => {
         );
 
         if (cannotDeleteItems.length > 0) {
-          const cannotDeleteIds = cannotDeleteItems
-            .map((item) => item.id)
-            .join(', ');
-
           alert({
             title: 'Beberapa data tidak dapat dihapus!',
             variant: 'danger',
@@ -1197,6 +1268,25 @@ const GridPanjarHeader = () => {
     forms.reset();
   };
 
+  const handleExportExcel = async (exportFilters?: any) => {
+    const { page, limit, ...filtersWithoutLimit } = filters;
+    const activeFilters = exportFilters ?? filtersWithoutLimit;
+
+    await generateExport({
+      label: 'Export Panjar',
+      payload: {
+        search: activeFilters.search,
+        filters: activeFilters.filters,
+        sortBy: activeFilters.sortBy,
+        sortDirection: activeFilters.sortDirection
+      },
+      apiFn: generatePanjarHeaderExportFn
+    });
+  };
+
+  // Cetak laporan dijalankan di BACKEND (background job + socket). Frontend
+  // hanya mengirim id baris yang dicentang dan nama template .mrt-nya. Progres
+  // render muncul di toast; PDF diambil setelah selesai.
   const handleReport = async () => {
     if (checkedRows.size === 0) {
       alert({
@@ -1214,175 +1304,45 @@ const GridPanjarHeader = () => {
       });
       return; // Stop execution if no rows are selected
     }
+
     const rowId = Array.from(checkedRows)[0];
+    const { page, limit, ...filtersWithoutLimit } = filters;
 
-    try {
-      dispatch(setProcessing());
-
-      //TANGGAL
-      const now = new Date();
-      const pad = (n: any) => n.toString().padStart(2, '0');
-      const tglcetak = `${pad(now.getDate())}-${pad(
-        now.getMonth() + 1
-      )}-${now.getFullYear()} ${pad(now.getHours())}:${pad(
-        now.getMinutes()
-      )}:${pad(now.getSeconds())}`;
-
-      const response = await getPanjarHeaderByIdFn(rowId);
-
-      if (response.data === null || response.data.length === 0) {
-        alert({
-          title: 'DATA TIDAK TERSEDIA!',
-          variant: 'danger',
-          submitText: 'OK'
-        });
-        return;
-      }
-
-      const reportRows = response.data.map((row: any) => ({
-        ...row,
-        judullaporan: 'PT. TRANSPORINDO AGUNG SEJAHTERA',
-        usercetak: user.username,
-        tglcetak,
-        judul: `LAPORAN PANJAR`
-      }));
-
-      sessionStorage.setItem('dataId', rowId as unknown as string);
-      // Dynamically import Stimulsoft and generate the PDF report
-      import('stimulsoft-reports-js/Scripts/stimulsoft.blockly.editor')
-        .then((module) => {
-          const { Stimulsoft } = module;
-          Stimulsoft.Base.StiFontCollection.addOpentypeFontFile(
-            '/fonts/tahoma.ttf',
-            'Tahoma'
-          ); // Regular
-          Stimulsoft.Base.StiFontCollection.addOpentypeFontFile(
-            '/fonts/tahomabd.ttf',
-            'Tahoma'
-          ); // Bold
-          Stimulsoft.Base.StiLicense.Key =
-            '6vJhGtLLLz2GNviWmUTrhSqnOItdDwjBylQzQcAOiHksEid1Z5nN/hHQewjPL/4/AvyNDbkXgG4Am2U6dyA8Ksinqp' +
-            '6agGqoHp+1KM7oJE6CKQoPaV4cFbxKeYmKyyqjF1F1hZPDg4RXFcnEaYAPj/QLdRHR5ScQUcgxpDkBVw8XpueaSFBs' +
-            'JVQs/daqfpFiipF1qfM9mtX96dlxid+K/2bKp+e5f5hJ8s2CZvvZYXJAGoeRd6iZfota7blbsgoLTeY/sMtPR2yutv' +
-            'gE9TafuTEhj0aszGipI9PgH+A/i5GfSPAQel9kPQaIQiLw4fNblFZTXvcrTUjxsx0oyGYhXslAAogi3PILS/DpymQQ' +
-            '0XskLbikFsk1hxoN5w9X+tq8WR6+T9giI03Wiqey+h8LNz6K35P2NJQ3WLn71mqOEb9YEUoKDReTzMLCA1yJoKia6Y' +
-            'JuDgUf1qamN7rRICPVd0wQpinqLYjPpgNPiVqrkGW0CQPZ2SE2tN4uFRIWw45/IITQl0v9ClCkO/gwUtwtuugegrqs' +
-            'e0EZ5j2V4a1XDmVuJaS33pAVLoUgK0M8RG72';
-
-          const report = new Stimulsoft.Report.StiReport();
-          const dataSet = new Stimulsoft.System.Data.DataSet('Data');
-
-          // Load the report template (MRT file)
-          report.loadFile('/reports/LaporanPanjar.mrt');
-          report.dictionary.dataSources.clear();
-          dataSet.readJson({
-            data: reportRows
-            // detail: merged
-          });
-
-          report.regData(dataSet.dataSetName, '', dataSet);
-          report.dictionary.synchronize();
-
-          // Render the report asynchronously
-
-          report.renderAsync(() => {
-            // Export the report to PDF asynchronously
-            report.exportDocumentAsync((pdfData: any) => {
-              const pdfBlob = new Blob([new Uint8Array(pdfData)], {
-                type: 'application/pdf'
-              });
-              const pdfUrl = URL.createObjectURL(pdfBlob);
-
-              // Store the Blob URL in sessionStorage
-              sessionStorage.setItem('pdfUrl', pdfUrl);
-
-              // Navigate to the report page
-              window.open('/reports/panjarheader', '_blank');
-            }, Stimulsoft.Report.StiExportFormat.Pdf);
-          });
-        })
-        .catch((error) => {
-          console.error('Failed to load Stimulsoft:', error);
-        });
-    } catch (error) {
-      dispatch(setProcessed());
-    } finally {
-      dispatch(setProcessed());
-    }
+    await generateReport({
+      label: 'Panjar',
+      payload: {
+        mrtName: 'LaporanPanjar.mrt',
+        id: rowId,
+        judullaporan: 'PT. TRANSPORINDO AGUNG SEJAHTERA'
+      },
+      apiFn: generatePanjarHeaderReportFn,
+      // Tombol Export di toolbar viewer — memakai filter yang sama dengan
+      // laporan yang sedang dibuka (sama seperti di halaman /reports/*).
+      onExport: () => handleExportExcel(filtersWithoutLimit)
+    });
   };
 
-  // const handleReport = async () => {
-  //   if (checkedRows.size === 0) {
-  //     alert({
-  //       title: 'PILIH DATA YANG INGIN DI CETAK!',
-  //       variant: 'danger',
-  //       submitText: 'OK'
-  //     });
-  //     return; // Stop execution if no rows are selected
-  //   }
-  //   if (checkedRows.size > 1) {
-  //     alert({
-  //       title: 'HANYA BISA MEMILIH SATU DATA!',
-  //       variant: 'danger',
-  //       submitText: 'OK'
-  //     });
-  //     return; // Stop execution if no rows are selected
-  //   }
-
-  //   const rowId = Array.from(checkedRows)[0];
-  //   try {
-  //     dispatch(setProcessing()); // Show loading overlay when the request starts
-
-  //     const now = new Date();
-  //     const pad = (n: any) => n.toString().padStart(2, '0');
-  //     const tglcetak = `${pad(now.getDate())}-${pad(
-  //       now.getMonth() + 1
-  //     )}-${now.getFullYear()} ${pad(now.getHours())}:${pad(
-  //       now.getMinutes()
-  //     )}:${pad(now.getSeconds())}`;
-
-  //     const { page, limit, ...filtersWithoutLimit } = filters;
-  //     const response = await getPanjarHeaderByIdFn(rowId);
-
-  //     if (response.data === null || response.data.length === 0) {
-  //       alert({
-  //         title: 'DATA TIDAK TERSEDIA!',
-  //         variant: 'danger',
-  //         submitText: 'OK'
-  //       });
-  //     } else {
-  //       const reportRows = response.data.map((row: any) => ({
-  //         ...row,
-  //         judullaporan: 'PT. TRANSPORINDO AGUNG SEJAHTERA',
-  //         usercetak: user.username,
-  //         tglcetak,
-  //         judul: `LAPORAN BIAYA EXTRA`
-  //       }));
-
-  //       dispatch(setReportData(reportRows));
-  //       // dispatch(setDetailDataReport(merged));
-  //       window.open('/reports/designer', '_blank');
-  //     }
-  //   } catch (error) {
-  //     console.error('Error generating report:', error);
-  //     alert({
-  //       title: 'Terjadi kesalahan saat memuat data!',
-  //       variant: 'danger',
-  //       submitText: 'OK'
-  //     });
-  //   } finally {
-  //     dispatch(setProcessed()); // Hide loading overlay when the request is finished
-  //   }
-  // };
-
+  /**
+   * KONTRAK BACKEND (sama seperti groupbiayaextra & alatbayar): endpoint
+   * create/update mengembalikan { itemIndex (index DALAM window), fetchedPages,
+   * pagedData, pageNumber } dan menyimpan window-nya di redis per halaman
+   * (`panjarheader-page-<n>`), jadi window tidak perlu dirakit ulang di sini.
+   */
   const onSuccess = async (
-    indexOnPage: any,
-    pageNumber: any,
-    keepOpenModal: any = false
+    indexOnPage: number,
+    fetchedPages: number[],
+    pagedData: Record<string, PanjarHeader[]>,
+    pageNumber: number,
+    keepOpenModal = false,
+    focusId: string | null = null
   ) => {
     dispatch(setClearLookup(true));
     clearError();
     setIsFetchingManually(true);
+    // Tandai baris baru agar Row Combiner memfokuskannya by-id setelah data
+    // window settle. Lebih andal daripada selectCell by-index yang bisa meleset
+    // saat window bergeser.
+    pendingFocusIdRef.current = focusId ?? null;
 
     try {
       if (keepOpenModal) {
@@ -1394,21 +1354,83 @@ const GridPanjarHeader = () => {
       }
 
       if (mode !== 'delete') {
-        const response = await api2.get(`/redis/get/panjarheader-allItems`);
-        // Set the rows only if the data has changed
-        if (JSON.stringify(response.data) !== JSON.stringify(rows)) {
-          setRows(response.data);
-          setIsDataUpdated(true);
-          setCurrentPage(pageNumber);
-          setFetchedPages(new Set([pageNumber]));
-          setSelectedRow(indexOnPage);
-          setTimeout(() => {
-            gridRef?.current?.selectCell({
-              rowIdx: indexOnPage,
-              idx: 1
-            });
-          }, 200);
+        // Blokir data-effect memproses ulang hasil refetch pasca-mutasi selama
+        // window settle, agar fokus by-id tidak tertimpa.
+        suppressRefetchRef.current = true;
+
+        const response = await api2.get(
+          `/redis/get/panjarheader-page-${pageNumber}`
+        );
+        const loadedRows: PanjarHeader[] = Array.isArray(response.data)
+          ? response.data
+          : [];
+
+        // Fokus BERDASARKAN ID baris, bukan indexOnPage dari backend. Setelah
+        // edit, posisi baris di window yang dimuat bisa berbeda dari hitungan
+        // index backend sehingga fokus meleset. Fallback ke indexOnPage bila id
+        // tak ketemu.
+        const focusIdx =
+          focusId != null
+            ? loadedRows.findIndex((r) => String(r.id) === String(focusId))
+            : -1;
+        const targetIndex = focusIdx >= 0 ? focusIdx : indexOnPage;
+
+        setIsDataUpdated(true);
+        setShouldBulkFetch(false);
+        setRows([]);
+        setRows(loadedRows);
+        setVisiblePages(fetchedPages);
+        setSelectedRow(targetIndex);
+        selectedRowRef.current = targetIndex;
+        // Acuan master-detail ikut pindah ke baris yang baru disimpan.
+        const focusedRowId = loadedRows[targetIndex]?.id ?? focusId;
+        if (focusedRowId != null) {
+          selectedHeaderIdRef.current = String(focusedRowId);
         }
+        setPageDataCache(
+          new Map(
+            Object.entries(pagedData).map(([key, value]) => [
+              Number(key),
+              value as PanjarHeader[]
+            ])
+          )
+        );
+        setCurrentPage(pageNumber);
+
+        const updatedBuffer = new Map(streamBufferRef.current);
+        Object.entries(pagedData).forEach(([key, value]) => {
+          updatedBuffer.set(Number(key), value as PanjarHeader[]);
+        });
+        streamBufferRef.current = updatedBuffer;
+
+        setTimeout(() => {
+          gridRef?.current?.selectCell({
+            rowIdx: targetIndex,
+            idx: 1
+          });
+        }, 200);
+
+        // Penahan fokus pasca-mutasi. setCurrentPage(pageNumber) memicu refetch
+        // yang menjalankan Row Combiner lagi; karena pendingFocusIdRef sudah
+        // dikonsumsi pada run pertama, cabang else-nya men-scroll ke baris 0
+        // (gejala "edit selalu balik ke baris 1"). Re-assert id fokus beberapa
+        // kali selama window settle lalu bersihkan.
+        if (focusId != null) {
+          [120, 320, 620].forEach((d) =>
+            setTimeout(() => {
+              pendingFocusIdRef.current = String(focusId);
+            }, d)
+          );
+          setTimeout(() => {
+            if (String(pendingFocusIdRef.current) === String(focusId)) {
+              pendingFocusIdRef.current = null;
+            }
+          }, 950);
+        }
+
+        setTimeout(() => {
+          suppressRefetchRef.current = false;
+        }, 1000);
       }
 
       setIsDataUpdated(false);
@@ -1426,21 +1448,55 @@ const GridPanjarHeader = () => {
       dispatch(setProcessing());
       if (mode === 'delete') {
         if (selectedRowId) {
-          await deletePanjarHeader(selectedRowId as unknown as string, {
+          await deletePanjarHeader(selectedRowId, {
             onSuccess: () => {
               setPopOver(false);
+
+              // 1. Buang dari baris yang tampil
               setRows((prevRows) =>
                 prevRows.filter((row) => row.id !== selectedRowId)
               );
-              if (selectedRow === 0) {
-                setSelectedRow(selectedRow);
-                gridRef?.current?.selectCell({ rowIdx: selectedRow, idx: 1 });
-              } else {
-                setSelectedRow(selectedRow - 1);
-                gridRef?.current?.selectCell({
-                  rowIdx: selectedRow - 1,
-                  idx: 1
+
+              // 2. Buang dari pageDataCache (semua halaman)
+              setPageDataCache((prevCache) => {
+                const updated = new Map(prevCache);
+                updated.forEach((pageRows, pageNum) => {
+                  const filtered = pageRows.filter(
+                    (row) => row.id !== selectedRowId
+                  );
+                  if (filtered.length !== pageRows.length) {
+                    updated.set(pageNum, filtered);
+                  }
                 });
+                return updated;
+              });
+
+              // 3. Buang dari streamBuffer
+              const newBuffer = new Map(streamBufferRef.current);
+              newBuffer.forEach((pageRows, pageNum) => {
+                const filtered = pageRows.filter(
+                  (row) => row.id !== selectedRowId
+                );
+                if (filtered.length !== pageRows.length) {
+                  newBuffer.set(pageNum, filtered);
+                }
+              });
+              streamBufferRef.current = newBuffer;
+
+              // 4. Fokus baris BERIKUTNYA (by-id). Setelah baris dihapus, baris
+              // tepat di bawahnya naik mengisi slot yang sama.
+              const nextFocusRow =
+                rows[selectedRow + 1] ?? rows[selectedRow - 1];
+              if (nextFocusRow) {
+                pendingFocusIdRef.current = String(nextFocusRow.id);
+                // Acuan master-detail langsung pindah: id yang lama sudah tidak
+                // ada di `rows`, dan tanpa ini detail bertahan menampilkan
+                // panjar yang barusan dihapus.
+                selectedHeaderIdRef.current = String(nextFocusRow.id);
+              } else {
+                setSelectedRow(0);
+                selectedRowRef.current = 0;
+                selectedHeaderIdRef.current = null;
               }
             }
           });
@@ -1449,35 +1505,50 @@ const GridPanjarHeader = () => {
       }
 
       if (mode === 'add') {
-        const newOrder = await createPanjarHeader(
+        await createPanjarHeader(
           {
             ...values,
+            // id detail 0 = penanda baris BARU untuk backend. Dikirim sebagai
+            // angka, dan skema zod (FE & BE) memang menerima string|number.
             details: values.details.map((detail: any) => ({
               ...detail,
               id: 0
             })),
-            ...filters
+            ...filters // Kirim filter ke body/payload
           },
           {
-            onSuccess: (data) =>
-              onSuccess(data.dataIndex, data.pageNumber, keepOpenModal)
+            onSuccess: (data: any) =>
+              onSuccess(
+                data.itemIndex,
+                data.fetchedPages,
+                data.pagedData,
+                data.pageNumber,
+                keepOpenModal,
+                data.newItem?.id ?? null
+              )
           }
         );
-
-        if (newOrder !== undefined && newOrder !== null) {
-        }
         return;
       }
 
       if (selectedRowId && mode === 'edit') {
         await updatePanjarHeader(
           {
-            id: selectedRowId as unknown as string,
+            id: selectedRowId,
             fields: { ...values, ...filters }
           },
-          { onSuccess: (data) => onSuccess(data.dataIndex, data.pageNumber) }
+          {
+            onSuccess: (data: any) =>
+              onSuccess(
+                data.itemIndex,
+                data.fetchedPages,
+                data.pagedData,
+                data.pageNumber,
+                false,
+                data.updatedItem?.id ?? selectedRowId ?? null
+              )
+          }
         );
-        queryClient.invalidateQueries('panjarheader');
       }
     } catch (error: any) {
       if (error?.response?.status !== 400) {
@@ -1541,13 +1612,34 @@ const GridPanjarHeader = () => {
     element.classList.remove('c1kqdw7y7-0-0-beta-47');
   });
 
-  function handleCellClick(args: { row: PanjarHeader }) {
+  // MASTER-DETAIL: ini SATU-SATUNYA tempat id header terpilih dicatat.
+  // Dipanggil onCellClick (klik mouse) dan onSelectedCellChange (panah keyboard
+  // + selectCell programatik). Pergeseran window saat scroll TIDAK lewat sini —
+  // dia cuma menggeser `selectedRow` — sehingga pilihan user tidak ikut bergeser
+  // dan grid detail tetap menampilkan panjar yang sama.
+  //
+  // setHeaderData sengaja TIDAK di-dispatch di sini: satu-satunya yang
+  // mendispatch adalah effect di bawah, dengan id (bukan index) sebagai acuan.
+  function handleCellClick(
+    args: { row: PanjarHeader },
+    fromMouseClick = false
+  ) {
     const clickedRow = args.row;
+    // args.row bisa undefined saat grid sedang re-render di tengah pergeseran
+    // window (selectCell programatik menembak index yang barisnya sudah hilang).
+    if (!clickedRow) return;
+
     const rowIndex = rows.findIndex((r) => r.id === clickedRow.id);
-    const foundRow = rows.find((r) => r.id === clickedRow?.id);
-    if (rowIndex !== -1 && foundRow) {
-      setSelectedRow(rowIndex);
-      dispatch(setHeaderData(foundRow));
+    if (rowIndex === -1) return;
+
+    setSelectedRow(rowIndex);
+
+    // Klik mouse selalu dianggap pilihan sadar user, jadi tidak pernah diabaikan
+    // walau kebetulan jatuh saat window sedang bergeser/fetch. Sebaliknya
+    // onSelectedCellChange bisa terpicu oleh grid sendiri saat baris di bawah
+    // sel aktif bergeser — di fase itu id lama yang dipertahankan.
+    if (fromMouseClick || (!isTransitioning && !isFetching)) {
+      selectedHeaderIdRef.current = String(clickedRow.id);
     }
   }
 
@@ -1560,44 +1652,189 @@ const GridPanjarHeader = () => {
     return row.id;
   }
 
-  function isAtTop({ currentTarget }: React.UIEvent<HTMLDivElement>): boolean {
-    return currentTarget.scrollTop <= 10;
-  }
+  // Tarik halaman-halaman berikutnya diam-diam ke streamBuffer. Saat window
+  // nanti bergeser ke salah satunya, datanya sudah ada -> tidak ada spinner &
+  // tidak ada network latency di jalur scroll.
+  const prefetchPages = useCallback(
+    async (
+      pagesToFetch: number[],
+      existingCache?: Map<number, PanjarHeader[]>,
+      knownTotalPages?: number
+    ) => {
+      const cacheToCheck = existingCache ?? pageDataCache;
+      const effectiveTotalPages = knownTotalPages ?? totalPages;
 
-  function isAtBottom(event: React.UIEvent<HTMLDivElement>): boolean {
-    const { currentTarget } = event;
-    if (!currentTarget) return false;
+      const validPages = pagesToFetch.filter(
+        (p) =>
+          p >= 1 &&
+          p <= effectiveTotalPages &&
+          !streamBufferRef.current.has(p) &&
+          !cacheToCheck.has(p) &&
+          !prefetchingPagesRef.current.has(p)
+      );
 
-    return (
-      currentTarget.scrollTop + currentTarget.clientHeight >=
-      currentTarget.scrollHeight - 2
-    );
-  }
+      if (validPages.length === 0) return;
+
+      validPages.forEach((p) => prefetchingPagesRef.current.add(p));
+
+      await Promise.allSettled(
+        validPages.map(async (pageNum) => {
+          try {
+            const data = await getAllPanjarHeaderFn({
+              ...filters,
+              page: pageNum,
+              limit: filters.limit
+            });
+
+            if (data?.data && data.data.length > 0) {
+              streamBufferRef.current = new Map(streamBufferRef.current);
+              streamBufferRef.current.set(pageNum, data.data);
+            }
+          } catch (err) {
+            // Prefetch gagal tidak perlu diberitahukan ke user.
+            console.warn(`[StreamBuffer] Prefetch page ${pageNum} gagal:`, err);
+          } finally {
+            prefetchingPagesRef.current.delete(pageNum);
+          }
+        })
+      );
+    },
+    [filters, totalPages, pageDataCache]
+  );
 
   async function handleScroll(event: React.UIEvent<HTMLDivElement>) {
-    if (isLoadingPanjarHeader || !hasMore || rows.length === 0) return;
+    if (
+      isLoadingPanjarHeader ||
+      rows.length === 0 ||
+      isTransitioning ||
+      isFetching
+    )
+      return;
 
-    const findUnfetchedPage = (pageOffset: number) => {
-      let page = currentPage + pageOffset;
-      while (page > 0 && fetchedPages.has(page)) {
-        page += pageOffset;
-      }
-      return page > 0 ? page : null;
-    };
+    const { currentTarget } = event;
+    const scrollTop = currentTarget.scrollTop;
+    const clientHeight = currentTarget.clientHeight;
 
-    if (isAtBottom(event)) {
-      const nextPage = findUnfetchedPage(1);
+    const hasScrolled = Math.abs(scrollTop - lastScrollTopRef.current) > 5;
+    if (!hasScrolled) return;
 
-      if (nextPage && nextPage <= totalPages && !fetchedPages.has(nextPage)) {
-        setCurrentPage(nextPage);
-        setIsAllSelected(false);
+    lastScrollTopRef.current = scrollTop;
+    isScrollingRef.current = true;
+
+    if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
+    scrollTimeoutRef.current = setTimeout(() => {
+      isScrollingRef.current = false;
+    }, 150);
+
+    scrollPositionRef.current = scrollTop;
+    scrollContainerRef.current = currentTarget;
+
+    const firstVisibleRow = Math.floor(scrollTop / ROW_HEIGHT);
+    const lastVisibleRow = Math.floor((scrollTop + clientHeight) / ROW_HEIGHT);
+    const THRESHOLD_ROWS = 50;
+
+    // SCROLL KE BAWAH
+    if (rows.length - lastVisibleRow <= THRESHOLD_ROWS) {
+      const nextPage = Math.max(...visiblePages) + 1;
+
+      if (nextPage <= totalPages && !isFetching && isScrollingRef.current) {
+        if (streamBufferRef.current.has(nextPage)) {
+          // Buffer hit — geser window langsung tanpa request.
+          setIsFetching(true);
+          setIsTransitioning(true);
+          hasAdjustedScrollRef.current = false;
+
+          const bufferedData = streamBufferRef.current.get(nextPage)!;
+          setPageDataCache((prev) => new Map(prev).set(nextPage, bufferedData));
+
+          streamBufferRef.current = new Map(streamBufferRef.current);
+          streamBufferRef.current.delete(nextPage);
+
+          isPageTransitionRef.current = true;
+          pendingScrollAdjustment.current = -(filters.limit * ROW_HEIGHT);
+          shiftSelectionForWindow(-filters.limit);
+
+          setVisiblePages((prevVisible) => {
+            const removedPage = prevVisible[0];
+            setPageDataCache((prev) => {
+              const updated = new Map(prev);
+              updated.delete(removedPage);
+              return updated;
+            });
+            return [...prevVisible.slice(1), nextPage];
+          });
+
+          setTimeout(() => {
+            setIsTransitioning(false);
+            setIsFetching(false);
+          }, 50);
+
+          prefetchPages(
+            Array.from(
+              { length: STREAM_BUFFER_SIZE },
+              (_, i) => nextPage + 1 + i
+            )
+          );
+        } else if (!pageDataCache.has(nextPage)) {
+          // Buffer miss — fallback ke fetch normal (effect #2 yang merakit).
+          setIsFetching(true);
+          setIsTransitioning(true);
+          hasAdjustedScrollRef.current = false;
+          setCurrentPage(nextPage);
+        }
       }
     }
 
-    if (isAtTop(event)) {
-      const prevPage = findUnfetchedPage(-1);
-      if (prevPage && !fetchedPages.has(prevPage)) {
-        setCurrentPage(prevPage);
+    // SCROLL KE ATAS
+    if (firstVisibleRow <= THRESHOLD_ROWS) {
+      const prevPage = Math.min(...visiblePages) - 1;
+
+      if (prevPage >= 1 && !isFetching && isScrollingRef.current) {
+        if (streamBufferRef.current.has(prevPage)) {
+          setIsFetching(true);
+          setIsTransitioning(true);
+          hasAdjustedScrollRef.current = false;
+
+          const bufferedData = streamBufferRef.current.get(prevPage)!;
+          setPageDataCache((prev) => new Map(prev).set(prevPage, bufferedData));
+
+          streamBufferRef.current = new Map(streamBufferRef.current);
+          streamBufferRef.current.delete(prevPage);
+
+          isPageTransitionRef.current = true;
+          pendingScrollAdjustment.current = filters.limit * ROW_HEIGHT;
+          shiftSelectionForWindow(filters.limit);
+
+          setVisiblePages((prevVisible) => {
+            const removedPage = prevVisible[prevVisible.length - 1];
+            setPageDataCache((prev) => {
+              const updated = new Map(prev);
+              updated.delete(removedPage);
+              return updated;
+            });
+            return [prevPage, ...prevVisible.slice(0, WINDOW_SIZE - 1)];
+          });
+
+          setTimeout(() => {
+            setIsTransitioning(false);
+            setIsFetching(false);
+          }, 50);
+
+          prefetchPages(
+            Array.from(
+              { length: STREAM_BUFFER_SIZE },
+              (_, i) => prevPage - 1 - i
+            ).filter((p) => p >= 1)
+          );
+        } else if (!pageDataCache.has(prevPage)) {
+          setIsFetching(true);
+          setIsTransitioning(true);
+          hasAdjustedScrollRef.current = false;
+          // Reset dulu supaya setCurrentPage(prevPage) pasti memicu refetch
+          // walau nilainya sama dengan currentPage saat ini.
+          setCurrentPage(0);
+          setTimeout(() => setCurrentPage(prevPage), 0);
+        }
       }
     }
   }
@@ -1647,21 +1884,12 @@ const GridPanjarHeader = () => {
     } else if (event.key === ' ') {
       // Handle spacebar keydown to toggle row selection
       if (selectedRowId !== undefined) {
-        handleRowSelect(selectedRowId); // Toggling the selection of the row
+        handleRowSelect(selectedRowId);
       }
     }
   }
 
   useEffect(() => {
-    return () => {
-      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
-      colTimersRef.current.forEach((t) => clearTimeout(t));
-      colTimersRef.current.clear();
-    };
-  }, []);
-
-  useEffect(() => {
-    setIsFirstLoad(true);
     loadGridConfig(
       user.id,
       'GridPanjarHeader',
@@ -1672,102 +1900,361 @@ const GridPanjarHeader = () => {
   }, []);
 
   useEffect(() => {
+    setIsFirstLoad(true);
+  }, []);
+
+  useEffect(() => {
     if (isFirstLoad && gridRef.current && rows.length > 0) {
       setSelectedRow(0);
+      selectedRowRef.current = 0;
       gridRef.current.selectCell({ rowIdx: 0, idx: 1 });
+      selectedHeaderIdRef.current = String(rows[0].id);
       dispatch(setHeaderData(rows[0]));
+      lastDispatchedId.current = rows[0].id;
       setIsFirstLoad(false);
     }
   }, [rows, isFirstLoad]);
 
+  // Reload dari FilterGrid: periode / jenis orderan berubah = dataset berbeda,
+  // jadi filter kolom & window lama dibuang seluruhnya.
   useEffect(() => {
-    if (isFirstLoad) {
-      if (
-        selectedDate !== filters.filters.tglDari ||
-        selectedDate2 !== filters.filters.tglSampai
-      ) {
-        setFilters((prevFilters) => ({
-          ...prevFilters,
-          filters: {
-            ...prevFilters.filters,
-            tglDari: selectedDate,
-            tglSampai: selectedDate2,
-            jenisOrderan: String(selectedJenisOrderan)
-          }
-        }));
-      }
-    } else if (onReload) {
-      if (filters.filters.jenisOrderan !== String(selectedJenisOrderan)) {
-        setFilters((prevFilters: Filter) => ({
-          ...prevFilters,
-          filters: {
-            ...filterPanjarHeader,
-            tglDari: selectedDate,
-            tglSampai: selectedDate2,
-            jenisOrderan: String(selectedJenisOrderan)
-          }
-        }));
-        setSelectedRow(0);
-        setCurrentPage(1);
-        setCheckedRows(new Set());
-        setIsAllSelected(false);
-      }
-      // Jika onReload diklik, update filter tanggal
-      if (
-        selectedDate !== filters.filters.tglDari ||
-        selectedDate2 !== filters.filters.tglSampai
-      ) {
-        setFilters((prevFilters) => ({
-          ...prevFilters,
-          filters: {
-            ...prevFilters.filters,
-            tglDari: selectedDate,
-            tglSampai: selectedDate2,
-            jenisOrderan: String(selectedJenisOrderan)
-          }
-        }));
-      }
-    }
-  }, [selectedDate, selectedDate2, filters, onReload, isFirstLoad]);
+    if (!onReload) return;
 
+    setFilters((prev) => ({
+      ...prev,
+      page: 1,
+      filters: {
+        ...filterPanjarHeader,
+        tglDari: committed.tglDari,
+        tglSampai: committed.tglSampai,
+        jenisOrderan: committed.jenisOrderan
+      }
+    }));
+
+    setCurrentPage(1);
+    setCheckedRows(new Set());
+    setIsAllSelected(false);
+    setRows([]);
+    resetSelectionForNewDataset();
+    resetBufferingCache();
+
+    pendingInitialFocusRef.current = true;
+
+    // ✅ Reset onReload setelah selesai diproses
+    dispatch(clearOnReload());
+  }, [onReload]);
+
+  // 1. Bulk Fetch — sekali ambil WINDOW_SIZE halaman, lalu dipecah ke cache.
   useEffect(() => {
-    if (!allPanjarHeader || isDataUpdated) return;
+    if (
+      !shouldBulkFetch ||
+      !allPanjarHeader ||
+      isDataUpdated ||
+      // Selama settle pasca-mutasi (add/edit), jangan biarkan hasil refetch
+      // membangun ulang cache — kalau tidak, Row Combiner jalan lagi setelah
+      // pendingFocusIdRef dikonsumsi & fokus loncat ke baris 1.
+      suppressRefetchRef.current
+    ) {
+      return;
+    }
+
+    const bulkData = allPanjarHeader.data || [];
+    if (bulkData.length === 0) {
+      setShouldBulkFetch(false);
+      setIsFirstLoad(false);
+      setIsFetching(false);
+      setRows([]);
+      return;
+    }
+
+    const pageSize = filters.limit;
+    const newCache = new Map<number, PanjarHeader[]>();
+    const logicalStartPage = (bulkStartPage - 1) * WINDOW_SIZE + 1;
+
+    for (let i = 0; i < WINDOW_SIZE; i++) {
+      const pageData = bulkData.slice(i * pageSize, (i + 1) * pageSize);
+      if (pageData.length > 0) newCache.set(logicalStartPage + i, pageData);
+    }
+
+    setPageDataCache(newCache);
+    setVisiblePages(
+      Array.from({ length: WINDOW_SIZE }, (_, i) => logicalStartPage + i)
+    );
+
+    const totalItems = allPanjarHeader.pagination?.totalItems || 0;
+    // pagination.totalPages dari backend dihitung memakai limit bulk
+    // (limit * WINDOW_SIZE), jadi TIDAK bisa dipakai langsung — hitung ulang
+    // dengan limit per-halaman yang sebenarnya.
+    const totalPgs = Math.ceil(totalItems / filters.limit) || 1;
+
+    setTotalPages(totalPgs);
+    setHasMore(bulkData.length === filters.limit * WINDOW_SIZE);
+    setShouldBulkFetch(false);
+    setIsFirstLoad(false);
+    setIsFetching(false);
+    setPrevFilters(filters);
+
+    const lastLogicalPage = Math.min(
+      logicalStartPage + WINDOW_SIZE - 1,
+      totalPgs
+    );
+    const initialPrefetch = Array.from(
+      { length: STREAM_BUFFER_SIZE },
+      (_, i) => lastLogicalPage + 1 + i
+    ).filter((p) => p <= totalPgs);
+
+    if (initialPrefetch.length > 0) {
+      prefetchPages(initialPrefetch, newCache, totalPgs);
+    }
+  }, [
+    allPanjarHeader,
+    shouldBulkFetch,
+    isDataUpdated,
+    filters.limit,
+    bulkStartPage
+  ]);
+
+  // 2. Pagination Fetch — hasil fetch satu halaman (buffer miss) masuk cache
+  //    dan window digeser satu langkah.
+  useEffect(() => {
+    if (
+      shouldBulkFetch ||
+      isDataUpdated ||
+      isFetchingManually ||
+      suppressRefetchRef.current
+    )
+      return;
+    if (!allPanjarHeader) return;
+    // currentPage 0 = fase antara dari trik setCurrentPage(0) di handleScroll.
+    if (currentPage < 1) return;
 
     const newRows = allPanjarHeader.data || [];
 
-    setRows((prevRows) => {
-      if (currentPage === 1 || filters !== prevFilters) {
-        setCurrentPage(1); // Reset data if filter changes (first page)
-        setFetchedPages(new Set([1])); // Reset fetchedPages to [1]
-        return newRows; // Use the fetched new rows directly
-      }
+    setPageDataCache((prevCache) =>
+      new Map(prevCache).set(currentPage, newRows)
+    );
 
-      if (!fetchedPages.has(currentPage)) {
-        // Add new data to the bottom for infinite scroll
-        return [...prevRows, ...newRows];
-      }
+    isPageTransitionRef.current = true;
+    const maxVisible = Math.max(...visiblePages);
+    const minVisible = Math.min(...visiblePages);
 
-      return prevRows;
-    });
+    if (currentPage > maxVisible && currentPage <= maxVisible + 1) {
+      const removedPage = visiblePages[0];
+      pendingScrollAdjustment.current = -(filters.limit * ROW_HEIGHT);
+      shiftSelectionForWindow(-filters.limit);
 
-    if (allPanjarHeader.pagination.totalPages) {
+      setPageDataCache((prev) => {
+        const updated = new Map(prev);
+        updated.delete(removedPage);
+        return updated;
+      });
+      setVisiblePages((prevVisible) => [...prevVisible.slice(1), currentPage]);
+    } else if (currentPage < minVisible && currentPage >= minVisible - 1) {
+      const removedPage = visiblePages[visiblePages.length - 1];
+      pendingScrollAdjustment.current = filters.limit * ROW_HEIGHT;
+      shiftSelectionForWindow(filters.limit);
+
+      setPageDataCache((prev) => {
+        const updated = new Map(prev);
+        updated.delete(removedPage);
+        return updated;
+      });
+      setVisiblePages((prevVisible) => [
+        currentPage,
+        ...prevVisible.slice(0, WINDOW_SIZE - 1)
+      ]);
+    }
+
+    if (allPanjarHeader.pagination?.totalPages) {
       setTotalPages(allPanjarHeader.pagination.totalPages);
     }
 
     setHasMore(newRows.length === filters.limit);
-    setFetchedPages((prev) => new Set(prev).add(currentPage));
-    setIsFirstLoad(false);
     setPrevFilters(filters);
-  }, [allPanjarHeader, currentPage, filters, isDataUpdated]);
 
+    setTimeout(() => {
+      setIsTransitioning(false);
+      setIsFetching(false);
+
+      const isScrollDown = currentPage >= Math.max(...visiblePages);
+      const pagesToPrefetch = isScrollDown
+        ? Array.from(
+            { length: STREAM_BUFFER_SIZE },
+            (_, i) => currentPage + 1 + i
+          ).filter((p) => p <= totalPages)
+        : Array.from(
+            { length: STREAM_BUFFER_SIZE },
+            (_, i) => currentPage - 1 - i
+          ).filter((p) => p >= 1);
+
+      if (pagesToPrefetch.length > 0) {
+        setTimeout(() => prefetchPages(pagesToPrefetch), 200);
+      }
+    }, 100);
+  }, [
+    allPanjarHeader,
+    currentPage,
+    filters,
+    isDataUpdated,
+    shouldBulkFetch,
+    isFetchingManually
+  ]);
+
+  // 3. Row Combiner — gabungkan halaman yang sedang terlihat jadi `rows`.
   useEffect(() => {
-    if (rows.length > 0 && selectedRow !== null) {
-      const selectedRowData = rows[selectedRow];
-      dispatch(setHeaderData(selectedRowData)); // Pastikan data sudah benar
-    } else {
-      dispatch(setHeaderData({}));
+    const combinedRows: PanjarHeader[] = [];
+    visiblePages?.forEach((page) => {
+      const pageData = pageDataCache.get(page);
+      if (pageData) combinedRows.push(...pageData);
+    });
+
+    if (combinedRows.length === 0) return;
+
+    setRows(combinedRows);
+
+    // --- Fokus baris yang baru disimpan (add/edit) BERDASARKAN ID ---
+    // `return` mencegah cabang lain men-scroll ke row 0 (yang memicu
+    // pergeseran window lewat handleScroll).
+    if (pendingFocusIdRef.current != null) {
+      const fid = pendingFocusIdRef.current;
+      pendingFocusIdRef.current = null;
+      const fidx = combinedRows.findIndex((r) => String(r.id) === String(fid));
+      if (fidx >= 0) {
+        selectedRowRef.current = fidx;
+        setSelectedRow(fidx);
+        // Baris hasil add/edit = pilihan yang disengaja, jadi jadikan acuan
+        // master-detail. Tanpa ini effect di bawah menarik pilihan balik ke id
+        // lama sebelum selectCell sempat memperbaruinya.
+        selectedHeaderIdRef.current = String(fid);
+        setTimeout(() => {
+          gridRef.current?.scrollToCell?.({ rowIdx: fidx, idx: 1 });
+          gridRef.current?.selectCell?.({ rowIdx: fidx, idx: 1 });
+        }, 50);
+      }
+      return;
     }
-  }, [rows, selectedRow, dispatch]);
+
+    if (isPageTransitionRef.current) {
+      isPageTransitionRef.current = false;
+      // Commit selectedRow yang sudah digeser BERSAMAAN dengan setRows, supaya
+      // highlight tidak berkedip di satu frame.
+      const targetRow = Math.min(
+        Math.max(selectedRowRef.current, 0),
+        combinedRows.length - 1
+      );
+      selectedRowRef.current = targetRow;
+      setSelectedRow(targetRow);
+    } else if (pendingInitialFocusRef.current) {
+      pendingInitialFocusRef.current = false;
+      selectedRowRef.current = 0;
+      setSelectedRow(0);
+      setTimeout(() => {
+        gridRef.current?.scrollToCell?.({
+          rowIdx: 0,
+          idx: pendingSelectIdxRef.current
+        });
+        gridRef.current?.selectCell?.({
+          rowIdx: 0,
+          idx: pendingSelectIdxRef.current
+        });
+      }, 50);
+    }
+  }, [visiblePages, pageDataCache]);
+
+  // Kompensasi scrollTop setelah window bergeser, supaya baris yang sedang
+  // dilihat user tetap di posisi visual yang sama (tidak meloncat).
+  useLayoutEffect(() => {
+    if (pendingScrollAdjustment.current !== 0 && scrollContainerRef.current) {
+      const container = scrollContainerRef.current;
+      container.scrollTop += pendingScrollAdjustment.current;
+
+      scrollPositionRef.current = container.scrollTop;
+      lastScrollTopRef.current = container.scrollTop;
+      hasAdjustedScrollRef.current = true;
+      pendingScrollAdjustment.current = 0;
+    }
+  }, [rows]);
+
+  // Baris terpilih = header yang dipakai grid detail di bawahnya.
+  useEffect(() => {
+    // Selama lazy loading masih bergerak, `rows` boleh kosong sesaat dan
+    // `selectedRow` boleh menunjuk index yang barisnya belum/sudah tidak ada.
+    // Semua itu keadaan SEMENTARA, bukan "user membatalkan pilihan".
+    const sedangMuat =
+      isLoadingPanjarHeader ||
+      isFetching ||
+      isTransitioning ||
+      shouldBulkFetch ||
+      isFetchingManually;
+
+    if (rows.length === 0) {
+      // Kosong sementara (ganti window, refetch) -> pertahankan pilihan lama,
+      // supaya saat data balik masih ada acuan untuk memulihkannya dan grid
+      // detail tidak sempat ikut kosong.
+      if (sedangMuat) return;
+
+      // Benar-benar tidak ada data (filter tidak ketemu / periode kosong).
+      selectedHeaderIdRef.current = null;
+      lastDispatchedId.current = null;
+      dispatch(setHeaderData({}));
+      return;
+    }
+
+    // ID yang menang, BUKAN index. `selectedRow` digeser sebanyak filters.limit
+    // tiap kali window bergeser, jadi nilainya tidak bisa dipercaya sebagai
+    // penunjuk "baris yang dipilih user". Id cuma dicatat di handleCellClick
+    // (pemilihan yang disengaja), sehingga dia tetap menunjuk panjar yang sama
+    // sepanjang user scroll.
+    const idById = selectedHeaderIdRef.current;
+    const idxById = idById
+      ? rows.findIndex((r) => String(r.id) === String(idById))
+      : -1;
+
+    if (idxById >= 0) {
+      if (idxById !== selectedRow) {
+        // Barisnya masih di window tapi pindah index (window bergeser) ->
+        // samakan lagi supaya highlight (getRowClass) menunjuk baris yang benar.
+        selectedRowRef.current = idxById;
+        setSelectedRow(idxById);
+      }
+      const rowById = rows[idxById];
+      if (rowById.id !== lastDispatchedId.current) {
+        dispatch(setHeaderData(rowById));
+        lastDispatchedId.current = rowById.id;
+      }
+      return;
+    }
+
+    if (!idById) {
+      // Belum pernah ada pilihan (load pertama / dataset baru) -> pakai index.
+      const selectedRowData = rows[selectedRow] ?? rows[0];
+      if (selectedRowData) {
+        selectedHeaderIdRef.current = String(selectedRowData.id);
+        if (selectedRowData.id !== lastDispatchedId.current) {
+          dispatch(setHeaderData(selectedRowData));
+          lastDispatchedId.current = selectedRowData.id;
+        }
+      }
+      return;
+    }
+
+    // Ada pilihan, tapi halamannya sudah keluar dari window (user scroll jauh).
+    // Sengaja TIDAK dispatch apa pun: headerData dibiarkan menunjuk panjar yang
+    // dipilih user, jadi grid detail tetap terisi. Kalau di sini di-dispatch
+    // {}, detail akan mengosongkan diri DAN mematikan query-nya (enabled: !!id)
+    // sehingga tampak "no rows data found" padahal headernya ada isinya.
+    // Ref-nya juga dipertahankan supaya pilihan pulih otomatis saat user scroll
+    // balik ke halaman itu.
+  }, [
+    rows,
+    selectedRow,
+    dispatch,
+    isLoadingPanjarHeader,
+    isFetching,
+    isTransitioning,
+    shouldBulkFetch,
+    isFetchingManually
+  ]);
 
   useEffect(() => {
     const headerCells = document.querySelectorAll('.rdg-header-row .rdg-cell');
@@ -1795,13 +2282,11 @@ const GridPanjarHeader = () => {
           event.target instanceof HTMLTextAreaElement
         )
       ) {
-        event.preventDefault(); // Mencegah scroll pada tombol space jika bukan di input
+        event.preventDefault();
       }
     };
 
-    document.addEventListener('keydown', preventScrollOnSpace); // Menambahkan event listener saat komponen di-mount
-
-    // Menghapus event listener saat komponen di-unmount
+    document.addEventListener('keydown', preventScrollOnSpace);
     return () => {
       document.removeEventListener('keydown', preventScrollOnSpace);
     };
@@ -1818,26 +2303,21 @@ const GridPanjarHeader = () => {
     if (selectedRow !== null && rows.length > 0 && mode !== 'add') {
       const rowData = rows[selectedRow];
 
-      forms.setValue('id', rowData?.id);
-      forms.setValue('nobukti', rowData?.nobukti);
-      forms.setValue('tglbukti', rowData?.tglbukti);
-      forms.setValue('jenisorder_id', rowData?.jenisorder_id);
-      forms.setValue('jenisorder_nama', rowData?.jenisorder_nama);
-      forms.setValue('biayaemkl_id', rowData?.biayaemkl_id);
-      forms.setValue('biayaemkl_nama', rowData?.biayaemkl_nama);
-      forms.setValue('keterangan', rowData?.keterangan);
-    } else {
-      if (selectedJenisOrderan || selectedJenisOrderanNama) {
-        filtersJenisOrderan = selectedJenisOrderan;
-        filtersJenisOrderanNama = selectedJenisOrderanNama;
-      } else {
-        filtersJenisOrderan = JENISORDERMUATAN;
-        filtersJenisOrderanNama = JENISORDERMUATANNAMA;
-      }
-      forms.setValue('jenisorder_id', filtersJenisOrderan);
-      forms.setValue('jenisorder_nama', filtersJenisOrderanNama);
+      forms.setValue('id', rowData?.id ?? '');
+      forms.setValue('nobukti', rowData?.nobukti ?? '');
+      forms.setValue('tglbukti', rowData?.tglbukti ?? '');
+      // jenisorder_id & biayaemkl_id adalah uuid v7 bertipe TEXT — dikirim apa
+      // adanya (String), tidak boleh diubah case-nya atau dikonversi ke angka.
+      forms.setValue('jenisorder_id', String(rowData?.jenisorder_id ?? ''));
+      forms.setValue('jenisorder_nama', rowData?.jenisorder_nama ?? '');
+      forms.setValue('biayaemkl_id', String(rowData?.biayaemkl_id ?? ''));
+      forms.setValue('biayaemkl_nama', rowData?.biayaemkl_nama ?? '');
+      forms.setValue('keterangan', rowData?.keterangan ?? '');
     }
-  }, [forms, selectedRow, rows, mode, popOver]);
+    // JANGAN forms.reset() saat mode 'add' di sini: effect ini ikut ter-trigger
+    // setiap kali `rows` di-update background fetch selama modal Add terbuka,
+    // sehingga akan me-reset nilai yang baru diisi user.
+  }, [forms, selectedRow, rows, mode]);
 
   useEffect(() => {
     columns.forEach((col) => {
@@ -1851,37 +2331,20 @@ const GridPanjarHeader = () => {
   useEffect(() => {
     const handleEscape = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        forms.reset(); // Reset the form when the Escape key is pressed
-        setMode(''); // Reset the mode to empty
+        forms.reset();
+        setMode('');
         clearError();
         setPopOver(false);
         dispatch(clearOpenName());
       }
     };
 
-    // Add event listener for keydown when the component is mounted
     document.addEventListener('keydown', handleEscape);
-
-    // Cleanup event listener when the component is unmounted or the effect is re-run
     return () => {
       document.removeEventListener('keydown', handleEscape);
     };
   }, [forms]);
 
-  useEffect(() => {
-    // Memastikan refetch dilakukan saat filters berubah
-    if (filters !== prevFilters) {
-      refetch(); // Memanggil ulang API untuk mendapatkan data terbaru
-      setPrevFilters(filters); // Simpan filters terbaru
-    }
-  }, [filters, refetch]); // Dependency array termasuk filters dan refetch
-  useEffect(() => {
-    // Memastikan refetch dilakukan saat filters berubah
-    if (onReload) {
-      refetch(); // Memanggil ulang API untuk mendapatkan data terbaru
-      setPrevFilters(filters); // Simpan filters terbaru
-    }
-  }, [onReload, refetch]); // Dependency array termasuk filters dan refetch
   useEffect(() => {
     return () => {
       debouncedFilterUpdate.cancel();
@@ -1890,7 +2353,6 @@ const GridPanjarHeader = () => {
 
   useEffect(() => {
     if (isSubmitSuccessful) {
-      // reset();
       // Pastikan fokus terjadi setelah repaint
       requestAnimationFrame(() => setFocus('tglbukti'));
     }
@@ -1983,10 +2445,13 @@ const GridPanjarHeader = () => {
           rows={rows}
           rowKeyGetter={rowKeyGetter}
           rowClass={getRowClass}
-          onCellClick={handleCellClick}
+          onCellClick={(args) => handleCellClick(args, true)}
           headerRowHeight={70}
-          rowHeight={30}
+          rowHeight={ROW_HEIGHT}
           className={`${isDark ? 'rdg-dark' : 'rdg-light'} fill-grid`}
+          // WAJIB false: dengan virtualization aktif, sel aktif yang ter-scroll
+          // keluar layar ikut ter-unmount sehingga DOM focus jatuh ke <body> dan
+          // Arrow/PageUp/PageDown tidak lagi sampai ke grid.
           enableVirtualization={false}
           onColumnResize={onColumnResize}
           onColumnsReorder={onColumnsReorder}
@@ -2001,7 +2466,7 @@ const GridPanjarHeader = () => {
         />
         <div className="flex flex-row justify-between border border-x-0 border-b-0 border-border bg-background-grid-header p-2">
           <ActionButton
-            module="BIAYA-EXTRA-HEADER"
+            module="PANJAR-HEADER"
             onAdd={handleAdd}
             checkedRows={checkedRows}
             onEdit={handleEdit}
@@ -2011,12 +2476,20 @@ const GridPanjarHeader = () => {
             totalItems={
               allPanjarHeader ? allPanjarHeader.pagination.totalItems : 0
             }
+            startRow={startRow}
             customActions={[
               {
                 label: 'Print',
                 icon: <FaPrint />,
+                shortcut: 'P',
                 onClick: () => handleReport(),
                 className: 'bg-cyan-500 hover:bg-cyan-700'
+              },
+              {
+                label: 'Export',
+                icon: <FaFileExport />,
+                onClick: () => handleExportExcel(),
+                className: 'bg-green-600 hover:bg-green-700'
               }
             ]}
           />
@@ -2062,7 +2535,11 @@ const GridPanjarHeader = () => {
         popOver={popOver}
         setPopOver={setPopOver}
         handleClose={handleClose}
-        onSubmit={forms.handleSubmit(onSubmit as any)}
+        onSubmit={(keepOpenModal: boolean) =>
+          forms.handleSubmit((values) =>
+            onSubmit(values as any, keepOpenModal)
+          )()
+        }
         isLoadingCreate={isLoadingCreate}
         isLoadingUpdate={isLoadingUpdate}
         isLoadingDelete={isLoadingDelete}

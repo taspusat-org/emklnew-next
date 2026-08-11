@@ -28,7 +28,14 @@ import {
   useRef,
   useState
 } from 'react';
-import { FaPrint, FaSort, FaSortDown, FaSortUp, FaTimes } from 'react-icons/fa';
+import {
+  FaFileExport,
+  FaPrint,
+  FaSort,
+  FaSortDown,
+  FaSortUp,
+  FaTimes
+} from 'react-icons/fa';
 import {
   clearOpenName,
   setClearLookup
@@ -45,7 +52,6 @@ import {
   checkValidationShippingInstructionFn,
   getAllShippingInstructionHeaderFn
 } from '@/lib/apis/shippinginstruction.api';
-import { getShippingInstructionByIdFn } from '../../../../lib/apis/shippinginstruction.api';
 import {
   filterShippingInstruction,
   ShippingInstruction
@@ -75,8 +81,11 @@ import {
 } from '@/lib/utils';
 import DraggableColumn from '@/components/custom-ui/DraggableColumns';
 import { highlightText } from '@/components/custom-ui/HighlightText';
-import { useReportProgress } from '@/components/custom-ui/ReportProgressProvider';
-import { loadStimulsoftScript } from '@/lib/loadStimulsoft';
+import {
+  generateShippingInstructionExportFn,
+  generateShippingInstructionReportFn
+} from '@/lib/apis/report.api';
+import { useReportPdfContext } from '@/hooks/ReportPdfProvider';
 import { useTheme } from 'next-themes';
 import { clearOnReload } from '@/lib/store/filterSlice/filterSlice';
 import {
@@ -104,7 +113,7 @@ const GridShippingInstruction = () => {
   const { clearError } = useFormError();
   const { theme, resolvedTheme } = useTheme();
   const isDark = theme === 'dark' || resolvedTheme === 'dark';
-  const { start } = useReportProgress();
+  const { generateReport, generateExport } = useReportPdfContext();
   const { user } = useSelector((state: RootState) => state.auth);
   const { committed, onReload } = useSelector(
     (state: RootState) => state.filter
@@ -141,7 +150,7 @@ const GridShippingInstruction = () => {
   );
   const [filters, setFilters] = useState<Filter>({
     page: 1,
-    limit: 30,
+    limit: 50,
     search: '',
     sortBy: 'nobukti',
     sortDirection: 'asc',
@@ -162,6 +171,10 @@ const GridShippingInstruction = () => {
   const [isFetching, setIsFetching] = useState(false);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [visiblePages, setVisiblePages] = useState<number[]>([1, 2, 3, 4, 5]);
+  const minVisiblePage = useMemo(
+    () => Math.min(...visiblePages),
+    [visiblePages]
+  );
   const [pageDataCache, setPageDataCache] = useState<
     Map<number, ShippingInstruction[]>
   >(new Map());
@@ -179,12 +192,6 @@ const GridShippingInstruction = () => {
   const pendingSelectIdxRef = useRef<number>(1);
   const selectedRowRef = useRef<number>(0);
   const lastDispatchedId = useRef<string | null>(null);
-  // Fokus awal grid. Dipegang di ref (bukan state `isFirstLoad`) karena
-  // `setIsFirstLoad(false)` sudah terlanjur ter-commit di effect bulk-fetch,
-  // yaitu SEBELUM Row Combiner sempat mengisi `rows` — akibatnya effect yang
-  // bergantung pada `isFirstLoad` tidak pernah kebagian baris untuk diselect
-  // dan DataGrid tidak pernah memegang fokus DOM. Pola ini menyamai
-  // GridAlatbayar yang melakukan selectCell dari dalam Row Combiner.
   const pendingInitialFocusRef = useRef(true);
 
   useEffect(() => {
@@ -198,6 +205,10 @@ const GridShippingInstruction = () => {
   const shiftSelectionForWindow = (deltaRows: number) => {
     selectedRowRef.current = Math.max(0, selectedRowRef.current + deltaRows);
   };
+
+  const currentMinPage =
+    visiblePages.length > 0 ? Math.min(...visiblePages) : 1;
+  const startRow = (currentMinPage - 1) * filters.limit + 1;
 
   const effectiveLimit = shouldBulkFetch
     ? filters.limit * WINDOW_SIZE
@@ -447,10 +458,14 @@ const GridShippingInstruction = () => {
           </div>
         ),
         renderCell: (props: any) => {
-          const rowIndex = rows.findIndex((row) => row.id === props.row.id);
+          const localIndex = rows.findIndex((row) => row.id === props.row.id);
+          const absoluteNumber =
+            localIndex === -1
+              ? '—'
+              : (minVisiblePage - 1) * filters.limit + localIndex + 1;
           return (
             <div className="flex h-full w-full cursor-pointer items-center justify-center text-sm">
-              {rowIndex + 1}
+              {absoluteNumber}
             </div>
           );
         }
@@ -1418,6 +1433,25 @@ const GridShippingInstruction = () => {
     forms.reset();
   };
 
+  const handleExportExcel = async (exportFilters?: any) => {
+    const { page, limit, ...filtersWithoutLimit } = filters;
+    const activeFilters = exportFilters ?? filtersWithoutLimit;
+
+    await generateExport({
+      label: 'Export Shipping Instruction',
+      payload: {
+        search: activeFilters.search,
+        filters: activeFilters.filters,
+        sortBy: activeFilters.sortBy,
+        sortDirection: activeFilters.sortDirection
+      },
+      apiFn: generateShippingInstructionExportFn
+    });
+  };
+
+  // Cetak laporan dijalankan di BACKEND (background job + socket). Frontend
+  // hanya mengirim id baris yang dicentang dan nama template .mrt-nya. Progres
+  // render muncul di toast; PDF diambil setelah selesai.
   const handleReport = async () => {
     if (checkedRows.size === 0) {
       alert({
@@ -1435,121 +1469,22 @@ const GridShippingInstruction = () => {
       });
       return; // Stop execution if no rows are selected
     }
+
     const rowId = Array.from(checkedRows)[0];
-    const job = start('Shipping Instruction', 'pdf');
+    const { page, limit, ...filtersWithoutLimit } = filters;
 
-    try {
-      job.fetching();
-
-      //TANGGAL
-      const now = new Date();
-      const pad = (n: any) => n.toString().padStart(2, '0');
-      const tglcetak = `${pad(now.getDate())}-${pad(
-        now.getMonth() + 1
-      )}-${now.getFullYear()} ${pad(now.getHours())}:${pad(
-        now.getMinutes()
-      )}:${pad(now.getSeconds())}`;
-
-      const response = await getShippingInstructionByIdFn(rowId);
-
-      if (response.data === null || response.data.length === 0) {
-        job.fail('DATA TIDAK TERSEDIA!');
-        alert({
-          title: 'DATA TIDAK TERSEDIA!',
-          variant: 'danger',
-          submitText: 'OK'
-        });
-        return;
-      }
-
-      const { header, detail } = response.data;
-      const reportRows = header.map((row: any) => ({
-        ...row,
-        judullaporan: 'PT. TRANSPORINDO AGUNG SEJAHTERA',
-        usercetak: user.username,
-        tglcetak,
-        judul: `EKSPEDISI MUATAN KAPAL LAUT`,
-        judul2: `SHIPPING INSTRUCTION`,
-        cabang: user.cabang,
-        pelabuhan: user.pelabuhan
-      }));
-
-      const merged = detail.flatMap((item: any) =>
-        (item.rincian || []).map((rincian: any) => ({
-          ...item,
-          rincian_id: rincian.id,
-          rincian_comodity: rincian.comodity,
-          rincian_keterangan: rincian.keterangan,
-          rincian_nocontainer: rincian.nocontainer,
-          rincian_noseal: rincian.noseal,
-          rincian_orderan_muatan: rincian.orderanmuatan_nobukti,
-          rincian_shipper_nama: rincian.shipper_nama,
-          rincian_shippinginstructiondetail_id:
-            rincian.shippinginstructiondetail_id,
-          rincian_shippinginstructiondetail_nobukti:
-            rincian.shippinginstructiondetail_nobukti
-        }))
-      );
-
-      sessionStorage.setItem('dataId', rowId as unknown as string);
-
-      job.rendering();
-      await loadStimulsoftScript();
-      const Stimulsoft = (window as any).Stimulsoft;
-      Stimulsoft.Base.StiFontCollection.addOpentypeFontFile(
-        '/fonts/tahoma.ttf',
-        'Tahoma'
-      ); // Regular
-      Stimulsoft.Base.StiFontCollection.addOpentypeFontFile(
-        '/fonts/tahomabd.ttf',
-        'Tahoma'
-      ); // Bold
-      Stimulsoft.Base.StiLicense.Key =
-        '6vJhGtLLLz2GNviWmUTrhSqnOItdDwjBylQzQcAOiHksEid1Z5nN/hHQewjPL/4/AvyNDbkXgG4Am2U6dyA8Ksinqp' +
-        '6agGqoHp+1KM7oJE6CKQoPaV4cFbxKeYmKyyqjF1F1hZPDg4RXFcnEaYAPj/QLdRHR5ScQUcgxpDkBVw8XpueaSFBs' +
-        'JVQs/daqfpFiipF1qfM9mtX96dlxid+K/2bKp+e5f5hJ8s2CZvvZYXJAGoeRd6iZfota7blbsgoLTeY/sMtPR2yutv' +
-        'gE9TafuTEhj0aszGipI9PgH+A/i5GfSPAQel9kPQaIQiLw4fNblFZTXvcrTUjxsx0oyGYhXslAAogi3PILS/DpymQQ' +
-        '0XskLbikFsk1hxoN5w9X+tq8WR6+T9giI03Wiqey+h8LNz6K35P2NJQ3WLn71mqOEb9YEUoKDReTzMLCA1yJoKia6Y' +
-        'JuDgUf1qamN7rRICPVd0wQpinqLYjPpgNPiVqrkGW0CQPZ2SE2tN4uFRIWw45/IITQl0v9ClCkO/gwUtwtuugegrqs' +
-        'e0EZ5j2V4a1XDmVuJaS33pAVLoUgK0M8RG72';
-
-      const report = new Stimulsoft.Report.StiReport();
-      const dataSet = new Stimulsoft.System.Data.DataSet('Data');
-
-      // Load the report template (MRT file)
-      report.loadFile('/reports/LaporanShippingInstruction.mrt');
-      report.dictionary.dataSources.clear();
-      dataSet.readJson({
-        data: reportRows,
-        detail: merged
-      });
-
-      report.regData(dataSet.dataSetName, '', dataSet);
-      report.dictionary.synchronize();
-
-      await new Promise<void>((resolve, reject) => {
-        report.renderAsync(() => {
-          job.exporting();
-          report.exportDocumentAsync((pdfData: any) => {
-            try {
-              const pdfBlob = new Blob([new Uint8Array(pdfData)], {
-                type: 'application/pdf'
-              });
-              sessionStorage.setItem('pdfUrl', URL.createObjectURL(pdfBlob));
-              job.finish(() =>
-                window.open('/reports/shippinginstruction', '_blank')
-              );
-              resolve();
-            } catch (err) {
-              reject(err);
-            }
-          }, Stimulsoft.Report.StiExportFormat.Pdf);
-        });
-      });
-    } catch (error) {
-      job.fail('Gagal membuat laporan PDF');
-      console.error('[handleReport PDF]', error);
-    }
+    await generateReport({
+      label: 'Shipping Instruction',
+      payload: {
+        mrtName: 'LaporanShippingInstruction.mrt',
+        id: rowId,
+        judullaporan: 'PT. TRANSPORINDO AGUNG SEJAHTERA'
+      },
+      apiFn: generateShippingInstructionReportFn,
+      // Tombol Export di toolbar viewer — memakai filter yang sama dengan
+      // laporan yang sedang dibuka (sama seperti di halaman /reports/*).
+      onExport: () => handleExportExcel(filtersWithoutLimit)
+    });
   };
 
   // const handleReport = async () => {
@@ -2120,8 +2055,6 @@ const GridShippingInstruction = () => {
     setRows([]);
     resetBufferingCache();
 
-    // Fokus baru bisa dipasang setelah baris hasil reload benar-benar ada;
-    // pemasangannya diserahkan ke Row Combiner (lihat pendingInitialFocusRef).
     pendingInitialFocusRef.current = true;
 
     // ✅ Reset onReload setelah selesai diproses
@@ -2287,11 +2220,6 @@ const GridShippingInstruction = () => {
       selectedRowRef.current = targetRow;
       setSelectedRow(targetRow);
     } else if (pendingInitialFocusRef.current) {
-      // Baris pertama masuk (load awal / setelah Reload): serahkan fokus DOM ke
-      // DataGrid. Tanpa selectCell, tidak ada sel ber-tabindex 0 yang difokus
-      // sehingga PageUp/PageDown/ArrowUp/ArrowDown baru jalan setelah user
-      // meng-klik salah satu baris. setTimeout menunggu render `rows` selesai,
-      // supaya posisi (0, 1) sudah berada dalam selection bounds grid.
       pendingInitialFocusRef.current = false;
       selectedRowRef.current = 0;
       setSelectedRow(0);
@@ -2551,12 +2479,19 @@ const GridShippingInstruction = () => {
                 ? allShippingInstructionHeader.pagination.totalItems
                 : 0
             }
+            startRow={startRow}
             customActions={[
               {
                 label: 'Print',
                 icon: <FaPrint />,
                 onClick: () => handleReport(),
                 className: 'bg-cyan-500 hover:bg-cyan-700'
+              },
+              {
+                label: 'Export',
+                icon: <FaFileExport />,
+                onClick: () => handleExportExcel(),
+                className: 'bg-green-600 hover:bg-green-700'
               }
             ]}
           />

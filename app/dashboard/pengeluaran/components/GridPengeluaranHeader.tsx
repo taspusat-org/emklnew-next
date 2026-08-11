@@ -91,12 +91,7 @@ import { checkValidationKasGantungFn } from '@/lib/apis/kasgantungheader.api';
 import { formatCurrency, formatDateToDDMMYYYY } from '@/lib/utils';
 import { useFormError } from '@/lib/hooks/formErrorContext';
 import FilterOptions from '@/components/custom-ui/FilterOptions';
-import {
-  getPengeluaranDetailFn,
-  getPengeluaranHeaderByIdFn,
-  getPengeluaranHeaderFn
-} from '@/lib/apis/pengeluaranheader.api';
-import { numberToTerbilang } from '@/lib/utils/terbilang';
+import { getPengeluaranHeaderFn } from '@/lib/apis/pengeluaranheader.api';
 import JsxParser from 'react-jsx-parser';
 import {
   cancelPreviousRequest,
@@ -110,8 +105,11 @@ import { highlightText } from '@/components/custom-ui/HighlightText';
 import { useTheme } from 'next-themes';
 import { LoadRowsRenderer } from '@/components/LoadRows';
 import { EmptyRowsRenderer } from '@/components/EmptyRows';
-import { useReportProgress } from '@/components/custom-ui/ReportProgressProvider';
-import { loadStimulsoftScript } from '@/lib/loadStimulsoft';
+import { useReportPdfContext } from '@/hooks/ReportPdfProvider';
+import {
+  generatePengeluaranExportFn,
+  generatePengeluaranReportFn
+} from '@/lib/apis/report.api';
 import { useSession } from 'next-auth/react';
 import { clearOnReload } from '@/lib/store/filterSlice/filterSlice';
 
@@ -133,7 +131,7 @@ const GridPengeluaranHeader = () => {
   const [isFirstLoad, setIsFirstLoad] = useState(true);
   const dispatch = useDispatch();
   const searchParams = useSearchParams();
-  const { start } = useReportProgress();
+  const { generateReport, generateExport } = useReportPdfContext();
   const { data: session, status } = useSession();
 
   const [totalPages, setTotalPages] = useState(1);
@@ -204,26 +202,10 @@ const GridPengeluaranHeader = () => {
   const ROW_HEIGHT = 27;
   const jumpToFirstRef = useRef(false);
   const jumpToLastRef = useRef(false);
-  // Id baris yang harus difokuskan Row Combiner setelah window settle pasca
-  // simpan. Fokus by-id lebih andal daripada selectCell by-index: index bisa
-  // meleset karena window pagination ikut bergeser saat re-render. Selama ref
-  // ini ter-set, Combiner TIDAK menjalankan cabang else (scroll ke row 0).
   const pendingFocusIdRef = useRef<string | null>(null);
-  // Diset true selama window settle pasca-mutasi (add/edit) untuk memblokir
-  // kedua data-effect memproses ulang hasil refetch — yang kalau tidak diblokir
-  // menimpa fokus ke baris 1. Ref (bukan state) supaya resetnya tidak memicu
-  // effect lagi. Pola ini disalin dari GridAlatbayar.
   const suppressRefetchRef = useRef(false);
-  // react-data-grid menandai sel yang sedang terpilih dengan tabindex=0 (sel lain
-  // -1). `selectCell()` sudah menetapkan sel terpilih -- highlight baris benar --
-  // tapi fokus DOM-nya belum tentu ikut: saat form ditutup pasca-simpan, Radix
-  // Dialog mengembalikan fokus ke tombol pemicu dan menimpa fokus sel. Karena
-  // onCloseAutoFocus di FormPengeluaran kini mematikan pengembalian itu, fokus
-  // tertinggal di <body>, jadi grid harus mengklaimnya sendiri di sini.
   const focusSelectedCell = () => {
     const active = document.activeElement as HTMLElement | null;
-    // Jangan rebut fokus kalau user sudah sengaja pindah ke input (mis. kolom
-    // filter atau search) selama jendela settle pasca-simpan.
     if (
       active &&
       (active.tagName === 'INPUT' ||
@@ -237,50 +219,38 @@ const GridPengeluaranHeader = () => {
     );
     cell?.focus({ preventScroll: true });
   };
-  // ⚠️ DIAGNOSTIK SEMENTARA — hapus setelah bug fokus pasca-save selesai.
-  // Filter console dengan "[FOKUS]" untuk melihat seluruh rantainya.
-  const dbg = (...a: any[]) => console.log('[FOKUS]', ...a);
-  const dbgActive = (tag: string) =>
-    setTimeout(() => {
-      const el = document.activeElement as HTMLElement | null;
-      dbg(`activeElement@${tag}:`, el?.tagName, el?.className?.slice?.(0, 60));
-    }, 0);
-  // Index display kolom yang akan di-focus setelah re-fetch (sort/filter).
-  // Default 1 = lewati kolom 'nomor' (idx 0).
   const pendingSelectIdxRef = useRef<number>(1);
-  // Filter input yang sedang fokus -- agar focus tetap di sana setelah re-fetch
-  // (Row Combiner mengembalikan focus + caret).
   const activeFilterInputRef = useRef<HTMLElement | null>(null);
-  // Versi ref dari isScrolling: di-set sinkron agar pengecekan di dalam
-  // handleScroll yang sama langsung melihat nilai terbaru. State `isScrolling`
-  // bersifat async, sehingga pada navigasi keyboard (hanya 1 event scroll per
-  // tekan PageUp/PageDown) closure-nya masih `false` dan pemicu fetch halaman
-  // berikutnya tidak pernah jalan. Ref ini mencegah masalah tsb.
   const isScrollingRef = useRef(false);
-  // Modalitas input terakhir: 'keyboard' (Arrow/Page) atau 'pointer' (wheel/drag
-  // scrollbar). Dipakai utk menentukan apakah selectCell harus di-re-anchor
-  // ke baris data yg sama setelah window-shift.
   const interactionModeRef = useRef<'keyboard' | 'pointer'>('pointer');
-  // Diset saat window benar-benar bergeser (shiftSelectionForWindow). Menandai
-  // apakah pergeseran itu dari keyboard, sehingga useLayoutEffect tahu apakah
-  // perlu re-anchor selectCell. Mouse scroll TIDAK boleh memindahkan sel aktif.
   const reanchorFromKeyboardRef = useRef(false);
-  // Menandai bahwa sedang ada transisi halaman (window-shift) agar Row Combiner
-  // tahu harus commit selectedRow bersamaan dengan setRows.
   const isPageTransitionRef = useRef(false);
+  const gridCellHadFocusRef = useRef(false);
+  const getSelectedGridCell = (): HTMLElement | null =>
+    gridRef.current?.element?.querySelector<HTMLElement>(
+      ':scope > [role="row"] > [role="gridcell"][tabindex="0"]'
+    ) ?? null;
 
-  // Saat window pagination bergeser (halaman atas/bawah keluar dari window),
-  // index setiap baris di array `rows` ikut bergeser sebanyak filters.limit.
-  // Fungsi ini menjaga agar baris DATA yang sama tetap ter-select dengan HANYA
-  // menggeser index (selectedRowRef) -- highlight digambar via getRowClass.
-  // CATATAN: setSelectedRow TIDAK dipanggil di sini -- ditunda ke Row Combiner
-  // agar commit bersamaan dengan setRows. Jika selectedRow di-update sekarang,
-  // akan ada 1 frame di mana selectedRow sudah bergeser tapi `rows` belum
-  // -> highlight kuning "berkedip".
+  const isSelectedGridCellFocused = () => {
+    const cell = getSelectedGridCell();
+    return cell !== null && cell === document.activeElement;
+  };
+
+  const restoreGridCellFocus = () => {
+    if (!gridCellHadFocusRef.current) return;
+    gridCellHadFocusRef.current = false;
+    getSelectedGridCell()?.focus({ preventScroll: true });
+  };
+
   const shiftSelectionForWindow = (deltaRows: number) => {
+    const fromKeyboard = interactionModeRef.current === 'keyboard';
+    reanchorFromKeyboardRef.current = fromKeyboard;
+
+    gridCellHadFocusRef.current = isSelectedGridCellFocused();
+    if (!fromKeyboard) return;
+
     const next = Math.max(0, selectedRowRef.current + deltaRows);
     selectedRowRef.current = next;
-    reanchorFromKeyboardRef.current = interactionModeRef.current === 'keyboard';
   };
   const forms = useForm<PengeluaranHeaderInput>({
     resolver:
@@ -343,7 +313,8 @@ const GridPengeluaranHeader = () => {
   useEffect(() => {
     selectedRowRef.current = selectedRow;
   }, [selectedRow]);
-  const selectedHeaderIdRef = useRef<string | null>(null);
+  const lastDispatchedId = useRef<string | null>(null);
+  const headerClearedRef = useRef(false);
 
   const {
     data: allData,
@@ -1872,14 +1843,6 @@ const GridPengeluaranHeader = () => {
     const rowIndex = rows.findIndex((r) => r.id === clickedRow.id);
     if (rowIndex !== -1) {
       setSelectedRow(rowIndex);
-      // MASTER-DETAIL: ini SATU-SATUNYA tempat id header yang dipilih dicatat.
-      // onSelectedCellChange memanggil handler ini untuk semua pemilihan yang
-      // benar-benar disengaja (klik, panah keyboard, selectCell setelah
-      // sort/filter). Pergeseran window saat scroll TIDAK lewat sini — dia cuma
-      // menggeser `selectedRow` — sehingga id pilihan user tidak ikut bergeser.
-      if (!isTransitioning && !isFetching) {
-        selectedHeaderIdRef.current = String(clickedRow.id);
-      }
     }
   }
   const orderedColumns = useMemo(() => {
@@ -2192,19 +2155,6 @@ const GridPengeluaranHeader = () => {
     dispatch(setClearLookup(true));
     clearError();
     setIsFetchingManually(true);
-    dbg('1) onSuccess masuk', {
-      mode,
-      keepOpenModal,
-      dialogTetapTerbuka: keepOpenModal,
-      focusId,
-      indexOnPage,
-      pageNumber,
-      fetchedPages,
-      pagedDataKeys: Object.keys(pagedData ?? {}),
-      pagedDataCounts: Object.entries(pagedData ?? {}).map(
-        ([k, v]) => `${k}:${(v as any[])?.length}`
-      )
-    });
     // Tandai baris yang baru disimpan agar Row Combiner memfokuskannya by-id
     // setelah data window settle (lihat pendingFocusIdRef).
     pendingFocusIdRef.current = focusId ?? null;
@@ -2242,16 +2192,6 @@ const GridPengeluaranHeader = () => {
             ? loadedRows.findIndex((r) => String(r.id) === String(focusId))
             : -1;
         const targetIndex = focusIdx >= 0 ? focusIdx : indexOnPage;
-        dbg('2) hasil GET redis', {
-          isArray: Array.isArray(response.data),
-          len: Array.isArray(response.data) ? response.data.length : null,
-          rawJikaBukanArray: Array.isArray(response.data)
-            ? undefined
-            : response.data,
-          focusIdx,
-          targetIndex,
-          idBarisTermuat: loadedRows.slice(0, 5).map((r) => r.id)
-        });
 
         setSelectedRow(targetIndex);
         setPageDataCache(
@@ -2294,7 +2234,6 @@ const GridPengeluaranHeader = () => {
           // dialog (dan sempat menggeser fokus) setelah animasi tutup selesai,
           // yang bisa mendarat belakangan daripada selectCell di 50/200ms.
           [350, 700].forEach((d) => setTimeout(focusSelectedCell, d));
-          setTimeout(() => dbgActive('AKHIR-harusnya-gridcell'), 1100);
           setTimeout(() => {
             // Bersihkan HANYA kalau masih id kita: jangan wipe fokus yang
             // sudah di-set alur lain (mis. hapus baris) di sela-sela ini.
@@ -2314,7 +2253,6 @@ const GridPengeluaranHeader = () => {
 
       setIsDataUpdated(false);
     } catch (error) {
-      dbg('!!) onSuccess MELEMPAR -> fokus dibatalkan', error);
       console.error('Error during onSuccess:', error);
       // WAJIB dilepas di sini juga. Kalau GET redis di atas gagal, setTimeout
       // pelepas tak pernah terpasang sehingga ref tersangkut true selamanya dan
@@ -2460,37 +2398,53 @@ const GridPengeluaranHeader = () => {
     }
   };
 
-  const handleEdit = async () => {
-    if (selectedRow !== null) {
-      const rowData = rows[selectedRow];
+  // `selectedRow` selalu number (default 0), jadi cek `!== null` tidak pernah
+  // menahan apa pun: saat grid kosong dialog tetap terbuka membawa nilai baris
+  // lama. Yang menentukan adalah ada/tidaknya baris di index terpilih.
+  const hasSelectedRow = rows.length > 0 && rows[selectedRow] !== undefined;
 
-      setPopOver(true);
-      setMode('edit');
-    }
+  // Tombol tetap aktif walau grid kosong; guard-nya berupa alert supaya user
+  // tahu alasannya, bukan tombol mati tanpa penjelasan.
+  const alertNoSelectedRow = () => {
+    alert({
+      title: 'HARAP PILIH DATA TERLEBIH DAHULU!',
+      variant: 'danger',
+      submitText: 'OK'
+    });
   };
-  const handleDelete = async () => {
-    if (selectedRow !== null) {
-      const rowData = rows[selectedRow];
 
-      try {
-        setMode('delete');
-        setPopOver(true);
-      } catch (error) {
-        console.error('Error during delete validation:', error);
-      }
+  const handleEdit = () => {
+    if (!hasSelectedRow) {
+      alertNoSelectedRow();
+      return;
     }
+    setPopOver(true);
+    setMode('edit');
+  };
+
+  const handleDelete = () => {
+    if (!hasSelectedRow) {
+      alertNoSelectedRow();
+      return;
+    }
+    setMode('delete');
+    setPopOver(true);
   };
 
   const handleView = () => {
-    if (selectedRow !== null) {
-      setMode('view');
-      setPopOver(true);
+    if (!hasSelectedRow) {
+      alertNoSelectedRow();
+      return;
     }
+    setMode('view');
+    setPopOver(true);
   };
 
+  // Cetak bukti dijalankan di BACKEND (background job + socket). Frontend
+  // hanya mengirim id baris yang dicentang plus nama template .mrt-nya;
+  // pengambilan header + rincian, hitung terbilang, dan render Stimulsoft
+  // semuanya di sana. Progres muncul di toast, PDF-nya dibuka di modal viewer.
   const handleReport = async () => {
-    const job = start('Pengeluaran header', 'pdf');
-
     if (checkedRows.size === 0) {
       alert({
         title: 'PILIH DATA YANG INGIN DI CETAK!',
@@ -2509,107 +2463,43 @@ const GridPengeluaranHeader = () => {
     }
     const rowId = Array.from(checkedRows)[0];
 
-    try {
-      job.fetching();
-
-      dispatch(setProcessing());
-
-      //TANGGAL
-      const now = new Date();
-      const pad = (n: any) => n.toString().padStart(2, '0');
-      const tglcetak = `${pad(now.getDate())}-${pad(
-        now.getMonth() + 1
-      )}-${now.getFullYear()} ${pad(now.getHours())}:${pad(
-        now.getMinutes()
-      )}:${pad(now.getSeconds())}`;
-
-      const { page, limit, ...filtersWithoutLimit } = filters;
-      const response = await getPengeluaranHeaderByIdFn(rowId);
-      if (!response.data?.length) {
-        alert({
-          title: 'TERJADI KESALAHAN SAAT MEMBUAT LAPORAN!',
-          variant: 'danger',
-          submitText: 'OK'
-        });
-        return;
-      }
-      const selectedRowNobukti = rows.find((r) => r.id === rowId)?.nobukti;
-      const responseDetail = await getPengeluaranDetailFn({
-        filters: { nobukti: selectedRowNobukti }
-      });
-      const totalNominal =
-        responseDetail.data.reduce(
-          (sum: number, item: any) =>
-            sum + Math.round((Number(item.nominal) || 0) * 100),
-          0
-        ) / 100;
-
-      const reportRows = response.data.map((row: any) => ({
-        ...row,
-        judullaporan: 'Laporan Pengeluaran',
-        usercetak: String(session?.user.username || ''),
-        tglcetak,
-        terbilang: numberToTerbilang(totalNominal),
-        judul: `Bukti Pengeluaran KAS EMKL`
-      }));
-
-      sessionStorage.setItem(
-        'filtersWithoutLimit',
-        JSON.stringify(filtersWithoutLimit)
-      );
-      sessionStorage.setItem('dataId', rowId as unknown as string);
-      job.rendering();
-
-      // Dynamically import Stimulsoft and generate the PDF report
-      await loadStimulsoftScript();
-      const Stimulsoft = (window as any).Stimulsoft;
-      Stimulsoft.Base.StiFontCollection.addOpentypeFontFile(
-        '/fonts/tahoma.ttf',
-        'Tahoma'
-      );
-
-      Stimulsoft.Base.StiFontCollection.addOpentypeFontFile(
-        '/fonts/tahomabd.ttf',
-        'Tahoma'
-      );
-      Stimulsoft.Base.StiLicense.Key =
-        '6vJhGtLLLz2GNviWmUTrhSqnOItdDwjBylQzQcAOiHksEid1Z5nN/hHQewjPL/4/AvyNDbkXgG4Am2U6dyA8Ksinqp' +
-        '6agGqoHp+1KM7oJE6CKQoPaV4cFbxKeYmKyyqjF1F1hZPDg4RXFcnEaYAPj/QLdRHR5ScQUcgxpDkBVw8XpueaSFBs' +
-        'JVQs/daqfpFiipF1qfM9mtX96dlxid+K/2bKp+e5f5hJ8s2CZvvZYXJAGoeRd6iZfota7blbsgoLTeY/sMtPR2yutv' +
-        'gE9TafuTEhj0aszGipI9PgH+A/i5GfSPAQel9kPQaIQiLw4fNblFZTXvcrTUjxsx0oyGYhXslAAogi3PILS/DpymQQ' +
-        '0XskLbikFsk1hxoN5w9X+tq8WR6+T9giI03Wiqey+h8LNz6K35P2NJQ3WLn71mqOEb9YEUoKDReTzMLCA1yJoKia6Y' +
-        'JuDgUf1qamN7rRICPVd0wQpinqLYjPpgNPiVqrkGW0CQPZ2SE2tN4uFRIWw45/IITQl0v9ClCkO/gwUtwtuugegrqs' +
-        'e0EZ5j2V4a1XDmVuJaS33pAVLoUgK0M8RG72';
-      const report = new Stimulsoft.Report.StiReport();
-      const dataSet = new Stimulsoft.System.Data.DataSet('Data');
-      report.loadFile('/reports/LaporanPengeluaran.mrt');
-      report.dictionary.dataSources.clear();
-      dataSet.readJson({ data: reportRows });
-      report.regData(dataSet.dataSetName, '', dataSet);
-      report.dictionary.synchronize();
-      await new Promise<void>((resolve, reject) => {
-        report.renderAsync(() => {
-          job.exporting();
-          report.exportDocumentAsync((pdfData: any) => {
-            try {
-              const blob = new Blob([new Uint8Array(pdfData)], {
-                type: 'application/pdf'
-              });
-              sessionStorage.setItem('pdfUrl', URL.createObjectURL(blob));
-              job.finish(() => window.open('/reports/pengeluaran', '_blank'));
-              resolve();
-            } catch (err) {
-              reject(err);
-            }
-          }, Stimulsoft.Report.StiExportFormat.Pdf);
-        });
-      });
-    } catch (error) {
-      dispatch(setProcessed());
-    } finally {
-      dispatch(setProcessed());
-    }
+    await generateReport({
+      label: 'Pengeluaran',
+      payload: {
+        mrtName: 'LaporanPengeluaran.mrt',
+        id: String(rowId),
+        judullaporan: 'Laporan Pengeluaran'
+      },
+      apiFn: generatePengeluaranReportFn,
+      // Tombol Export di toolbar viewer memakai filter grid yang sedang aktif,
+      // sama seperti tombol Export di toolbar bawah.
+      onExport: () => handleExportExcel()
+    });
   };
+
+  /**
+   * Export Excel dijalankan di BACKEND (background job + socket). Frontend
+   * hanya mengirim filter yang sedang aktif di grid; progresnya muncul di
+   * toast, dan setelah selesai toast menampilkan tombol Download.
+   *
+   * Beda dengan Print yang mencetak SATU bukti terpilih, export ini mengambil
+   * seluruh baris yang lolos filter.
+   */
+  const handleExportExcel = async () => {
+    const { page, limit, ...filtersWithoutLimit } = filters;
+
+    await generateExport({
+      label: 'Export Pengeluaran',
+      payload: {
+        search: filtersWithoutLimit.search,
+        filters: filtersWithoutLimit.filters,
+        sortBy: filtersWithoutLimit.sortBy,
+        sortDirection: filtersWithoutLimit.sortDirection
+      },
+      apiFn: generatePengeluaranExportFn
+    });
+  };
+
   document.querySelectorAll('.column-headers').forEach((element) => {
     element.classList.remove('c1kqdw7y7-0-0-beta-47');
   });
@@ -2736,7 +2626,6 @@ const GridPengeluaranHeader = () => {
   }, []);
   useEffect(() => {
     if (isFirstLoad && gridRef.current && rows.length > 0) {
-      dbg('6!) effect isFirstLoad MEMAKSA baris 0 <-- perebut fokus');
       setSelectedRow(0);
       gridRef.current.selectCell({ rowIdx: 0, idx: 1 });
       dispatch(setHeaderData(rows[0]));
@@ -2851,11 +2740,9 @@ const GridPengeluaranHeader = () => {
         // Combiner, jadi lompatan ke baris 0 di sini harus dilewati.
         // GridAlatbayar (referensi resep ini) memang tidak punya blok ini.
         if (pendingFocusIdRef.current != null || suppressRefetchRef.current) {
-          dbg('5) ekor bulk-fetch DILEWATI (guard aktif)');
           return;
         }
         if (gridRef.current) {
-          dbg('5!) ekor bulk-fetch MEMAKSA baris 0 <-- perebut fokus');
           setSelectedRow(0);
           gridRef.current.scrollToCell({ rowIdx: 0, idx: 1 });
         }
@@ -2975,11 +2862,6 @@ const GridPengeluaranHeader = () => {
     });
 
     if (combinedRows.length === 0) {
-      dbg('3!) Combiner jalan tapi combinedRows KOSONG -> tidak ada fokus', {
-        visiblePages,
-        cacheKeys: Array.from(pageDataCache.keys()),
-        pendingFocusId: pendingFocusIdRef.current
-      });
     }
 
     if (combinedRows.length > 0) {
@@ -2999,12 +2881,6 @@ const GridPengeluaranHeader = () => {
         const fidx = combinedRows.findIndex(
           (r) => String(r.id) === String(fid)
         );
-        dbg('3) Combiner cabang FOKUS', {
-          fid,
-          fidx,
-          totalCombined: combinedRows.length,
-          visiblePages
-        });
         if (fidx >= 0) {
           selectedRowRef.current = fidx;
           setSelectedRow(fidx);
@@ -3012,24 +2888,11 @@ const GridPengeluaranHeader = () => {
             gridRef.current?.scrollToCell?.({ rowIdx: fidx, idx: 1 });
             gridRef.current?.selectCell?.({ rowIdx: fidx, idx: 1 });
             focusSelectedCell();
-            dbg('4) selectCell dipanggil utk rowIdx', fidx);
-            dbgActive('setelah-selectCell');
           }, 50);
         } else {
-          dbg('!! id tidak ketemu di combinedRows', {
-            cari: fid,
-            contohId: combinedRows.slice(0, 5).map((r) => r.id)
-          });
         }
         return;
       }
-      dbg('3x) Combiner JALAN TANPA pendingFocusId', {
-        totalCombined: combinedRows.length,
-        jumpFirst: jumpToFirstRef.current,
-        jumpLast: jumpToLastRef.current,
-        pageTransition: isPageTransitionRef.current,
-        suppress: suppressRefetchRef.current
-      });
 
       if (jumpToFirstRef.current) {
         jumpToFirstRef.current = false;
@@ -3086,6 +2949,14 @@ const GridPengeluaranHeader = () => {
           }
         }, 50);
       }
+    } else {
+      // Window kosong = tidak ada baris sama sekali. Tanpa ini `rows` menyimpan
+      // hasil query sebelumnya.
+      setRows((prev) => (prev.length > 0 ? [] : prev));
+      selectedRowRef.current = 0;
+      setSelectedRow(0);
+      isPageTransitionRef.current = false;
+      pendingScrollAdjustment.current = 0;
     }
   }, [visiblePages, pageDataCache]);
 
@@ -3117,68 +2988,35 @@ const GridPengeluaranHeader = () => {
         );
         const idx = idxFromKey >= 0 ? idxFromKey : 1;
         gridRef.current?.selectCell?.({ rowIdx: targetRow, idx });
+        // selectCell sudah memindahkan DOM focus ke sel target.
+        gridCellHadFocusRef.current = false;
+      } else {
+        restoreGridCellFocus();
       }
       reanchorFromKeyboardRef.current = false;
     }
   }, [rows]);
 
   useEffect(() => {
-    // Selama lazy loading masih bergerak, `rows` boleh kosong sesaat dan
-    // `selectedRow` boleh menunjuk ke index yang barisnya belum/sudah tidak ada.
-    // Semua itu keadaan SEMENTARA, bukan "user membatalkan pilihan".
+    if (rows.length > 0 && selectedRow !== null) {
+      const selectedRowData = rows[selectedRow];
+      if (selectedRowData?.id !== lastDispatchedId.current) {
+        dispatch(setHeaderData(selectedRowData));
+        lastDispatchedId.current = selectedRowData?.id;
+      }
+      headerClearedRef.current = false;
+      return;
+    }
+
+    // Grid master-detail: kalau header benar-benar kosong (bukan sekadar sedang
+    // memuat), detail harus ikut kosong.
     const sedangMuat =
       isLoadingData || isFetching || isTransitioning || shouldBulkFetch;
-
-    if (rows.length === 0) {
-      // Kosong sementara (Ctrl+End, ganti window, refetch) -> pertahankan
-      // pilihan lama. Dulu di sini id-nya ikut dibuang, jadi begitu data balik
-      // tidak ada lagi acuan untuk memulihkan pilihan dan detail ikut kosong.
-      if (sedangMuat) return;
-
-      // Benar-benar tidak ada data (filter tidak ketemu / periode kosong).
-      selectedHeaderIdRef.current = null;
+    if (rows.length === 0 && !sedangMuat && !headerClearedRef.current) {
+      headerClearedRef.current = true;
+      lastDispatchedId.current = null;
       dispatch(setHeaderData({}));
-      return;
     }
-
-    // ID yang menang, BUKAN index. `selectedRow` digeser sebanyak filters.limit
-    // tiap kali window bergeser, jadi nilainya tidak bisa dipercaya sebagai
-    // penunjuk "baris yang dipilih user". Id dicatat hanya di handleCellClick
-    // (pemilihan yang disengaja), sehingga dia tetap menunjuk bukti yang sama
-    // sepanjang user scroll.
-    const idById = selectedHeaderIdRef.current;
-    const idxById = idById
-      ? rows.findIndex((r) => String(r.id) === String(idById))
-      : -1;
-
-    if (idxById >= 0) {
-      if (idxById !== selectedRow) {
-        // Barisnya masih di window tapi pindah index -> samakan lagi supaya
-        // highlight (getRowClass) muncul di baris yang benar.
-        selectedRowRef.current = idxById;
-        setSelectedRow(idxById);
-      }
-      dispatch(setHeaderData(rows[idxById]));
-      return;
-    }
-
-    if (!idById) {
-      // Belum pernah ada pilihan (load pertama) -> pakai index apa adanya.
-      const selectedRowData = rows[selectedRow] ?? rows[0];
-      if (selectedRowData) {
-        selectedHeaderIdRef.current = String(selectedRowData.id);
-        dispatch(setHeaderData(selectedRowData));
-      }
-      return;
-    }
-
-    // Ada pilihan, tapi halamannya sudah keluar dari window (user scroll jauh).
-    // Sengaja TIDAK dispatch apa pun: headerData dibiarkan menunjuk bukti yang
-    // dipilih user, jadi grid detail tetap terisi. Kalau di sini di-dispatch
-    // undefined/{}, detail akan mengosongkan diri DAN mematikan query-nya
-    // (enabled: !!nobukti) sehingga tampak kosong padahal headernya ada isinya.
-    // Ref-nya juga dipertahankan supaya pilihan otomatis pulih saat user
-    // scroll balik ke halaman itu.
   }, [
     rows,
     selectedRow,
@@ -3304,7 +3142,6 @@ const GridPengeluaranHeader = () => {
       debouncedFilterUpdate.cancel();
     };
   }, []);
-  console.log('committed', committed);
 
   return (
     <div className={`flex h-[100%] w-full justify-center`}>
@@ -3422,7 +3259,7 @@ const GridPengeluaranHeader = () => {
           <ActionButton
             module="PENGELUARAN"
             onAdd={handleAdd}
-            // checkedRows={checkedRows}
+            checkedRows={checkedRows}
             onDelete={handleDelete}
             onView={handleView}
             onEdit={handleEdit}
@@ -3435,6 +3272,12 @@ const GridPengeluaranHeader = () => {
                 icon: <FaPrint />,
                 onClick: () => handleReport(),
                 className: 'bg-cyan-500 hover:bg-cyan-700'
+              },
+              {
+                label: 'Export',
+                icon: <FaFileExport />,
+                onClick: () => handleExportExcel(),
+                className: 'bg-green-600 hover:bg-green-700'
               }
             ]}
           />

@@ -457,6 +457,13 @@ table {
   color: inherit !important;
   padding: 0 !important;
 }
+/* Grid rincian bersarang: aturan ".rdg > .rdg-row:last-child .rdg-cell" milik
+   grid induk memakai descendant selector, jadi ikut mematikan garis antar baris
+   di dalam grid rincian saat blok-nya jadi baris terakhir. Kembalikan di sini,
+   kecuali untuk baris terakhir grid rincian itu sendiri. */
+.rincian-block-cell .rdg > .rdg-row:not(:last-child) > .rdg-cell {
+  border-bottom: 1px solid hsla(var(--border));
+}
 .s8wc6fl7-0-0-beta-47[tabindex='0'] {
   color: black;
 }

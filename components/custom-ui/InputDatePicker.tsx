@@ -114,8 +114,7 @@ const InputDatePicker: React.FC<DateInputProps> = ({
                 e.stopPropagation();
                 focusMaskedInput();
               }}
-              className="z-5 absolute inset-0 flex cursor-text select-none items-center rounded-sm bg-background-card px-3 text-sm text-input-text"
-              style={{ right: showCalendar ? '36px' : '0' }}
+              className="z-5 absolute inset-0 flex cursor-text select-none items-center rounded-sm bg-background-input px-3 text-sm text-input-text"
             >
               {displayValue}
             </div>
@@ -125,7 +124,7 @@ const InputDatePicker: React.FC<DateInputProps> = ({
             mask={dateMask}
             {...rest}
             inputRef={maskRef}
-            className={`h-9 w-full rounded-sm bg-transparent px-3 text-sm focus:bg-background-input-focus focus:outline-none focus:ring-0
+            className={`h-9 w-full rounded-sm px-3 text-sm focus:bg-background-input-focus focus:outline-none focus:ring-0
               ${
                 disabled
                   ? 'cursor-not-allowed bg-background-input-disabled text-input-text-disabled'

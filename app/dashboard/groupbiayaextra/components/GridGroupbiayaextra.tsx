@@ -81,12 +81,16 @@ import {
   saveGridConfig
 } from '@/lib/utils';
 
-import { getGroupbiayaextraFn } from '@/lib/apis/groupbiayaextra.api';
+import {
+  checkValidationGroupbiayaextraFn,
+  getGroupbiayaextraFn
+} from '@/lib/apis/groupbiayaextra.api';
 import {
   generateGroupbiayaextraExportFn,
   generateGroupbiayaextraReportFn
 } from '@/lib/apis/report.api';
 import { useReportPdfContext } from '@/hooks/ReportPdfProvider';
+import { HEADER_ROW_HEIGHT, LIMIT, ROW_HEIGHT } from '@/constants/constant';
 
 interface Filter {
   page: number;
@@ -210,7 +214,6 @@ const GridGroupbiayaextra = () => {
   const prefetchingPagesRef = useRef<Set<number>>(new Set());
   const STREAM_BUFFER_SIZE = 5;
   const WINDOW_SIZE = 5;
-  const ROW_HEIGHT = 27;
   const jumpToLastRef = useRef(false);
   const jumpToFirstRef = useRef(false);
   // Modalitas input terakhir: 'keyboard' (Arrow/Page) atau 'pointer' (wheel/drag
@@ -310,7 +313,7 @@ const GridGroupbiayaextra = () => {
   const router = useRouter();
   const [filters, setFilters] = useState<Filter>({
     page: 1,
-    limit: 50,
+    limit: LIMIT,
     search: '',
     filters: {
       keterangan: '',
@@ -1785,18 +1788,50 @@ const GridGroupbiayaextra = () => {
     }
   };
 
-  const handleEdit = () => {
-    if (selectedRow !== null) {
-      setPopOver(true);
-      setMode('edit');
+  // Pra-cek ke backend sebelum dialog dibuka: EDIT mengambil lock baris, DELETE
+  // memastikan group-nya tidak sedang dipakai biayaextramuatandetail. Server
+  // tetap menolak lagi saat submit — ini hanya supaya user tahu lebih awal.
+  const runCheckValidation = async (aksi: 'EDIT' | 'DELETE') => {
+    const rowData = rows[selectedRow];
+    if (!rowData) return false;
+
+    try {
+      const result = await checkValidationGroupbiayaextraFn({
+        aksi,
+        value: rowData.id
+      });
+
+      if (result.data?.status === 'failed') {
+        alert({
+          title: result.data.message,
+          variant: 'danger',
+          submitText: 'OK'
+        });
+        return false;
+      }
+
+      return true;
+    } catch (error) {
+      console.error('Error checking validation:', error);
+      alert({
+        title: 'Gagal memeriksa data, silakan coba lagi.',
+        variant: 'danger',
+        submitText: 'OK'
+      });
+      return false;
     }
   };
 
-  const handleDelete = () => {
-    if (selectedRow !== null) {
-      setMode('delete');
-      setPopOver(true);
-    }
+  const handleEdit = async () => {
+    if (!(await runCheckValidation('EDIT'))) return;
+    setPopOver(true);
+    setMode('edit');
+  };
+
+  const handleDelete = async () => {
+    if (!(await runCheckValidation('DELETE'))) return;
+    setMode('delete');
+    setPopOver(true);
   };
 
   const handleView = () => {
@@ -2531,7 +2566,7 @@ const GridGroupbiayaextra = () => {
             setSelectedCellKey(args.column.key);
             handleCellClick({ row: args.row });
           }}
-          headerRowHeight={70}
+          headerRowHeight={HEADER_ROW_HEIGHT}
           rowHeight={ROW_HEIGHT}
           className={`${isDark ? 'rdg-dark' : 'rdg-light'} fill-grid`}
           // WAJIB false (sama seperti GridCuti). Dengan virtualization aktif,

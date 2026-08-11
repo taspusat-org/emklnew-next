@@ -104,7 +104,7 @@ const FormKasGantung = ({
   }
   const addRow = () => {
     const newRow: Partial<KasGantungDetail> & { isNew: boolean } = {
-      id: 0, // Placeholder ID
+      id: '0', // baris baru: backend memperlakukan id '0' sebagai insert
       nobukti: '',
       keterangan: '',
       nominal: '',
@@ -277,7 +277,6 @@ const FormKasGantung = ({
                       e.target.value
                     )
                   }
-                  className="h-2 min-h-9 w-full rounded border border-gray-300"
                 />
               )}
             </div>
@@ -465,7 +464,11 @@ const FormKasGantung = ({
           nobukti: item.nobukti ?? '',
           nominal: item.nominal ?? '',
           keterangan: item.keterangan ?? '',
-          pengeluarandetail_id: Number(item.pengeluarandetail_id) ?? 0,
+          // uuid v7, bukan angka: Number() di sini menghasilkan NaN dan
+          // memutus pasangan detail kas gantung ↔ detail pengeluaran.
+          pengeluarandetail_id: item.pengeluarandetail_id
+            ? String(item.pengeluarandetail_id)
+            : null,
           isNew: false
         }));
 
@@ -478,7 +481,7 @@ const FormKasGantung = ({
         // If no data, add one editable row and the "Add Row" button row at the end
         setRows([
           {
-            id: 0,
+            id: '0',
             nobukti: '',
             nominal: '',
             keterangan: '',
@@ -503,7 +506,6 @@ const FormKasGantung = ({
       forms.setValue('details', filteredRows);
     }
   }, [rows]);
-
   return (
     <Dialog open={popOver} onOpenChange={setPopOver}>
       <DialogTitle hidden={true}>Title</DialogTitle>
@@ -533,7 +535,13 @@ const FormKasGantung = ({
             <Form {...forms}>
               <form
                 ref={formRef}
-                onSubmit={onSubmit}
+                // `onSubmit` adalah handler MENTAH dari grid, jadi pembungkusan
+                // handleSubmit dilakukan di sini. Submit native (mis. ENTER di
+                // sebuah field) diperlakukan sama dengan tombol SAVE:
+                // keepOpenModal = false, dialog menutup.
+                onSubmit={forms.handleSubmit((values: any) =>
+                  onSubmit(values, false)
+                )}
                 className="flex h-full flex-col gap-6"
               >
                 <div className="flex h-[100%] flex-col gap-2 lg:gap-3">
@@ -636,9 +644,7 @@ const FormKasGantung = ({
                           labelLookup="LOOKUP RELASI"
                           disabled={mode === 'view' || mode === 'delete'}
                           // onClear={forms.setValue('relasi_id', null)}
-                          lookupValue={(id) =>
-                            forms.setValue('relasi_id', id)
-                          }
+                          lookupValue={(id) => forms.setValue('relasi_id', id)}
                           // inputLookupValue={forms.getValues('relasi_id')}
                           lookupNama={forms.getValues('relasi_nama')}
                         />
@@ -685,7 +691,12 @@ const FormKasGantung = ({
                               labelLookup="LOOKUP ALAT BAYAR"
                               disabled={mode === 'view' || mode === 'delete'}
                               lookupValue={(id) =>
-                                forms.setValue('alatbayar_id', String(id ?? ''))
+                                // LookUp mengirim null saat di-clear; String(id ?? '')
+                                // mengubahnya jadi '' yang ditolak foreign key.
+                                forms.setValue(
+                                  'alatbayar_id',
+                                  id != null ? String(id) : null
+                                )
                               }
                               inputLookupValue={forms.getValues('alatbayar_id')}
                               lookupNama={forms.getValues('alatbayar_nama')}
@@ -764,7 +775,9 @@ const FormKasGantung = ({
         </div>
         <FormFooterButtons
           mode={mode}
-          onSave={onSubmit}
+          onSave={() => {
+            forms.handleSubmit((values: any) => onSubmit(values, false))();
+          }}
           onCancel={handleClose}
           isLoadingCreate={isLoadingCreate}
           isLoadingUpdate={isLoadingUpdate}

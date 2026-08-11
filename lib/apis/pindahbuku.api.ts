@@ -3,6 +3,11 @@ import { GetParams } from '../types/all.type';
 import { api2 } from '../utils/AxiosInstance';
 import { IAllPindahBuku } from '../types/pindahbuku.type';
 import { pindahBukuInput } from '../validations/pindahbuku.validation';
+import {
+  BuktiJobPayload,
+  ExportBuktiJobPayload,
+  ReportJobResponse
+} from './report.api';
 
 interface UpdatePindahBukuParams {
   id: string;
@@ -97,4 +102,19 @@ export const exportPindahBukuFn = async (
     console.error('Error exporting data pindah buku:', error);
     throw new Error('Failed to export data pindah buku');
   }
+};
+export const generatePindahBukuReportFn = async (
+  payload: BuktiJobPayload
+): Promise<ReportJobResponse> => {
+  const response = await api2.post('/pindahbuku/report', payload);
+  return response.data;
+};
+
+// Export per transaksi: satu bukti + rinciannya, bukan daftar grid — payloadnya
+// hanya id baris yang dicentang.
+export const generatePindahBukuExportFn = async (
+  payload: ExportBuktiJobPayload
+): Promise<ReportJobResponse> => {
+  const response = await api2.post('/pindahbuku/export', payload);
+  return response.data;
 };

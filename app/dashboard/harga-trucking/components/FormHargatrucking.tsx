@@ -152,6 +152,34 @@ const FormMenu = ({
                 className="flex h-full flex-col gap-6"
               >
                 <div className="flex h-[100%] flex-col gap-2 lg:gap-3">
+                  {/* <FormField
+                    name="tujuankapal_text"
+                    control={forms.control}
+                    render={({ field }) => (
+                      <FormItem className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
+                        <FormLabel
+                          className="text-sm font-semibold lg:w-[15%]"
+                        >
+                          Tarif Detail
+                        </FormLabel>
+                        <div className="flex flex-col lg:w-[85%]">
+                          {lookUpPropsTujuankapal.map((props, index) => (
+                            <LookUp
+                              key={index}
+                              {...props}
+                              lookupValue={(id) =>
+                                forms.setValue('tujuankapal_id', id)
+                              }
+                              lookupNama={forms.getValues('tujuankapal_text')}
+                              disabled={mode === 'view' || mode === 'delete'}
+                            />
+                          ))}
+                          <FormMessage />
+                        </div>
+                      </FormItem>
+                    )}
+                  /> */}
+
                   <FormField
                     name="tujuankapal_text"
                     control={forms.control}
@@ -209,10 +237,7 @@ const FormMenu = ({
                     control={forms.control}
                     render={({ field }) => (
                       <FormItem className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
-                        <FormLabel
-                          required={true}
-                          className="font-semibold lg:w-[15%]"
-                        >
+                        <FormLabel className="font-semibold lg:w-[15%]">
                           KETERANGAN
                         </FormLabel>
                         <div className="flex flex-col lg:w-[85%]">
@@ -269,7 +294,7 @@ const FormMenu = ({
                           lookupValue={(id) => {
                             forms.setValue('jenisorder_id', String(id ?? ''));
                           }}
-                          lookupNama={forms.getValues('jenisorderan_text')}
+                          lookupNama={forms.getValues('jenisorder_text')}
                           disabled={mode === 'view' || mode === 'delete'}
                         />
                       ))}
@@ -316,7 +341,10 @@ const FormMenu = ({
                           key={index}
                           {...props}
                           lookupValue={(id) =>
-                            forms.setValue('statusaktif', id)
+                            forms.setValue('statusaktif', String(id ?? ''))
+                          }
+                          onSelectRow={(val) =>
+                            forms.setValue('statusaktif_uuid', val.uuid)
                           }
                           lookupNama={forms.getValues('text')}
                           disabled={mode === 'view' || mode === 'delete'}

@@ -26,6 +26,14 @@ export const generateGroupbiayaextraReportFn = async (
   return response.data;
 };
 
+/** Cetak laporan Parameter di background — lihat generateGroupbiayaextraReportFn. */
+export const generateParameterReportFn = async (
+  payload: ReportJobPayload
+): Promise<ReportJobResponse> => {
+  const response = await api2.post('/parameter/report', payload);
+  return response.data;
+};
+
 /** Cetak laporan User di background — lihat generateGroupbiayaextraReportFn. */
 export const generateUserReportFn = async (
   payload: ReportJobPayload
@@ -40,23 +48,12 @@ export const generateAsuransiReportFn = async (
   const response = await api2.post('/asuransi/report', payload);
   return response.data;
 };
-
-/**
- * Meminta backend mencetak laporan Type Akuntansi di background.
- * Balasannya hanya jobId — progres render datang lewat socket `/report`
- * (event `report:progress`), lalu PDF-nya diambil via downloadReportPdfFn.
- */
 export const generateTypeAkuntansiReportFn = async (
   payload: ReportJobPayload
 ): Promise<ReportJobResponse> => {
   const response = await api2.post('/type-akuntansi/report', payload);
   return response.data;
 };
-
-/**
- * Payload cetak BUKTI (satu transaksi), bukan laporan daftar: yang menentukan
- * isinya adalah id baris yang dipilih di grid, bukan filter kolom / search.
- */
 export interface BuktiJobPayload {
   /** Nama file template .mrt yang ada di folder `reports` milik backend. */
   mrtName: string;
@@ -64,18 +61,52 @@ export interface BuktiJobPayload {
   id: string;
   judullaporan?: string;
 }
-
-/**
- * Cetak bukti Hutang di background — alurnya sama dengan laporan daftar
- * (balas jobId, progres lewat socket `/report`), hanya datanya satu bukti
- * beserta rinciannya sesuai dua datasource di LaporanHutang.mrt.
- */
 export const generateHutangReportFn = async (
   payload: BuktiJobPayload
 ): Promise<ReportJobResponse> => {
   const response = await api2.post('/hutangheader/report', payload);
   return response.data;
 };
+/**
+ * Cetak Harga trucking di background — alurnya sama dengan laporan daftar
+ * (balas jobId, progres lewat socket `/report`), hanya datanya satu bukti
+ * beserta rinciannya sesuai dua datasource di LaporanHutang.mrt.
+ */
+export const generateHargatruckingReportFn = async (
+  payload: BuktiJobPayload
+): Promise<ReportJobResponse> => {
+  const response = await api2.post('/hargatrucking/report', payload);
+  return response.data;
+};
+export const generateLabaRugiKalkulasiReportFn = async (
+  payload: BuktiJobPayload
+): Promise<ReportJobResponse> => {
+  const response = await api2.post('/labarugikalkulasi/report', payload);
+  return response.data;
+};
+
+/** Cetak bukti Pengeluaran di background — lihat generateHutangReportFn. */
+export const generatePengeluaranReportFn = async (
+  payload: BuktiJobPayload
+): Promise<ReportJobResponse> => {
+  const response = await api2.post('/pengeluaranheader/report', payload);
+  return response.data;
+};
+
+/** Cetak bukti Biaya Extra di background — lihat generateHutangReportFn. */
+export const generateBiayaExtraHeaderReportFn = async (
+  payload: BuktiJobPayload
+): Promise<ReportJobResponse> => {
+  const response = await api2.post('/biayaextraheader/report', payload);
+  return response.data;
+};
+/**
+ * Payload export Excel per transaksi — satu bukti beserta rinciannya, jadi
+ * yang dikirim hanya id barisnya (sama seperti cetak bukti).
+ */
+export interface ExportBuktiJobPayload {
+  id: string;
+}
 
 /** Payload export Excel background — sama seperti report, tanpa template .mrt. */
 export interface ExportJobPayload {
@@ -85,12 +116,6 @@ export interface ExportJobPayload {
   sortDirection?: 'asc' | 'desc';
 }
 
-/**
- * Meminta backend menyusun file Excel Alat Bayar di background. Balasannya
- * hanya jobId — progresnya datang lewat socket `/report` (event
- * `report:progress`, kanal yang sama dengan cetak laporan), lalu file-nya
- * diambil via downloadReportFileFn.
- */
 export const generateAlatbayarExportFn = async (
   payload: ExportJobPayload
 ): Promise<ReportJobResponse> => {
@@ -98,7 +123,6 @@ export const generateAlatbayarExportFn = async (
   return response.data;
 };
 
-/** Export Excel Group Biaya Extra di background — lihat generateAlatbayarExportFn. */
 export const generateGroupbiayaextraExportFn = async (
   payload: ExportJobPayload
 ): Promise<ReportJobResponse> => {
@@ -106,7 +130,14 @@ export const generateGroupbiayaextraExportFn = async (
   return response.data;
 };
 
-/** Export Excel User di background — lihat generateAlatbayarExportFn. */
+/** Export Excel Parameter di background — lihat generateAlatbayarExportFn. */
+export const generateParameterExportFn = async (
+  payload: ExportJobPayload
+): Promise<ReportJobResponse> => {
+  const response = await api2.post('/parameter/export', payload);
+  return response.data;
+};
+
 export const generateUserExportFn = async (
   payload: ExportJobPayload
 ): Promise<ReportJobResponse> => {
@@ -130,11 +161,42 @@ export const generateHutangExportFn = async (
   return response.data;
 };
 
+/** Export Excel daftar Pengeluaran di background — lihat generateAlatbayarExportFn. */
+export const generatePengeluaranExportFn = async (
+  payload: ExportJobPayload
+): Promise<ReportJobResponse> => {
+  const response = await api2.post('/pengeluaranheader/export', payload);
+  return response.data;
+};
+
 /** Export Excel daftar Biaya Extra di background — lihat generateAlatbayarExportFn. */
 export const generateBiayaExtraHeaderExportFn = async (
   payload: ExportJobPayload
 ): Promise<ReportJobResponse> => {
   const response = await api2.post('/biayaextraheader/export', payload);
+  return response.data;
+};
+
+/** Export Excel Harga Trucking di background — lihat generateAlatbayarExportFn. */
+export const generateHargatruckingExportFn = async (
+  payload: ExportJobPayload
+): Promise<ReportJobResponse> => {
+  const response = await api2.post('/hargatrucking/export', payload);
+  return response.data;
+};
+
+/** Export Excel Asuransi di background — lihat generateAlatbayarExportFn. */
+export const generateAsuransiExportFn = async (
+  payload: ExportJobPayload
+): Promise<ReportJobResponse> => {
+  const response = await api2.post('/asuransi/export', payload);
+  return response.data;
+};
+
+export const generateLabaRugiKalkulasiExportFn = async (
+  payload: ExportJobPayload
+): Promise<ReportJobResponse> => {
+  const response = await api2.post('/labarugikalkulasi/export', payload);
   return response.data;
 };
 

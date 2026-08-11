@@ -123,6 +123,26 @@ export function isLeapYear(year: any) {
 export function dynamicRequiredMessage(fieldName: string) {
   return `${fieldName.toUpperCase()} ${REQUIRED_FIELD}`;
 }
+
+/**
+ * Kolom relasi (`*_id`, `coa*`) boleh NULL di db tapi TIDAK boleh string kosong:
+ * '' tetap dianggap nilai dan langsung ditolak foreign key. LookUp yang
+ * di-clear lewat `String(id ?? '')` dan defaultValues bernilai '' menghasilkan
+ * '' itu, jadi payload dinormalkan dulu sebelum dikirim.
+ */
+export const blankToNull = <T extends Record<string, unknown>>(
+  values: T,
+  keys: readonly (keyof T)[]
+): T => {
+  const normalized = { ...values };
+  keys.forEach((key) => {
+    const value = normalized[key];
+    if (typeof value === 'string' && value.trim() === '') {
+      normalized[key] = null as T[keyof T];
+    }
+  });
+  return normalized;
+};
 export const parseCurrency = (value: string): number => {
   // Convert value to string and trim any whitespace before processing
   const stringValue = String(value).trim();

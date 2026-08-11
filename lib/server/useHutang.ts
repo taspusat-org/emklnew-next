@@ -3,7 +3,6 @@ import {
   deleteHutangFn,
   getHutangDetailFn,
   getHutangHeaderFn,
-  getHutangHeaderByIdFn,
   storeHutangFn,
   updateHutangFn,
   getHutangListFn
@@ -16,6 +15,7 @@ import { useDispatch } from 'react-redux';
 import { AxiosError } from 'axios';
 import { IErrorResponse } from '../types/user.type';
 import { useAlert } from '../store/client/useAlert';
+import { useFormError } from '../hooks/formErrorContext';
 
 export const useGetHutangHeader = (
   filters: {
@@ -38,42 +38,14 @@ export const useGetHutangHeader = (
   } = {},
   signal?: AbortSignal
 ) => {
-  const dispatch = useDispatch();
-  const { alert } = useAlert();
-  const queryClient = useQueryClient();
-
+  // Overlay global TIDAK dipicu dari sini. Grid punya LoadRowsRenderer sendiri,
+  // dan setProcessing/setProcessed di dalam query fn ikut jalan pada tiap
+  // refetch window pagination — overlay berkedip tiap kali user scroll. Sama
+  // seperti useGetPengeluaranHeader / useGetJurnalUmumHeader.
   return useQuery(
     ['hutang', filters],
-    async () => {
-      // Only trigger processing if the page is 1
-      if (filters.page === 1) {
-        dispatch(setProcessing());
-      }
-
-      try {
-        const data = await getHutangHeaderFn(filters, signal);
-        return data;
-      } catch (error) {
-        // Show error toast and dispatch processed
-        dispatch(setProcessed());
-        // toast({
-        //   variant: 'destructive',
-        //   title: 'Gagal',
-        //   description: 'Terjadi masalah dengan permintaan Anda.'
-        // });
-        throw error;
-      } finally {
-        // Regardless of success or failure, we dispatch setProcessed after the query finishes
-        dispatch(setProcessed());
-      }
-    },
+    async () => await getHutangHeaderFn(filters, signal),
     {
-      // Optionally, you can use the `onSettled` callback if you want to reset the processing state after query success or failure
-      onSettled: () => {
-        if (filters.page === 1) {
-          dispatch(setProcessed());
-        }
-      },
       // Jangan fetch saat page < 1 (trik setCurrentPage(0) di grid untuk memaksa
       // refetch). Backend meng-clamp page<1 ke 1 (lihat FindAllSchema), jadi
       // tanpa guard ini halaman 0 akan memulangkan halaman 1 dan mengotori
@@ -136,38 +108,46 @@ export const useGetHutangDetail = (
   );
 };
 export const useCreateHutang = () => {
-  const queryClient = useQueryClient();
   const dispatch = useDispatch();
   const { alert } = useAlert();
+  const { setError } = useFormError();
 
+  // Sengaja TIDAK invalidateQueries('hutang') di sini. Alur onSuccess di
+  // GridHutangHeader sudah otoritatif: ia mengambil window baru dari redis lalu
+  // setCurrentPage(pageNumber) yang memicu refetch halaman yang BENAR.
+  // invalidateQueries malah me-refetch `currentPage` yang mungkin masih basi;
+  // karena useGetHutangHeader memakai staleTime/cacheTime 0, refetch itu selalu
+  // jalan, tiba paling akhir, dan menimpa baris + fokus hasil onSuccess.
+  // Sama seperti useCreatePengeluaran.
   return useMutation(storeHutangFn, {
-    // before the mutation fn runs
     onMutate: () => {
       dispatch(setProcessing());
     },
-    // on success, invalidate + toast + clear loading
     onSuccess: () => {
-      void queryClient.invalidateQueries(['hutang']);
-      //   toast({
-      //     title: 'Proses Berhasil',
-      //     description: 'Data Berhasil Ditambahkan'
-      //   });
       dispatch(setProcessed());
     },
-    // on error, toast + clear loading
     onError: (error: AxiosError) => {
-      const err = (error.response?.data as IErrorResponse) ?? {};
-      // toast({
-      //   variant: 'destructive',
-      //   title: err.message ?? 'Gagal',
-      //   description: 'Terjadi masalah dengan permintaan Anda.'
-      // });
+      const errorResponse = error.response?.data as IErrorResponse;
+      if (errorResponse !== undefined) {
+        const errorFields = Array.isArray(errorResponse.message)
+          ? errorResponse.message
+          : [];
+
+        if (errorResponse.statusCode === 400) {
+          errorFields?.forEach((err: { path: string[]; message: string }) => {
+            const path = err.path[0];
+            setError(path, err.message);
+          });
+        } else {
+          alert({
+            variant: 'danger',
+            submitText: 'OK',
+            title: errorResponse.message ?? 'Gagal'
+          });
+        }
+      }
       dispatch(setProcessed());
     }
-    // alternatively: always clear loading, whether success or fail
-    // onSettled: () => {
-    //   dispatch(clearProcessing());
-    // }
   });
 };
 export const useGetHutangHeaderList = (
@@ -175,7 +155,6 @@ export const useGetHutangHeaderList = (
   popOver: boolean
 ) => {
   const { alert } = useAlert();
-  const queryClient = useQueryClient();
 
   return useQuery(
     ['Hutangheaderlist', params],
@@ -184,12 +163,11 @@ export const useGetHutangHeaderList = (
         const data = await getHutangListFn(params.dari, params.sampai);
         return data;
       } catch (error) {
-        // Show error toast
-        // toast({
-        //   variant: 'destructive',
-        //   title: 'Gagal',
-        //   description: 'Terjadi masalah dengan permintaan Anda.'
-        // });
+        alert({
+          title: 'Gagal',
+          variant: 'danger',
+          submitText: 'OK'
+        });
         throw error; // Re-throw to ensure the query is marked as failed
       }
     },
@@ -201,24 +179,38 @@ export const useGetHutangHeaderList = (
 export const useUpdateHutang = () => {
   const queryClient = useQueryClient();
   const { alert } = useAlert();
+  const { setError } = useFormError();
 
+  // Sama seperti useCreateHutang: JANGAN invalidateQueries('hutang') di sini.
+  // onSuccess di GridHutangHeader yang mengatur data + posisi baris; refetch
+  // dari invalidate mendarat belakangan dan menimpa fokus tersebut (gejala
+  // "setelah update grid balik ke baris 1").
   return useMutation(updateHutangFn, {
     onSuccess: () => {
-      void queryClient.invalidateQueries('hutang');
-      void queryClient.invalidateQueries('jurnalumum');
-      //   toast({
-      //     title: 'Proses Berhasil.',
-      //     description: 'Data Berhasil Diubah.'
-      //   });
+      // Key 'jurnalumumdetail' aman di-invalidate: nobukti header tidak berubah
+      // saat edit, jadi tab Jurnal Umum Detail tidak akan me-refetch sendiri
+      // padahal isinya ikut berubah di backend.
+      void queryClient.invalidateQueries('jurnalumumdetail');
     },
     onError: (error: AxiosError) => {
       const errorResponse = error.response?.data as IErrorResponse;
       if (errorResponse !== undefined) {
-        alert({
-          title: errorResponse.message ?? 'Gagal',
-          variant: 'danger',
-          submitText: 'OK'
-        });
+        const errorFields = Array.isArray(errorResponse.message)
+          ? errorResponse.message
+          : [];
+
+        if (errorResponse.statusCode === 400) {
+          errorFields?.forEach((err: { path: string[]; message: string }) => {
+            const path = err.path[0];
+            setError(path, err.message);
+          });
+        } else {
+          alert({
+            title: errorResponse.message ?? 'Gagal',
+            variant: 'danger',
+            submitText: 'OK'
+          });
+        }
       }
     }
   });
@@ -230,19 +222,15 @@ export const useDeleteHutang = () => {
   return useMutation(deleteHutangFn, {
     onSuccess: () => {
       void queryClient.invalidateQueries('hutang');
-      //   toast({
-      //     title: 'Proses Berhasil.',
-      //     description: 'Data Berhasil Dihapus.'
-      //   });
     },
     onError: (error: AxiosError) => {
       const errorResponse = error.response?.data as IErrorResponse;
       if (errorResponse !== undefined) {
-        // toast({
-        //   variant: 'destructive',
-        //   title: errorResponse.message ?? 'Gagal',
-        //   description: 'Terjadi masalah dengan permintaan Anda.'
-        // });
+        alert({
+          title: errorResponse.message ?? 'Gagal',
+          variant: 'danger',
+          submitText: 'OK'
+        });
       }
     }
   });

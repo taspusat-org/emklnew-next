@@ -1,0 +1,5 @@
+const ROW_HEIGHT = 27;
+const HEADER_ROW_HEIGHT = 70;
+const LIMIT = 50;
+
+export { ROW_HEIGHT, HEADER_ROW_HEIGHT, LIMIT };

@@ -12,10 +12,63 @@ import {
   setProcessing
 } from '../store/loadingSlice/loadingSlice';
 import { useDispatch } from 'react-redux';
-import { AxiosError } from 'axios';
+import axios, { AxiosError } from 'axios';
 import { IErrorResponse } from '../types/user.type';
 import { useAlert } from '../store/client/useAlert';
 import { useFormError } from '../hooks/formErrorContext';
+
+/**
+ * Penanganan error mutasi pengeluaran.
+ *
+ * Dulu seluruh badan handler dibungkus `if (errorResponse !== undefined)`, jadi
+ * kalau backend balas tanpa body yang bisa dibaca — 500 ber-body HTML, gateway
+ * error, backend mati saat online — user menekan SIMPAN dan TIDAK terjadi apa
+ * pun: dialog diam, tanpa pesan. Sekarang selalu ada pesan yang keluar.
+ *
+ * Yang SENGAJA dilewati: pembatalan request dan kondisi offline. Keduanya sudah
+ * ditangani interceptor AxiosInstance (overlay offline / alert "Koneksi
+ * Timeout"), jadi alert kedua di sini hanya jadi popup dobel.
+ */
+const handleMutationError = (
+  error: AxiosError,
+  {
+    alert,
+    setError,
+    fallbackTitle
+  }: {
+    alert: ReturnType<typeof useAlert>['alert'];
+    setError: ReturnType<typeof useFormError>['setError'];
+    fallbackTitle: string;
+  }
+) => {
+  if (axios.isCancel(error) || error.code === 'ERR_CANCELED') return;
+  if (error.code === 'ECONNABORTED') return;
+  if (!error.response) return;
+
+  const errorResponse = error.response.data as IErrorResponse | undefined;
+
+  // Zod 400: pesannya array of issue per-field, dilempar ke form supaya muncul
+  // tepat di bawah fieldnya, bukan sebagai popup tanpa konteks.
+  if (
+    errorResponse?.statusCode === 400 &&
+    Array.isArray(errorResponse.message)
+  ) {
+    errorResponse.message.forEach(
+      (err: { path: string[]; message: string }) => {
+        setError(err.path[0], err.message);
+      }
+    );
+    return;
+  }
+
+  const message = errorResponse?.message;
+  alert({
+    title:
+      typeof message === 'string' && message.trim() ? message : fallbackTitle,
+    variant: 'danger',
+    submitText: 'OK'
+  });
+};
 
 export const useGetPengeluaranHeader = (
   filters: {
@@ -46,8 +99,7 @@ export const useGetPengeluaranHeader = (
   } = {},
   signal?: AbortSignal
 ) => {
-  const dispatch = useDispatch();
-  const queryClient = useQueryClient();
+  const { alert } = useAlert();
 
   return useQuery(
     ['pengeluaran', filters],
@@ -62,7 +114,27 @@ export const useGetPengeluaranHeader = (
       // plus entri cache yang tidak pernah dirender.
       enabled: !signal?.aborted && (filters.page ?? 1) >= 1,
       staleTime: 0,
-      cacheTime: 0
+      cacheTime: 0,
+      // Tanpa ini, gagal muat daftar = grid kosong tanpa satu pun keterangan;
+      // user tidak bisa membedakan "memang tidak ada data" dari "backend error".
+      // Pembatalan request TIDAK dialert: cancelPreviousRequest membatalkan
+      // request tiap kali filter/halaman berganti, jadi itu kondisi normal.
+      onError: (error: unknown) => {
+        const err = error as AxiosError;
+        if (axios.isCancel(err) || err?.code === 'ERR_CANCELED') return;
+        if (!err?.response) return;
+
+        const message = (err.response.data as IErrorResponse | undefined)
+          ?.message;
+        alert({
+          title:
+            typeof message === 'string' && message.trim()
+              ? message
+              : 'GAGAL MEMUAT DAFTAR PENGELUARAN',
+          variant: 'danger',
+          submitText: 'OK'
+        });
+      }
     }
   );
 };
@@ -138,47 +210,21 @@ export const useCreatePengeluaran = () => {
     onSuccess: () => {
       dispatch(setProcessed());
     },
-    // on error, toast + clear loading
     onError: (error: AxiosError) => {
-      const errorResponse = error.response?.data as IErrorResponse;
-      if (errorResponse !== undefined) {
-        // Menangani error berdasarkan path
-        const errorFields = Array.isArray(errorResponse.message)
-          ? errorResponse.message
-          : [];
-
-        if (errorResponse.statusCode === 400) {
-          // Iterasi error message dan set error di form
-          errorFields?.forEach((err: { path: string[]; message: string }) => {
-            const path = err.path[0]; // Ambil path error pertama (misalnya 'nama', 'akuntansi_id')
-            setError(path, err.message); // Update error di context
-          });
-        } else {
-          alert({
-            variant: 'danger',
-            submitText: 'OK',
-            title: errorResponse.message ?? 'Gagal'
-          });
-        }
-      }
-      // toast({
-      //   variant: 'destructive',
-      //   title: err.message ?? 'Gagal',
-      //   description: 'Terjadi masalah dengan permintaan Anda.'
-      // });
+      handleMutationError(error, {
+        alert,
+        setError,
+        fallbackTitle: 'GAGAL MENYIMPAN DATA PENGELUARAN'
+      });
       dispatch(setProcessed());
     }
-    // alternatively: always clear loading, whether success or fail
-    // onSettled: () => {
-    //   dispatch(clearProcessing());
-    // }
   });
 };
 export const useGetPengeluaranHeaderList = (
   params: { dari: string; sampai: string } = { dari: '', sampai: '' },
   popOver: boolean
 ) => {
-  const queryClient = useQueryClient();
+  const { alert } = useAlert();
 
   return useQuery(
     ['pengeluaranheaderlist', params],
@@ -187,12 +233,11 @@ export const useGetPengeluaranHeaderList = (
         const data = await getPengeluaranListFn(params.dari, params.sampai);
         return data;
       } catch (error) {
-        // Show error toast
-        // toast({
-        //   variant: 'destructive',
-        //   title: 'Gagal',
-        //   description: 'Terjadi masalah dengan permintaan Anda.'
-        // });
+        alert({
+          title: 'GAGAL MEMUAT DAFTAR NOMOR BUKTI PENGELUARAN',
+          variant: 'danger',
+          submitText: 'OK'
+        });
         throw error; // Re-throw to ensure the query is marked as failed
       }
     },
@@ -213,48 +258,29 @@ export const useUpdatePengeluaran = () => {
   // onSuccess di GridPengeluaranHeader yang mengatur data + posisi baris.
   return useMutation(updatePengeluaranFn, {
     onError: (error: AxiosError) => {
-      const errorResponse = error.response?.data as IErrorResponse;
-      if (errorResponse !== undefined) {
-        const errorFields = Array.isArray(errorResponse.message)
-          ? errorResponse.message
-          : [];
-
-        if (errorResponse.statusCode === 400) {
-          errorFields?.forEach((err: { path: string[]; message: string }) => {
-            const path = err.path[0];
-            setError(path, err.message);
-          });
-        } else {
-          alert({
-            title: errorResponse.message ?? 'Gagal',
-            variant: 'danger',
-            submitText: 'OK'
-          });
-        }
-      }
+      handleMutationError(error, {
+        alert,
+        setError,
+        fallbackTitle: 'GAGAL MENGUBAH DATA PENGELUARAN'
+      });
     }
   });
 };
 export const useDeletePengeluaran = () => {
   const queryClient = useQueryClient();
+  const { alert } = useAlert();
+  const { setError } = useFormError();
 
   return useMutation(deletePengeluaranFn, {
     onSuccess: () => {
       void queryClient.invalidateQueries('pengeluaran');
-      //   toast({
-      //     title: 'Proses Berhasil.',
-      //     description: 'Data Berhasil Dihapus.'
-      //   });
     },
     onError: (error: AxiosError) => {
-      const errorResponse = error.response?.data as IErrorResponse;
-      if (errorResponse !== undefined) {
-        // toast({
-        //   variant: 'destructive',
-        //   title: errorResponse.message ?? 'Gagal',
-        //   description: 'Terjadi masalah dengan permintaan Anda.'
-        // });
-      }
+      handleMutationError(error, {
+        alert,
+        setError,
+        fallbackTitle: 'GAGAL MENGHAPUS DATA PENGELUARAN'
+      });
     }
   });
 };
