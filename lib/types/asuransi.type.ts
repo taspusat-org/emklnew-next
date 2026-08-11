@@ -2,7 +2,6 @@ import { IMeta } from './error.type';
 
 export interface IAsuransi {
   id: string; // Primary Key (bigint / varchar(200))
-  // uuid: string; // Unique Identifier (UUID v4)
 
   nama: string; // Nama Asuransi (nvarchar(max))
   keterangan: string; // Keterangan (nvarchar(max))
@@ -51,3 +50,33 @@ export interface IAllAsuransi {
   type: string;
   pagination: IMeta;
 }
+
+export const filterAsuransi = {
+  nama: '',
+  keterangan: '',
+  contactperson: '',
+  alamat: '',
+  kota: '',
+  kodepos: '',
+  telp: '',
+  email: '',
+  fax: '',
+  web: '',
+  ratemodal: '',
+  ratejual: '',
+  npwp: '',
+  nominalasuransi: '',
+  rateopendoor: '',
+  adminbiaya: '',
+  admintagih: '',
+  batas1: '',
+  batas2: '',
+  batas3: '',
+  materai1: '',
+  materai2: '',
+  materai3: '',
+  statusaktif: '',
+  created_at: '',
+  updated_at: '',
+  modifiedby: ''
+};

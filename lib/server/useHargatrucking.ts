@@ -26,7 +26,7 @@ export const useGetHargatrucking = (
     sortBy?: string;
     sortDirection?: string;
     limit?: number;
-    search?: string; // Kata kunci pencarian
+    search?: string;
   } = {},
   signal?: AbortSignal
 ) => {
@@ -56,15 +56,13 @@ export const useCreateHargatrucking = () => {
       const errorResponse = error.response?.data as IErrorResponse;
 
       if (errorResponse !== undefined) {
-        // Menangani error berdasarkan path
         const errorFields = errorResponse.message || [];
 
         if (errorResponse.statusCode === 400) {
-          // Iterasi error message dan set error di form
           errorFields?.forEach((err: { path: string[]; message: string }) => {
-            const path = err.path[0]; // Ambil path error pertama (misalnya 'nama', 'akuntansi_id')
+            const path = err.path[0];
 
-            setError(path, err.message); // Update error di context
+            setError(path, err.message);
           });
         } else {
           alert({
@@ -93,17 +91,14 @@ export const useDeleteHargatrucking = () => {
     onError: (error: AxiosError) => {
       const errorResponse = error.response as IErrorResponse;
 
-      console.log('errorResponse', errorResponse);
       if (errorResponse !== undefined) {
         // Menangani error berdasarkan path
         const errorFields = errorResponse.message || [];
 
         if (errorResponse.statusCode === 400) {
-          // Iterasi error message dan set error di form
           errorFields?.forEach((err: { path: string[]; message: string }) => {
-            const path = err.path[0]; // Ambil path error pertama (misalnya 'nama', 'akuntansi_id')
-
-            setError(path, err.message); // Update error di context
+            const path = err.path[0];
+            setError(path, err.message);
           });
         } else {
           alert(errorResponse.message ?? 'Gagal');
@@ -133,15 +128,12 @@ export const useUpdateHargatrucking = () => {
       const errorResponse = error.response?.data as IErrorResponse;
 
       if (errorResponse !== undefined) {
-        // Menangani error berdasarkan path
         const errorFields = errorResponse.message || [];
 
         if (errorResponse.statusCode === 400) {
-          // Iterasi error message dan set error di form
           errorFields?.forEach((err: { path: string[]; message: string }) => {
-            const path = err.path[0]; // Ambil path error pertama (misalnya 'nama', 'akuntansi_id')
-
-            setError(path, err.message); // Update error di context
+            const path = err.path[0];
+            setError(path, err.message);
           });
         } else {
           alert({

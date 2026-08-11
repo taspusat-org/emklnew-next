@@ -70,6 +70,12 @@ export const generateHargatruckingReportFn = async (
   const response = await api2.post('/hargatrucking/report', payload);
   return response.data;
 };
+export const generateLabaRugiKalkulasiReportFn = async (
+  payload: BuktiJobPayload
+): Promise<ReportJobResponse> => {
+  const response = await api2.post('/labarugikalkulasi/report', payload);
+  return response.data;
+};
 
 /** Cetak bukti Pengeluaran di background — lihat generateHutangReportFn. */
 export const generatePengeluaranReportFn = async (
@@ -161,6 +167,13 @@ export const generateAsuransiExportFn = async (
   payload: ExportJobPayload
 ): Promise<ReportJobResponse> => {
   const response = await api2.post('/asuransi/export', payload);
+  return response.data;
+};
+
+export const generateLabaRugiKalkulasiExportFn = async (
+  payload: ExportJobPayload
+): Promise<ReportJobResponse> => {
+  const response = await api2.post('/labarugikalkulasi/export', payload);
   return response.data;
 };
 
