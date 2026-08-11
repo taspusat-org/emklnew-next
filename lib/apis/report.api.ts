@@ -26,6 +26,14 @@ export const generateGroupbiayaextraReportFn = async (
   return response.data;
 };
 
+/** Cetak laporan Parameter di background — lihat generateGroupbiayaextraReportFn. */
+export const generateParameterReportFn = async (
+  payload: ReportJobPayload
+): Promise<ReportJobResponse> => {
+  const response = await api2.post('/parameter/report', payload);
+  return response.data;
+};
+
 /** Cetak laporan User di background — lihat generateGroupbiayaextraReportFn. */
 export const generateUserReportFn = async (
   payload: ReportJobPayload
@@ -92,22 +100,13 @@ export const generateBiayaExtraHeaderReportFn = async (
   const response = await api2.post('/biayaextraheader/report', payload);
   return response.data;
 };
-
-/** Cetak bukti Pengeluaran di background — lihat generateHutangReportFn. */
-export const generatePengeluaranReportFn = async (
-  payload: BuktiJobPayload
-): Promise<ReportJobResponse> => {
-  const response = await api2.post('/pengeluaranheader/report', payload);
-  return response.data;
-};
-
-/** Cetak bukti Biaya Extra di background — lihat generateHutangReportFn. */
-export const generateBiayaExtraHeaderReportFn = async (
-  payload: BuktiJobPayload
-): Promise<ReportJobResponse> => {
-  const response = await api2.post('/biayaextraheader/report', payload);
-  return response.data;
-};
+/**
+ * Payload export Excel per transaksi — satu bukti beserta rinciannya, jadi
+ * yang dikirim hanya id barisnya (sama seperti cetak bukti).
+ */
+export interface ExportBuktiJobPayload {
+  id: string;
+}
 
 /** Payload export Excel background — sama seperti report, tanpa template .mrt. */
 export interface ExportJobPayload {
@@ -128,6 +127,14 @@ export const generateGroupbiayaextraExportFn = async (
   payload: ExportJobPayload
 ): Promise<ReportJobResponse> => {
   const response = await api2.post('/groupbiayaextra/export', payload);
+  return response.data;
+};
+
+/** Export Excel Parameter di background — lihat generateAlatbayarExportFn. */
+export const generateParameterExportFn = async (
+  payload: ExportJobPayload
+): Promise<ReportJobResponse> => {
+  const response = await api2.post('/parameter/export', payload);
   return response.data;
 };
 

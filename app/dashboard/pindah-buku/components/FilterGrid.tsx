@@ -6,7 +6,9 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import InputDatePicker from '@/components/custom-ui/InputDatePicker';
 import {
+  commitFilter,
   setOnReload,
+  setPending,
   setSelectedDate,
   setSelectedDate2
 } from '@/lib/store/filterSlice/filterSlice';
@@ -23,63 +25,21 @@ import {
   FormMessage
 } from '@/components/ui/form';
 import PeriodeValidation from '@/components/custom-ui/PeriodeValidate';
+import { RootState } from '@/lib/store/store';
 
 const FilterGrid = () => {
   const dispatch = useDispatch();
-  const { onReload } = useSelector((state: any) => state.filter);
+  const pending = useSelector((state: RootState) => state.filter.pending);
   const [triggerValidation, setTriggerValidation] = useState(false);
 
-  const onSubmit = () => {
-    setTriggerValidation(true);
-  };
-
   const handleValidationResult = (isValid: boolean) => {
-    if (triggerValidation) {
-      if (isValid) {
-        dispatch(setOnReload(true));
-      }
-      setTriggerValidation(false);
-    }
+    if (!triggerValidation) return;
+    setTriggerValidation(false);
+    if (!isValid) return;
+
+    // ✅ Atomic commit — satu action, satu re-render
+    dispatch(commitFilter());
   };
-
-  // function validateTanggal(tglDari: string, tglSampai: string): boolean {
-  //   dayjs.extend(customParseFormat);
-  //   const date1 = dayjs(tglDari, "DD-MM-YYYY", true);
-  //   const date2 = dayjs(tglSampai, "DD-MM-YYYY", true);
-
-  //   if (!date1.isValid()) {
-  //     console.error("Tanggal tidak valid:", tglDari, tglSampai);
-  //     setDateNotValid(true)
-  //     return false;
-  //   }
-  //   if (!date2.isValid()) {
-  //     console.error("Tanggal tidak valid:", tglDari, tglSampai);
-  //     return false;
-  //   }
-
-  //   return date2.isBefore(date1);
-  // }
-
-  useEffect(() => {
-    const now = new Date();
-    const fmt = (date: Date) =>
-      `${String(date.getDate()).padStart(2, '0')}-${String(
-        date.getMonth() + 1
-      ).padStart(2, '0')}-${date.getFullYear()}`;
-
-    const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const lastOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-
-    dispatch(setSelectedDate(fmt(firstOfMonth)));
-    dispatch(setSelectedDate2(fmt(lastOfMonth)));
-  }, [dispatch]);
-
-  useEffect(() => {
-    if (onReload) {
-      // Simulate a reload operation
-      dispatch(setOnReload(false));
-    }
-  }, [onReload]);
 
   return (
     <div className={`flex h-[100%] w-full justify-center`}>
@@ -88,14 +48,18 @@ const FilterGrid = () => {
         <div className="bg-background-header p-4">
           <PeriodeValidation
             label="periode"
+            date1={pending.tglDari}
+            date2={pending.tglSampai}
+            onDate1Change={(val) => dispatch(setPending({ tglDari: val }))}
+            onDate2Change={(val) => dispatch(setPending({ tglSampai: val }))}
             onValidationChange={handleValidationResult}
             triggerValidation={triggerValidation}
           />
 
           <Button
             variant="default"
-            className="mt-2 flex flex-row items-center justify-center"
-            onClick={onSubmit}
+            className="flex flex-row items-center justify-center"
+            onClick={() => setTriggerValidation(true)}
           >
             <IoMdRefresh />
             <p style={{ fontSize: 12 }} className="font-normal">

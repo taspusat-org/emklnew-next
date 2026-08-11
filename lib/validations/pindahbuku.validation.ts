@@ -3,24 +3,23 @@ import { dynamicRequiredMessage } from '../utils';
 
 export const pindahBukuSchema = z.object({
   // id: z.number().nullable().optional(),
-  nobukti: z.string().nullable(),
+  // Dibuat backend lewat running number, dan resetAddForm tidak mengisinya —
+  // tanpa .optional() mode ADD selalu gagal validasi "Required" di field yang
+  // memang disabled.
+  nobukti: z.string().nullable().optional(),
   tglbukti: z
     .string({ message: dynamicRequiredMessage('TGL BUKTI') })
     .nonempty({ message: dynamicRequiredMessage('TGL BUKTI') }),
 
+  // uuid v7, bukan angka: Number(uuid) = NaN dan validasinya tidak akan pernah
+  // lolos. Backend juga menerimanya sebagai string.
   bankdari_id: z
-    .number({
-      required_error: dynamicRequiredMessage('BANK DARI')
-      // invalid_type_error: dynamicRequiredMessage('BANK DARI')
-    })
-    // .int({ message: dynamicRequiredMessage('BANK DARI') })
+    .string({ message: dynamicRequiredMessage('BANK DARI') })
     .min(1, { message: dynamicRequiredMessage('BANK DARI') }),
   bankdari_nama: z.string().nullable().optional(),
 
   bankke_id: z
-    .number({
-      required_error: dynamicRequiredMessage('BANK KE')
-    })
+    .string({ message: dynamicRequiredMessage('BANK KE') })
     .min(1, { message: dynamicRequiredMessage('BANK KE') }),
   bankke_nama: z.string().nullable().optional(),
 

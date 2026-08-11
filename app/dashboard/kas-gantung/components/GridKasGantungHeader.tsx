@@ -2440,23 +2440,41 @@ const GridKasGantungHeader = () => {
         judullaporan: 'Laporan Kas Gantung'
       },
       apiFn: generateKasGantungHeaderReportFn,
-      // Tombol Export di toolbar viewer — memakai filter grid yang sedang
-      // aktif, sama seperti tombol Export di toolbar bawah.
-      onExport: () => handleExportExcel()
+      // Tombol Export di toolbar viewer — bukti yang SAMA dengan yang sedang
+      // ditampilkan, bukan seluruh baris grid.
+      onExport: () => handleExportExcel(String(rowId))
     });
   };
 
-  const handleExportExcel = async () => {
-    const { page, limit, ...filtersWithoutLimit } = filters;
+  // Export Excel per transaksi: satu bukti beserta rinciannya, dijalankan di
+  // BACKEND (background job + socket) seperti cetak bukti. Aturan pilihan
+  // barisnya juga disamakan dengan Print — tepat satu baris dicentang.
+  const handleExportExcel = async (buktiId?: string) => {
+    let rowId = buktiId;
+
+    if (rowId === undefined) {
+      if (checkedRows.size === 0) {
+        alert({
+          title: 'PILIH DATA YANG INGIN DI EXPORT!',
+          variant: 'danger',
+          submitText: 'OK'
+        });
+        return;
+      }
+      if (checkedRows.size > 1) {
+        alert({
+          title: 'HANYA BISA MEMILIH SATU DATA!',
+          variant: 'danger',
+          submitText: 'OK'
+        });
+        return;
+      }
+      rowId = String(Array.from(checkedRows)[0]);
+    }
 
     await generateExport({
       label: 'Export Kas Gantung',
-      payload: {
-        search: filtersWithoutLimit.search,
-        filters: filtersWithoutLimit.filters,
-        sortBy: filtersWithoutLimit.sortBy,
-        sortDirection: filtersWithoutLimit.sortDirection
-      },
+      payload: { id: rowId },
       apiFn: generateKasGantungHeaderExportFn
     });
   };
@@ -3275,12 +3293,16 @@ const GridKasGantungHeader = () => {
             customActions={[
               {
                 label: 'Print',
+                shortcut: 'P',
+
                 icon: <FaPrint />,
                 onClick: () => handleReport(),
                 className: 'bg-cyan-500 hover:bg-cyan-700'
               },
               {
                 label: 'Export',
+                shortcut: 'E',
+
                 icon: <FaFileExport />,
                 onClick: () => handleExportExcel(),
                 className: 'bg-green-600 hover:bg-green-700'

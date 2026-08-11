@@ -5,55 +5,23 @@ import { useSelector } from 'react-redux';
 import { IoMdRefresh } from 'react-icons/io';
 import { Button } from '@/components/ui/button';
 import React, { useEffect, useState } from 'react';
-import InputDatePicker from '@/components/custom-ui/InputDatePicker';
-import {
-  setProcessed,
-  setProcessing
-} from '@/lib/store/loadingSlice/loadingSlice';
-import {
-  setOnReload,
-  setSelectedDate,
-  setSelectedDate2
-} from '@/lib/store/filterSlice/filterSlice';
+import { commitFilter, setPending } from '@/lib/store/filterSlice/filterSlice';
 import PeriodeValidation from '@/components/custom-ui/PeriodeValidate';
+import { RootState } from '@/lib/store/store';
 
 const FilterGrid = () => {
   const dispatch = useDispatch();
+  const pending = useSelector((state: RootState) => state.filter.pending);
   const [triggerValidation, setTriggerValidation] = useState(false);
-  const { onReload } = useSelector((state: any) => state.filter);
-
-  const onSubmit = () => {
-    setTriggerValidation(true);
-  };
 
   const handleValidationResult = (isValid: boolean) => {
-    if (triggerValidation) {
-      if (isValid) {
-        dispatch(setOnReload(true));
-      }
-      setTriggerValidation(false);
-    }
+    if (!triggerValidation) return;
+    setTriggerValidation(false);
+    if (!isValid) return;
+
+    // ✅ Atomic commit — satu action, satu re-render
+    dispatch(commitFilter());
   };
-
-  useEffect(() => {
-    const now = new Date();
-    const fmt = (date: Date) =>
-      `${String(date.getDate()).padStart(2, '0')}-${String(
-        date.getMonth() + 1
-      ).padStart(2, '0')}-${date.getFullYear()}`;
-
-    const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const lastOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-
-    dispatch(setSelectedDate(fmt(firstOfMonth)));
-    dispatch(setSelectedDate2(fmt(lastOfMonth)));
-  }, [dispatch]);
-
-  useEffect(() => {
-    if (onReload) {
-      dispatch(setOnReload(false)); // Simulate a reload operation
-    }
-  }, [onReload]);
 
   return (
     <div className={`flex h-[100%] w-full justify-center`}>
@@ -62,14 +30,18 @@ const FilterGrid = () => {
         <div className="bg-background-header p-4">
           <PeriodeValidation
             label="periode"
+            date1={pending.tglDari}
+            date2={pending.tglSampai}
+            onDate1Change={(val) => dispatch(setPending({ tglDari: val }))}
+            onDate2Change={(val) => dispatch(setPending({ tglSampai: val }))}
             onValidationChange={handleValidationResult}
             triggerValidation={triggerValidation}
           />
 
           <Button
             variant="default"
-            className="mt-2 flex flex-row items-center justify-center"
-            onClick={onSubmit}
+            className="flex flex-row items-center justify-center"
+            onClick={() => setTriggerValidation(true)}
           >
             <IoMdRefresh />
             <p style={{ fontSize: 12 }} className="font-normal">
@@ -80,15 +52,6 @@ const FilterGrid = () => {
       </div>
     </div>
   );
-};
-
-// Fungsi untuk mengonversi string dd-mm-yyyy menjadi objek Date
-const parseDateFromDDMMYYYY = (dateString: string): Date | undefined => {
-  const parts = dateString.split('-');
-  if (parts.length !== 3) return undefined;
-  const [day, month, year] = parts.map(Number);
-  if (isNaN(day) || isNaN(month) || isNaN(year)) return undefined;
-  return new Date(year, month - 1, day); // Menggunakan month - 1 karena JavaScript Date menganggap bulan dimulai dari 0
 };
 
 export default FilterGrid;

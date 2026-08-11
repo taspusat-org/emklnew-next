@@ -51,7 +51,7 @@ import { useGetJurnalUmumDetail } from '@/lib/server/useJurnalUmum';
 import { JurnalUmumDetail } from '@/lib/types/jurnalumumheader.type';
 import { useTheme } from 'next-themes';
 
-const FormKasGantung = ({
+const FormJurnalUmum = ({
   popOver,
   setPopOver,
   forms,
@@ -752,4 +752,4 @@ const FormKasGantung = ({
   );
 };
 
-export default FormKasGantung;
+export default FormJurnalUmum;

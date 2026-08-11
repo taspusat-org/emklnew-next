@@ -12,8 +12,6 @@ import {
 import { useEffect, useRef, useState } from 'react';
 import { FaRegPlusSquare, FaTrashAlt } from 'react-icons/fa';
 import FormFooterButtons from '@/components/custom-ui/FormFooterButtons';
-import { useFormContext } from 'react-hook-form';
-import LookUp from '@/components/custom-ui/LookUp';
 import {
   Select,
   SelectContent,
@@ -24,20 +22,12 @@ import {
   SelectValue
 } from '@/components/ui/select';
 import { X } from 'lucide-react';
-import { FileUploader } from '@/components/file-uploader';
-import {
-  Dropzone,
-  ExtFile,
-  FileMosaic,
-  FileMosaicProps,
-  FullScreen,
-  ImagePreview,
-  VideoPreview
-} from '@files-ui/react';
 import { api, api2 } from '@/lib/utils/AxiosInstance';
 import { IoMdClose } from 'react-icons/io';
-import { useSelector } from 'react-redux';
+import { useDispatch, useSelector } from 'react-redux';
 import { RootState } from '@/lib/store/store';
+import { setSubmitClicked } from '@/lib/store/lookupSlice/lookupSlice';
+
 interface RowData {
   key: string;
   value: string;
@@ -63,36 +53,19 @@ const FormParameter = ({
   setPopOver,
   forms,
   onSubmit,
-  deleteMode,
+  mode,
   handleClose,
-  viewMode,
   isLoadingCreate,
-  isLoadingUpdate
+  isLoadingUpdate,
+  isLoadingDelete
 }: any) => {
-  const lookUpProps = [
-    {
-      columns: [{ key: 'text', name: 'TEXT' }],
-      // filterby: { class: 'system', method: 'get' },
-      selectedRequired: false,
-      // endpoint: 'parameter?grp=status+aktif',
-      label: 'Status Aktif',
-      singleColumn: true,
-      pageSize: 20,
-      showOnButton: true,
-      postData: 'grp'
-    }
-  ];
+  const readOnly = mode === 'view' || mode === 'delete';
+  const dispatch = useDispatch();
 
   const [rows, setRows] = useState<RowData[]>([{ key: '', value: '' }]);
   const [dataMaxLength, setDataMaxLength] = useState<{ [key: string]: number }>(
     {}
   );
-
-  const [color, setColor] = useState(''); // Warna default
-
-  const handleColorChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setColor(e.target.value);
-  };
   const [rowErrors, setRowErrors] = useState<RowError[]>([]);
   const sendRowsToAPI = async () => {
     try {
@@ -311,7 +284,15 @@ const FormParameter = ({
       <DialogTitle hidden={true}>Title</DialogTitle>
       <DialogContent className="flex h-full min-w-full flex-col overflow-hidden border border-border bg-background">
         <div className="flex items-center justify-between bg-background-form-header px-2 py-2">
-          <h2 className="text-sm font-semibold">Parameter Form</h2>
+          <h2 className="text-sm font-semibold">
+            {mode === 'add'
+              ? 'Add Parameter'
+              : mode === 'edit'
+              ? 'Edit Parameter'
+              : mode === 'delete'
+              ? 'Delete Parameter'
+              : 'View Parameter'}
+          </h2>
           <div
             className="cursor-pointer rounded-md border border-zinc-200 bg-red-500 p-0 hover:bg-red-400"
             onClick={() => {
@@ -327,7 +308,14 @@ const FormParameter = ({
             <Form {...forms}>
               <form
                 ref={formRef}
-                onSubmit={onSubmit}
+                // `onSubmit` dari grid menerima (keepOpenModal), bukan event —
+                // pembungkusan forms.handleSubmit dilakukan di grid. Tanpa
+                // preventDefault + argumen boolean, submit native mengirim
+                // objek EVENT sebagai `keepOpenModal`.
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  onSubmit(false);
+                }}
                 className="flex h-full flex-col gap-6"
               >
                 <div className="flex h-[100%] flex-col gap-2 lg:gap-3">
@@ -336,15 +324,19 @@ const FormParameter = ({
                     control={forms.control}
                     render={({ field }) => (
                       <FormItem className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
-                        <FormLabel className="font-semibold lg:w-[20%]">
+                        <FormLabel
+                          required={true}
+                          className="font-semibold lg:w-[20%]"
+                        >
                           Nama Grup
                         </FormLabel>
                         <div className="flex flex-col lg:w-[80%]">
                           <FormControl>
                             <Input
                               {...field}
+                              value={field.value ?? ''}
                               type="text"
-                              readOnly={deleteMode}
+                              readOnly={readOnly}
                             />
                           </FormControl>
                           <FormMessage />
@@ -364,7 +356,8 @@ const FormParameter = ({
                           <FormControl>
                             <Input
                               {...field}
-                              readOnly={deleteMode}
+                              value={field.value ?? ''}
+                              readOnly={readOnly}
                               type="text"
                             />
                           </FormControl>
@@ -386,8 +379,9 @@ const FormParameter = ({
                           <FormControl>
                             <Input
                               {...field}
+                              value={field.value ?? ''}
                               type="text"
-                              readOnly={deleteMode}
+                              readOnly={readOnly}
                             />
                           </FormControl>
                           <FormMessage />
@@ -400,15 +394,19 @@ const FormParameter = ({
                     control={forms.control}
                     render={({ field }) => (
                       <FormItem className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
-                        <FormLabel className="font-semibold lg:w-[20%]">
+                        <FormLabel
+                          required={true}
+                          className="font-semibold lg:w-[20%]"
+                        >
                           Nama Parameter
                         </FormLabel>
                         <div className="flex flex-col lg:w-[80%]">
                           <FormControl>
                             <Input
                               {...field}
+                              value={field.value ?? ''}
                               type="text"
-                              readOnly={deleteMode}
+                              readOnly={readOnly}
                             />
                           </FormControl>
                           <FormMessage />
@@ -428,8 +426,9 @@ const FormParameter = ({
                           <FormControl>
                             <Input
                               {...field}
+                              value={field.value ?? ''}
                               type="text"
-                              readOnly={deleteMode}
+                              readOnly={readOnly}
                             />
                           </FormControl>
                           <FormMessage />
@@ -437,26 +436,6 @@ const FormParameter = ({
                       </FormItem>
                     )}
                   />
-                  <div className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
-                    <div className="w-full lg:w-[20%]">
-                      <FormLabel className="text-sm font-semibold">
-                        Status Aktif
-                      </FormLabel>
-                    </div>
-                    <div className="w-full lg:w-[80%]">
-                      {lookUpProps.map((props, index) => (
-                        <LookUp
-                          key={index}
-                          {...props}
-                          lookupValue={(id) =>
-                            forms.setValue('statusaktif', id)
-                          }
-                          inputLookupValue={forms.getValues('statusaktif')}
-                          lookupNama={forms.getValues('statusaktif_nama')}
-                        />
-                      ))}
-                    </div>
-                  </div>
                   <FormField
                     name="default"
                     control={forms.control}
@@ -471,6 +450,7 @@ const FormParameter = ({
                             <Select
                               onValueChange={(value) => field.onChange(value)} // Set nilai ke field React Hook Form
                               value={field.value || ''} // Nilai diambil dari field
+                              disabled={readOnly}
                             >
                               <SelectTrigger className="w-full border-zinc-300 placeholder:text-zinc-400">
                                 <SelectValue
@@ -535,7 +515,8 @@ const FormParameter = ({
                                     <button
                                       type="button"
                                       onClick={() => deleteRow(index)}
-                                      className="text-red-500 hover:text-red-700"
+                                      disabled={readOnly}
+                                      className="text-red-500 hover:text-red-700 disabled:opacity-40"
                                     >
                                       <FaTrashAlt />
                                     </button>
@@ -544,6 +525,7 @@ const FormParameter = ({
                                     <Input
                                       type="text"
                                       value={row.key}
+                                      readOnly={readOnly}
                                       onChange={(e) =>
                                         handleInputChange(
                                           index,
@@ -566,6 +548,7 @@ const FormParameter = ({
                                         <Input
                                           type="color"
                                           value={row.value}
+                                          disabled={readOnly}
                                           onChange={(e) =>
                                             handleInputChange(
                                               index,
@@ -580,6 +563,7 @@ const FormParameter = ({
                                           type="text"
                                           value={row.value}
                                           maxLength={7}
+                                          readOnly={readOnly}
                                           onChange={(e) =>
                                             handleInputChange(
                                               index,
@@ -595,6 +579,7 @@ const FormParameter = ({
                                       <Input
                                         type="text"
                                         value={row.value}
+                                        readOnly={readOnly}
                                         onChange={(e) =>
                                           handleInputChange(
                                             index,
@@ -618,7 +603,8 @@ const FormParameter = ({
                                   <button
                                     type="button"
                                     onClick={addRow}
-                                    className="text-blue-500 hover:text-blue-700"
+                                    disabled={readOnly}
+                                    className="text-blue-500 hover:text-blue-700 disabled:opacity-40"
                                   >
                                     <FaRegPlusSquare />
                                   </button>
@@ -637,13 +623,20 @@ const FormParameter = ({
           </div>
         </div>
         <FormFooterButtons
-          mode={deleteMode ? 'delete' : 'add'}
-          onSave={onSubmit}
+          mode={mode}
+          onSave={() => {
+            onSubmit(false);
+            dispatch(setSubmitClicked(true));
+          }}
+          onSaveAndAdd={() => {
+            onSubmit(true);
+            dispatch(setSubmitClicked(true));
+          }}
           onCancel={handleClose}
           isLoadingCreate={isLoadingCreate}
           isLoadingUpdate={isLoadingUpdate}
-          hideSaveAndAdd
-          saveDisabled={viewMode}
+          isLoadingDelete={isLoadingDelete}
+          deleteMode={mode === 'delete'}
         />
       </DialogContent>
     </Dialog>
