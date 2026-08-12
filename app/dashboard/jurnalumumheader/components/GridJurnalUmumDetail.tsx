@@ -44,6 +44,7 @@ import { useTheme } from 'next-themes';
 import { EmptyRowsRenderer } from '@/components/EmptyRows';
 import { LoadRowsRenderer } from '@/components/LoadRows';
 import { useSession } from 'next-auth/react';
+import { hashQueryKey } from 'react-query';
 import { HEADER_ROW_HEIGHT, LIMIT, ROW_HEIGHT } from '@/constants/constant';
 
 // filterJurnalUmumDetail dipakai bersama grid lain (consignee, packinglist) dan
@@ -174,7 +175,11 @@ const GridJurnalUmumDetail = ({
     effectiveLimit
   ]);
 
-  const { data: detail, isLoading } = useGetJurnalUmumDetail(queryParams);
+  const {
+    data: detail,
+    isLoading,
+    dataUpdatedAt
+  } = useGetJurnalUmumDetail(queryParams);
 
   const [rows, setRows] = useState<JurnalUmumDetail[]>([]);
   const [selectedRow, setSelectedRow] = useState<number>(0);
@@ -1418,6 +1423,30 @@ const GridJurnalUmumDetail = ({
       }
     }, 100);
   }, [detail, currentPage, shouldBulkFetch]);
+
+  // ── 2b. Data di-refresh dari luar (invalidateQueries setelah header diedit) ─
+  // Refetch semacam ini cuma membawa data currentPage, sedangkan halaman lain di
+  // window masih hasil bulk fetch sebelum edit. Reset window supaya seluruhnya
+  // dirakit ulang; tanpa ini baris detail yang baru diedit tetap tampil lama.
+  // Penandanya adalah query key yang TIDAK berubah: fetch milik grid sendiri
+  // (bulk -> per-halaman, geser window, filter/sort) selalu mengubah key,
+  // sedangkan invalidateQueries me-refetch key yang sama. Tanpa perbandingan key
+  // ini, pergantian limit bulk -> per-halaman ikut terbaca sebagai refresh luar
+  // dan reset-nya memicu bulk fetch lagi — loop request tanpa henti.
+  const lastFetchRef = useRef({ key: '', updatedAt: 0 });
+  useEffect(() => {
+    if (!dataUpdatedAt) return;
+
+    const key = hashQueryKey(['jurnalumumdetail', queryParams]);
+    const previous = lastFetchRef.current;
+    lastFetchRef.current = { key, updatedAt: dataUpdatedAt };
+
+    if (previous.updatedAt === 0 || key !== previous.key) return;
+    if (dataUpdatedAt === previous.updatedAt) return;
+    if (shouldBulkFetch || isFetching || isTransitioning) return;
+
+    resetBufferingCache();
+  }, [dataUpdatedAt, queryParams]);
 
   // ── 3. Row combiner: gabungkan halaman-halaman window jadi `rows` ─────────
   useEffect(() => {

@@ -22,9 +22,9 @@ export const useGetScheduleHeader = (
       nobukti?: string;
       tglbukti?: string;
       keterangan?: string | null;
-      bank_id?: number | null;
-      pengeluaran_nobukti?: string | null;
-      coakaskeluar?: string | null;
+      modifiedby?: string;
+      created_at?: string;
+      updated_at?: string;
       tglDari?: string | null;
       tglSampai?: string | null;
     };
@@ -32,47 +32,19 @@ export const useGetScheduleHeader = (
     sortBy?: string;
     sortDirection?: string;
     limit?: number;
+    isreload?: boolean;
     search?: string; // Kata kunci pencarian
   } = {},
   signal?: AbortSignal
 ) => {
-  const dispatch = useDispatch();
-  const { alert } = useAlert();
-  const queryClient = useQueryClient();
-
   return useQuery(
     ['schedule', filters],
-    async () => {
-      if (filters.page === 1) {
-        dispatch(setProcessing()); // Only trigger processing if the page is 1
-      }
-
-      try {
-        const data = await getScheduleHeaderFn(filters, signal);
-        return data;
-      } catch (error) {
-        // Show error toast and dispatch processed
-        dispatch(setProcessed());
-        alert({
-          title: 'Gagal',
-          variant: 'danger',
-          submitText: 'OK'
-        });
-        throw error;
-      } finally {
-        dispatch(setProcessed());
-      }
-    },
+    async () => await getScheduleHeaderFn(filters, signal),
     {
-      enabled: !signal?.aborted
+      enabled: !signal?.aborted && (filters.page ?? 1) >= 1,
+      staleTime: 0,
+      cacheTime: 0
     }
-    // {
-    //   onSettled: () => {
-    //     if (filters.page === 1) {
-    //       dispatch(setProcessed());
-    //     }
-    //   }
-    // }
   );
 };
 
@@ -101,74 +73,39 @@ export const useGetScheduleDetail = (
       etdtujuan?: string;
       keterangan?: string;
     };
-  } = {}
+  } = {},
+  signal?: AbortSignal
 ) => {
   return useQuery(
-    ['schedule', id, filters],
-    async () => await getScheduleDetailFn(id!, filters),
+    ['scheduledetail', id, filters],
+    async () => await getScheduleDetailFn(id!, filters, signal),
     {
-      enabled: !!id // Hanya aktifkan query jika tab aktif adalah "pengalamankerja"
+      // page < 1 = fase antara dari trik setCurrentPage(0) di grid detail;
+      // query-nya sengaja tidak dijalankan supaya `data` tetap milik halaman
+      // lama sampai halaman tujuan di-set.
+      enabled: !!id && !signal?.aborted && (filters.page ?? 1) >= 1,
+      staleTime: 0,
+      cacheTime: 0
     }
   );
 };
 
 export const useCreateSchedule = () => {
-  const { setError } = useFormError(); // Mengambil setError dari context
-  const queryClient = useQueryClient();
   const dispatch = useDispatch();
   const { alert } = useAlert();
-
-  return useMutation(storeScheduleFn, {
-    // before the mutation fn runs
-    onMutate: () => {
-      dispatch(setProcessing());
-    },
-    onSuccess: () => {
-      // on success, invalidate + clear loading
-      void queryClient.invalidateQueries(['schedule']);
-      dispatch(setProcessed());
-    },
-    onError: (error: AxiosError) => {
-      // on error, clear loading
-      const err = (error.response?.data as IErrorResponse) ?? {};
-
-      if (err !== undefined) {
-        const errorFields = Array.isArray(err.message) ? err.message : [];
-
-        if (err.statusCode === 400) {
-          // Iterasi error message dan set error di form
-          errorFields?.forEach((err: { path: string[]; message: string }) => {
-            const path = err.path[0]; // Ambil path error pertama (misalnya 'nama', 'akuntansi_id')
-            setError(path, err.message); // Update error di context
-          });
-        } else {
-          alert({
-            title: err.message ?? 'Gagal',
-            variant: 'danger',
-            submitText: 'OK'
-          });
-        }
-      }
-      dispatch(setProcessed());
-    }
-    // onSettled: () => {
-    //   dispatch(setProcessed());
-    // }
-  });
-};
-
-export const useUpdateSchedule = () => {
   const { setError } = useFormError();
-  const queryClient = useQueryClient();
-  const { alert } = useAlert();
-  const dispatch = useDispatch();
 
-  return useMutation(updateScheduleFn, {
+  // Sengaja TIDAK invalidateQueries('schedule') di sini. Alur onSuccess di
+  // GridScheduleHeader sudah otoritatif: ia mengambil window baru dari redis
+  // lalu setCurrentPage(pageNumber) yang memicu refetch halaman yang BENAR.
+  // invalidateQueries malah me-refetch `currentPage` yang mungkin masih basi;
+  // karena useGetScheduleHeader memakai staleTime/cacheTime 0, refetch itu
+  // selalu jalan, tiba paling akhir, dan menimpa baris + fokus hasil onSuccess.
+  return useMutation(storeScheduleFn, {
     onMutate: () => {
       dispatch(setProcessing());
     },
     onSuccess: () => {
-      void queryClient.invalidateQueries('schedule');
       dispatch(setProcessed());
     },
     onError: (error: AxiosError) => {
@@ -179,10 +116,55 @@ export const useUpdateSchedule = () => {
           : [];
 
         if (errorResponse.statusCode === 400) {
-          // Iterasi error message dan set error di form
           errorFields?.forEach((err: { path: string[]; message: string }) => {
-            const path = err.path[0]; // Ambil path error pertama (misalnya 'nama', 'akuntansi_id')
-            setError(path, err.message); // Update error di context
+            const path = err.path[0];
+            setError(path, err.message);
+          });
+        } else {
+          alert({
+            title: errorResponse.message ?? 'Gagal',
+            variant: 'danger',
+            submitText: 'OK'
+          });
+        }
+      }
+      dispatch(setProcessed());
+    }
+  });
+};
+
+export const useUpdateSchedule = () => {
+  const dispatch = useDispatch();
+  const queryClient = useQueryClient();
+  const { alert } = useAlert();
+  const { setError } = useFormError();
+
+  // Sama seperti useCreateSchedule: JANGAN invalidateQueries('schedule').
+  // onSuccess di GridScheduleHeader yang mengatur data + posisi baris; refetch
+  // dari invalidate mendarat belakangan dan menimpa fokus tersebut (gejala
+  // "setelah update grid balik ke baris 1").
+  return useMutation(updateScheduleFn, {
+    onMutate: () => {
+      dispatch(setProcessing());
+    },
+    // Detail lain ceritanya: key-nya ['scheduledetail', id, ...] dan id header
+    // tidak berubah saat edit, jadi tanpa invalidate grid detail terus
+    // menampilkan baris lama sampai halaman di-reload.
+    onSuccess: () => {
+      void queryClient.invalidateQueries('scheduledetail');
+      dispatch(setProcessed());
+    },
+    onError: (error: AxiosError) => {
+      const errorResponse = error.response?.data as IErrorResponse;
+      if (errorResponse !== undefined) {
+        const errorFields = Array.isArray(errorResponse.message)
+          ? errorResponse.message
+          : [];
+
+        if (errorResponse.statusCode === 400) {
+          errorFields?.forEach((err: { path: string[]; message: string }) => {
+            const path = err.path[0];
+            setError(path, err.message);
           });
         } else {
           alert({
@@ -204,10 +186,7 @@ export const useDeleteSchedule = () => {
   return useMutation(deleteScheduleFn, {
     onSuccess: () => {
       void queryClient.invalidateQueries('schedule');
-      // toast({
-      //   title: 'Proses Berhasil.',
-      //   description: 'Data Berhasil Dihapus.'
-      // });
+      void queryClient.invalidateQueries('scheduledetail');
     },
     onError: (error: AxiosError) => {
       const errorResponse = error.response?.data as IErrorResponse;

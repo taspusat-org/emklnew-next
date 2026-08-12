@@ -25,6 +25,11 @@ interface AuthState {
   autoLogoutExpires?: number | null; // Waktu kedaluwarsa untuk auto logout
 }
 
+type SessionPayload = Pick<
+  AuthState,
+  'user' | 'id' | 'token' | 'refreshToken' | 'cabang_id' | 'accessTokenExpires'
+>;
+
 const initialState: AuthState = {
   user: {
     id: '',
@@ -75,6 +80,24 @@ const authSlice = createSlice({
       state.refreshTokenExpires = refreshTokenExpires;
       state.autoLogoutExpires = autoLogoutExpires;
     },
+    /**
+     * Isi ulang state auth dari session NextAuth (dipakai AuthSessionSync).
+     * Beda dengan setCredentials: `autoLogoutExpires` hanya diisi kalau masih
+     * kosong. Nilainya adalah titik awal hitungan idle logout, jadi menimpanya
+     * setiap session di-refetch membuat useIdleTimer tidak pernah kedaluwarsa.
+     */
+    hydrateSession: (state, action: PayloadAction<SessionPayload>) => {
+      const { user, id, token, refreshToken, cabang_id, accessTokenExpires } =
+        action.payload;
+
+      state.user = user;
+      state.id = id;
+      state.token = token;
+      state.refreshToken = refreshToken;
+      state.cabang_id = cabang_id;
+      state.accessTokenExpires = accessTokenExpires;
+      state.autoLogoutExpires = state.autoLogoutExpires ?? Date.now();
+    },
     setIsRefreshing(state, action: PayloadAction<boolean>) {
       state.isRefreshing = action.payload; // Set status refresh token
     },
@@ -105,6 +128,10 @@ const authSlice = createSlice({
   }
 });
 
-export const { setCredentials, clearCredentials, setIsRefreshing } =
-  authSlice.actions;
+export const {
+  setCredentials,
+  hydrateSession,
+  clearCredentials,
+  setIsRefreshing
+} = authSlice.actions;
 export default authSlice.reducer;

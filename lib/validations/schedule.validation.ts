@@ -1,14 +1,28 @@
 import { z } from 'zod';
 import { dynamicRequiredMessage } from '../utils';
 
+// id detail dan seluruh FK (pelayaran/kapal/tujuankapal) adalah varchar UUID
+// dari backend; baris baru dikirim sebagai 0.
+const idField = z.union([z.string(), z.number()]);
+
+const requiredLookup = (label: string) =>
+  idField
+    .nullable()
+    .refine(
+      (value) => value !== null && value !== '' && String(value) !== '0',
+      {
+        message: dynamicRequiredMessage(label)
+      }
+    );
+
 export const scheduleDetailSchema = z.object({
-  id: z.number().optional(),
+  id: idField.optional(),
   nobukti: z.string().nullable().optional(),
-  pelayaran_id: z.number().nullable(),
+  pelayaran_id: requiredLookup('PELAYARAN'),
   pelayaran_nama: z.string().nullable().optional(),
-  kapal_id: z.number().nullable(),
+  kapal_id: requiredLookup('KAPAL'),
   kapal_nama: z.string().nullable().optional(),
-  tujuankapal_id: z.number().nullable(),
+  tujuankapal_id: requiredLookup('TUJUAN KAPAL'),
   tujuankapal_nama: z.string().nullable().optional(),
   tglberangkat: z.string().nullable(),
   tgltiba: z.string().nullable(),
@@ -20,7 +34,6 @@ export const scheduleDetailSchema = z.object({
   closing: z.string().nullable(),
   etatujuan: z.string().nullable(),
   etdtujuan: z.string().nullable(),
-  // keterangan: z.string().nullable(),
   keterangan: z
     .string()
     .nonempty({ message: dynamicRequiredMessage('KETERANGAN') })
@@ -28,9 +41,10 @@ export const scheduleDetailSchema = z.object({
 export type ScheduleDetailInput = z.infer<typeof scheduleDetailSchema>;
 
 export const scheduleHeaderSchema = z.object({
-  nobukti: z.string().nullable(),
+  nobukti: z.string().nullable().optional(),
   tglbukti: z
     .string()
+    .trim()
     .nonempty({ message: dynamicRequiredMessage('TGL BUKTI') }),
   keterangan: z
     .string()

@@ -31,7 +31,14 @@ import {
   useRef,
   useState
 } from 'react';
-import { FaPrint, FaSort, FaSortDown, FaSortUp, FaTimes } from 'react-icons/fa';
+import {
+  FaFileExport,
+  FaPrint,
+  FaSort,
+  FaSortDown,
+  FaSortUp,
+  FaTimes
+} from 'react-icons/fa';
 import {
   cancelPreviousRequest,
   handleContextMenu,
@@ -41,11 +48,19 @@ import {
 } from '@/lib/utils';
 import {
   checkValidationTypeAkuntansiFn,
-  exportTypeAkuntansiFn,
   getAllTypeAkuntansiFn
 } from '@/lib/apis/typeakuntansi.api';
-import { generateTypeAkuntansiReportFn } from '@/lib/apis/report.api';
+import {
+  generateTypeAkuntansiExportFn,
+  generateTypeAkuntansiReportFn
+} from '@/lib/apis/report.api';
 import { useReportPdfContext } from '@/hooks/ReportPdfProvider';
+import {
+  HEADER_ROW_HEIGHT,
+  LIMIT,
+  NOMOR_CELL_BOX,
+  ROW_HEIGHT
+} from '@/constants/constant';
 import { setHeaderData } from '@/lib/store/headerSlice/headerSlice';
 import {
   clearOpenName,
@@ -54,7 +69,7 @@ import {
 import {
   TypeakuntansiInput,
   typeakuntansiSchema
-} from '@/lib/validations/typeakuntansi';
+} from '@/lib/validations/typeakuntansi.validation';
 import DataGrid, {
   CellClickArgs,
   CellKeyDownArgs,
@@ -110,7 +125,7 @@ const GridTypeAkuntansi = () => {
   const { theme, resolvedTheme } = useTheme();
   const isDark = theme === 'dark' || resolvedTheme === 'dark';
   const { user } = useSelector((state: RootState) => state.auth);
-  const { generateReport } = useReportPdfContext();
+  const { generateReport, generateExport } = useReportPdfContext();
   const gridRef = useRef<DataGridHandle>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const contextMenuRef = useRef<HTMLDivElement | null>(null);
@@ -148,7 +163,6 @@ const GridTypeAkuntansi = () => {
   // instan (tanpa spinner) selama buffer masih terisi.
   const STREAM_BUFFER_SIZE = 5;
   const WINDOW_SIZE = 5;
-  const ROW_HEIGHT = 27;
 
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [isAfterMutation, setIsAfterMutation] = useState(false);
@@ -216,7 +230,7 @@ const GridTypeAkuntansi = () => {
 
   const [filters, setFilters] = useState<Filter>({
     page: 1,
-    limit: 50,
+    limit: LIMIT,
     search: '',
     sortBy: 'nama',
     sortDirection: 'asc',
@@ -374,39 +388,57 @@ const GridTypeAkuntansi = () => {
       {
         key: 'nomor',
         name: 'NO',
-        width: 50,
+        width: 40,
         headerCellClass: 'column-headers',
-        renderHeaderCell: (column: any) => (
-          <div className="flex h-full flex-col items-center gap-1">
-            <div className="headers-cell h-[50%] items-center justify-center text-center">
-              <p className="text-sm font-normal">No.</p>
+        renderHeaderCell: () => (
+          // gap-1 WAJIB sama dengan kolom lain: dua anak h-[50%] + gap 4px
+          // melebihi tinggi container, keduanya menyusut 2px, dan garis bawah
+          // baris judul berhenti di H/2-2. Tanpa gap garisnya di H/2 — meleset
+          // 2px dari garis bawah kolom sebelahnya.
+          <div className="flex h-full w-full flex-col gap-1">
+            <div
+              className="headers-cell h-[50%] w-full"
+              onContextMenu={(event) =>
+                setContextMenu(handleContextMenu(event))
+              }
+            >
+              <p className="w-full text-center text-sm font-normal">No.</p>
             </div>
 
-            <div
-              className="flex h-[50%] w-full cursor-pointer items-center justify-center"
-              onClick={() => {
-                setFilters({
-                  ...filters,
-                  search: '',
-                  filters: {
-                    nama: '',
-                    order: '',
-                    keterangan: '',
-                    statusaktif: '',
-                    akuntansi: '',
-                    modifiedby: '',
-                    created_at: '',
-                    updated_at: ''
-                  }
-                }),
-                  setInputValue('');
-                resetBufferingCache();
-                setTimeout(() => {
-                  gridRef?.current?.selectCell({ rowIdx: 0, idx: 1 });
-                }, 0);
-              }}
-            >
-              <FaTimes className="bg-red-500 text-white" />
+            <div className={`h-[50%] w-[calc(100%+2px)] ${NOMOR_CELL_BOX}`}>
+              <div className="flex justify-center">
+                <Checkbox
+                  checked={isAllSelected}
+                  onCheckedChange={() => handleSelectAll()}
+                  id="header-checkbox"
+                />
+              </div>
+              <div
+                className="flex cursor-pointer items-center justify-center"
+                onClick={() => {
+                  setFilters({
+                    ...filters,
+                    search: '',
+                    filters: {
+                      nama: '',
+                      order: '',
+                      keterangan: '',
+                      statusaktif: '',
+                      akuntansi: '',
+                      modifiedby: '',
+                      created_at: '',
+                      updated_at: ''
+                    }
+                  }),
+                    setInputValue('');
+                  resetBufferingCache();
+                  setTimeout(() => {
+                    gridRef?.current?.selectCell({ rowIdx: 0, idx: 1 });
+                  }, 0);
+                }}
+              >
+                <FaTimes className="bg-red-500 text-white" />
+              </div>
             </div>
           </div>
         ),
@@ -414,50 +446,29 @@ const GridTypeAkuntansi = () => {
         // WINDOW_SIZE halaman, jadi index lokal harus digeser sebanyak
         // halaman-halaman sebelum window.
         renderCell: (props: any) => {
-          const localIndex = rows.findIndex((row) => row.id === props.row.id);
+          const rowId = props.row.id;
+          const localIndex = rows.findIndex((row) => row.id === rowId);
           const absoluteNumber =
             localIndex === -1
               ? '—'
               : (minVisiblePage - 1) * filters.limit + localIndex + 1;
           return (
-            <div className="flex h-full w-full cursor-pointer items-center justify-center text-sm">
-              {absoluteNumber}
+            <div
+              className={`-ml-[5px] h-full w-[calc(100%+9px)] cursor-pointer ${NOMOR_CELL_BOX}`}
+            >
+              <div className="flex justify-center">
+                <Checkbox
+                  checked={checkedRows.has(rowId)}
+                  onCheckedChange={() => handleRowSelect(rowId)}
+                  id={`row-checkbox-${rowId}`}
+                />
+              </div>
+              <div className="flex justify-center text-sm">
+                {absoluteNumber}
+              </div>
             </div>
           );
         }
-      },
-      {
-        key: 'select',
-        name: '',
-        width: 50,
-        headerCellClass: 'column-headers',
-        renderHeaderCell: (column: any) => (
-          <div className="flex h-full cursor-pointer flex-col items-center gap-1">
-            <div
-              className="headers-cell h-[50%]"
-              onContextMenu={(event) =>
-                setContextMenu(handleContextMenu(event))
-              }
-            ></div>
-            <div className="flex h-[50%] w-full items-center justify-center">
-              <Checkbox
-                checked={isAllSelected}
-                onCheckedChange={() => handleSelectAll()}
-                id="header-checkbox"
-                className="mb-2"
-              />
-            </div>
-          </div>
-        ),
-        renderCell: ({ row }: { row: ITypeAkuntansi }) => (
-          <div className="flex h-full items-center justify-center">
-            <Checkbox
-              checked={checkedRows.has(row.id)}
-              onCheckedChange={() => handleRowSelect(row.id)}
-              id={`row-checkbox-${row.id}`}
-            />
-          </div>
-        )
       },
       {
         key: 'nama',
@@ -2250,22 +2261,20 @@ const GridTypeAkuntansi = () => {
     });
   };
 
-  const handleExportExcel = async (exportFilters: any) => {
-    try {
-      const response = await exportTypeAkuntansiFn({ ...exportFilters });
+  const handleExportExcel = async (exportFilters?: any) => {
+    const { page, limit, ...filtersWithoutLimit } = filters;
+    const activeFilters = exportFilters ?? filtersWithoutLimit;
 
-      const url = window.URL.createObjectURL(new Blob([response]));
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `laporan_type_akuntansi_${Date.now()}.xlsx`;
-      document.body.appendChild(link);
-      link.click();
-
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(link);
-    } catch (error) {
-      console.error('Error exporting type akuntansi data:', error);
-    }
+    await generateExport({
+      label: 'Export Type Akuntansi',
+      payload: {
+        search: activeFilters.search,
+        filters: activeFilters.filters,
+        sortBy: activeFilters.sortBy,
+        sortDirection: activeFilters.sortDirection
+      },
+      apiFn: generateTypeAkuntansiExportFn
+    });
   };
 
   useEffect(() => {
@@ -2811,7 +2820,7 @@ const GridTypeAkuntansi = () => {
           rowKeyGetter={rowKeyGetter}
           rowClass={getRowClass}
           onCellClick={handleCellClick}
-          headerRowHeight={70}
+          headerRowHeight={HEADER_ROW_HEIGHT}
           rowHeight={ROW_HEIGHT}
           className={`${isDark ? 'rdg-dark' : 'rdg-light'} fill-grid`}
           // WAJIB false. Dengan virtualization aktif, RDG hanya me-render baris
@@ -2851,6 +2860,12 @@ const GridTypeAkuntansi = () => {
                 shortcut: 'P',
                 onClick: () => handleReport(),
                 className: 'bg-cyan-500 hover:bg-cyan-700'
+              },
+              {
+                label: 'Export',
+                icon: <FaFileExport />,
+                onClick: () => handleExportExcel(),
+                className: 'bg-green-600 hover:bg-green-700'
               }
             ]}
           />

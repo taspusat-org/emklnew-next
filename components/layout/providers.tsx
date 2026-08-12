@@ -6,6 +6,7 @@ import { RootState } from '@/lib/store/store';
 import { LoadingOverlay } from '../custom-ui/LoadingOverlay';
 import { HotkeysProvider } from '../providers/hotkeys-provider';
 import { ThemeProvider } from './ThemeToggle/theme-provider';
+import AuthSessionSync from './AuthSessionSync';
 
 export default function Providers({ children }: { children: React.ReactNode }) {
   const { isLoading, isProcessing } = useSelector(
@@ -28,6 +29,7 @@ export default function Providers({ children }: { children: React.ReactNode }) {
         refetchOnWindowFocus={false} // Disable refetch saat window focus
         // refetchWhenOffline={true} // Disable refetch saat offline
       >
+        <AuthSessionSync />
         <HotkeysProvider>{children}</HotkeysProvider>
       </SessionProvider>
     </ThemeProvider>

@@ -174,8 +174,15 @@ export const useUpdateBiayaExtraHeader = () => {
     onMutate: () => {
       dispatch(setProcessing());
     },
+    // Detail ikut tersimpan dalam payload header yang sama, tapi key-nya
+    // ('biayaextramuatandetail' / 'biayaextrabongkarandetail') tidak match
+    // 'biayaextraheader' — tanpa invalidate ini grid detail tidak pernah
+    // refetch dan tetap menampilkan baris sebelum edit. Header terpilih tidak
+    // berganti saat edit, jadi tidak ada perubahan id yang bisa memicunya.
     onSuccess: () => {
       void queryClient.invalidateQueries('biayaextraheader');
+      void queryClient.invalidateQueries('biayaextramuatandetail');
+      void queryClient.invalidateQueries('biayaextrabongkarandetail');
       dispatch(setProcessed());
     },
     onError: (error: AxiosError) => {

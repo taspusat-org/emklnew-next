@@ -46,5 +46,30 @@
       "created_at": 250,
       "updated_at": 250
     }
+  },
+  "GridGroupbiayaextra-02-E0CF9E01-0ED9-2C70-8463-360B144DB2A7": {
+    "columnsOrder": [0, 2, 3, 4, 1, 5],
+    "columnsWidth": {
+      "nomor": 50,
+      "statusaktif": 150,
+      "modifiedby": 150,
+      "created_at": 250,
+      "keterangan": 250,
+      "updated_at": 250
+    }
+  },
+  "GridBiayaExtraHeader-02-E0CF9E01-0ED9-2C70-8463-360B144DB2A7": {
+    "columnsOrder": [0, 1, 2, 3, 4, 5, 6, 7, 8],
+    "columnsWidth": {
+      "nomor": 50,
+      "nobukti": 300,
+      "tglbukti": 250,
+      "jenisorder_nama": 250,
+      "keterangan": 250,
+      "biayaemkl_nama": 250,
+      "modifiedby": 250,
+      "created_at": 250,
+      "updated_at": 250
+    }
   }
 }

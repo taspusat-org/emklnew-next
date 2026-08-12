@@ -130,6 +130,14 @@ export const generateGroupbiayaextraExportFn = async (
   return response.data;
 };
 
+/** Export Excel Type Akuntansi di background — lihat generateAlatbayarExportFn. */
+export const generateTypeAkuntansiExportFn = async (
+  payload: ExportJobPayload
+): Promise<ReportJobResponse> => {
+  const response = await api2.post('/type-akuntansi/export', payload);
+  return response.data;
+};
+
 /** Export Excel Parameter di background — lihat generateAlatbayarExportFn. */
 export const generateParameterExportFn = async (
   payload: ExportJobPayload

@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom';
 import Form from '../FormTypeAkuntansi';
-import { typeakuntansiSchema } from '@/lib/validations/typeakuntansi';
+import { typeakuntansiSchema } from '@/lib/validations/typeakuntansi.validation';
 import {
   renderForm,
   getBtn,
@@ -69,7 +69,10 @@ describe('FormTypeAkuntansi', () => {
   });
 
   test('cancel triggers handleClose', async () => {
-    const { handleClose } = renderForm(Form, { schema, defaultValues: validData });
+    const { handleClose } = renderForm(Form, {
+      schema,
+      defaultValues: validData
+    });
     await userEvent.click(getBtn('Cancel'));
     expect(handleClose).toHaveBeenCalled();
   });

@@ -184,6 +184,12 @@ export const saveGridConfig = async (
   columnsOrder: number[],
   columnsWidth: { [key: string]: number }
 ) => {
+  // Pemanggilnya menulis String(user?.id): saat auth belum terisi nilainya jadi
+  // '' atau 'undefined', dan /api/savegrid membalas 400 "Invalid input" —
+  // konfigurasi kolom hilang tanpa jejak selain error di console. Sama seperti
+  // resetGridConfig, request-nya tidak usah dikirim sama sekali.
+  if (!userId || userId === 'undefined' || userId === 'null') return;
+
   try {
     const response = await fetch('/api/savegrid', {
       method: 'POST',
@@ -235,12 +241,15 @@ export const loadGridConfig = async (
 
     const { columnsOrder, columnsWidth }: GridConfig = await response.json();
 
-    // columnsOrder
-    setColumnsOrder(
-      Array.isArray(columnsOrder) && columnsOrder.length > 0
-        ? columnsOrder
-        : defaultOrder
-    );
+    // columnsOrder berisi INDEX kolom, jadi hanya valid selama jumlah kolomnya
+    // masih sama. Kalau grid menambah/menghapus kolom, index lama menunjuk ke
+    // kolom lain (urutan teracak) dan index terakhir jadi undefined lalu kolom
+    // itu hilang dari grid — jatuhkan ke urutan default.
+    const isOrderStillValid =
+      Array.isArray(columnsOrder) &&
+      columnsOrder.length === defaultOrder.length;
+
+    setColumnsOrder(isOrderStillValid ? columnsOrder : defaultOrder);
 
     const hasServerWidths =
       columnsWidth != null && Object.keys(columnsWidth).length > 0;
