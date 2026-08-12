@@ -1,46 +1,49 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
-
-import Image from 'next/image';
-import { debounce } from 'lodash';
+import React, {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState
+} from 'react';
 import 'react-data-grid/lib/styles.scss';
-import { useSelector } from 'react-redux';
-import IcClose from '@/public/image/x.svg';
-import { ImSpinner2 } from 'react-icons/im';
-import { Input } from '@/components/ui/input';
-import { RootState } from '@/lib/store/store';
-import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
-import { LoadRowsRenderer } from '@/components/LoadRows';
-import { EmptyRowsRenderer } from '@/components/EmptyRows';
-import FilterInput from '@/components/custom-ui/FilterInput';
-import { useGetScheduleDetail } from '@/lib/server/useSchedule';
-import { FaSort, FaSortDown, FaSortUp, FaTimes } from 'react-icons/fa';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  filterScheduleDetail,
-  ScheduleDetail
-} from '@/lib/types/scheduleheader.type';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger
-} from '@/components/ui/tooltip';
-import {
-  cancelPreviousRequest,
-  handleContextMenu,
-  loadGridConfig,
-  resetGridConfig,
-  saveGridConfig
-} from '@/lib/utils';
+
 import DataGrid, {
   CellKeyDownArgs,
   Column,
   DataGridHandle
 } from 'react-data-grid';
-import DraggableColumn from '@/components/custom-ui/DraggableColumns';
+import { useSelector } from 'react-redux';
+import { RootState } from '@/lib/store/store';
+import { Button } from '@/components/ui/button';
+import {
+  handleContextMenu,
+  loadGridConfig,
+  resetGridConfig,
+  saveGridConfig
+} from '@/lib/utils';
+import {
+  filterScheduleDetail,
+  ScheduleDetail
+} from '@/lib/types/scheduleheader.type';
+import { useGetScheduleDetail } from '@/lib/server/useSchedule';
+import { getScheduleDetailFn } from '@/lib/apis/schedule.api';
+import { Input } from '@/components/ui/input';
+import Image from 'next/image';
+import IcClose from '@/public/image/x.svg';
 import { highlightText } from '@/components/custom-ui/HighlightText';
+import { FaSort, FaSortDown, FaSortUp, FaTimes } from 'react-icons/fa';
+import { debounce } from 'lodash';
+import FilterInput from '@/components/custom-ui/FilterInput';
+import DraggableColumn from '@/components/custom-ui/DraggableColumns';
 import { useTheme } from 'next-themes';
+import { EmptyRowsRenderer } from '@/components/EmptyRows';
+import { LoadRowsRenderer } from '@/components/LoadRows';
+import { useSession } from 'next-auth/react';
+import { hashQueryKey } from 'react-query';
+import { HEADER_ROW_HEIGHT, LIMIT, ROW_HEIGHT } from '@/constants/constant';
 
 interface Filter {
   page: number;
@@ -54,54 +57,127 @@ interface Filter {
 const GridScheduleDetail = () => {
   const { theme, resolvedTheme } = useTheme();
   const isDark = theme === 'dark' || resolvedTheme === 'dark';
-  const { user } = useSelector((state: RootState) => state.auth);
   const headerData = useSelector((state: RootState) => state.header.headerData);
-  const gridRef = useRef<DataGridHandle>(null);
-  const inputRef = useRef<HTMLInputElement | null>(null);
-  const abortControllerRef = useRef<AbortController | null>(null);
-  const resizeDebounceTimeout = useRef<NodeJS.Timeout | null>(null); // Timer debounce untuk resize
-  const inputColRefs = useRef<{ [key: string]: HTMLInputElement | null }>({});
-  const [dataGridKey, setDataGridKey] = useState(0);
+  const { data: session } = useSession();
+
+  // Rincian schedule diambil per id header (path param), bukan lewat filter
+  // nobukti seperti modul lain — endpointnya /schedule-detail/:id.
+  const scheduleId = headerData?.id ? String(headerData.id) : undefined;
+
+  const [filters, setFilters] = useState<Filter>({
+    page: 1,
+    limit: LIMIT,
+    filters: { ...filterScheduleDetail },
+    search: '',
+    sortBy: 'id',
+    sortDirection: 'asc'
+  });
+
+  // ── Lazy loading + caching (pola GridJurnalUmumDetail) ────────────────────
+  // Grid hanya menyimpan WINDOW_SIZE halaman di memori (`visiblePages`), isinya
+  // di `pageDataCache`. Halaman di luar window dibuang; halaman berikutnya
+  // di-prefetch diam-diam ke `streamBufferRef` supaya saat user scroll sampai
+  // ambang batas, data sudah ada dan window bergeser tanpa spinner.
+  const WINDOW_SIZE = 5;
+  const STREAM_BUFFER_SIZE = 5;
+
+  const [shouldBulkFetch, setShouldBulkFetch] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [visiblePages, setVisiblePages] = useState<number[]>([1, 2, 3, 4, 5]);
+  const minVisiblePage = useMemo(
+    () => (visiblePages.length > 0 ? Math.min(...visiblePages) : 1),
+    [visiblePages]
+  );
+  // Nomor baris pertama yang sedang ada di window (bukan di layar).
+  const startRow = (minVisiblePage - 1) * filters.limit + 1;
+  const [pageDataCache, setPageDataCache] = useState<
+    Map<number, ScheduleDetail[]>
+  >(new Map());
+  const streamBufferRef = useRef<Map<number, ScheduleDetail[]>>(new Map());
+  const prefetchingPagesRef = useRef<Set<number>>(new Set());
+
+  const [isFetching, setIsFetching] = useState(false);
+  const [isTransitioning, setIsTransitioning] = useState(false);
+  const isScrollingRef = useRef(false);
+  const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const lastScrollTopRef = useRef<number>(0);
+  const scrollPositionRef = useRef<number>(0);
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const pendingScrollAdjustment = useRef<number>(0);
+  const hasAdjustedScrollRef = useRef<boolean>(false);
+  const isPageTransitionRef = useRef(false);
+  const selectedRowRef = useRef<number>(0);
+
+  // Menggeser index baris terpilih saat window bergeser, supaya baris DATA yang
+  // sama tetap ter-highlight. Posisi visual dijaga oleh kompensasi scrollTop
+  // (pendingScrollAdjustment), jadi jangan panggil selectCell di sini.
+  const shiftSelectionForWindow = (deltaRows: number) => {
+    selectedRowRef.current = Math.max(0, selectedRowRef.current + deltaRows);
+  };
+
+  const resetBufferingCache = useCallback(() => {
+    setShouldBulkFetch(true);
+    setCurrentPage(1);
+    setPageDataCache(new Map());
+    setVisiblePages([1, 2, 3, 4, 5]);
+    setIsFetching(false);
+    setIsTransitioning(false);
+    streamBufferRef.current = new Map();
+    prefetchingPagesRef.current = new Set();
+    selectedRowRef.current = 0;
+  }, []);
+
+  // Bulk fetch pertama menarik WINDOW_SIZE halaman sekaligus (1 request) lalu
+  // dipecah di memori; setelah itu tiap pergeseran window cuma 1 halaman.
+  const effectiveLimit = shouldBulkFetch
+    ? filters.limit * WINDOW_SIZE
+    : filters.limit;
+
+  const queryParams = useMemo(
+    () => ({
+      ...filters,
+      page: shouldBulkFetch ? 1 : currentPage,
+      limit: effectiveLimit
+    }),
+    [filters, shouldBulkFetch, currentPage, effectiveLimit]
+  );
+
+  const {
+    data: detail,
+    isLoading,
+    dataUpdatedAt
+  } = useGetScheduleDetail(scheduleId, queryParams);
+
   const [rows, setRows] = useState<ScheduleDetail[]>([]);
-  const [inputValue, setInputValue] = useState<string>('');
   const [selectedRow, setSelectedRow] = useState<number>(0);
-  const contextMenuRef = useRef<HTMLDivElement | null>(null);
+  const [inputValue, setInputValue] = useState<string>('');
+
   const [columnsOrder, setColumnsOrder] = useState<readonly number[]>([]);
   const [columnsWidth, setColumnsWidth] = useState<{ [key: string]: number }>(
     {}
   );
+  const gridRef = useRef<DataGridHandle>(null);
+
+  const [dataGridKey, setDataGridKey] = useState(0);
+  const resizeDebounceTimeout = useRef<NodeJS.Timeout | null>(null); // Timer debounce untuk resize
+  const inputColRefs = useRef<{ [key: string]: HTMLInputElement | null }>({});
+  const contextMenuRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
   const [contextMenu, setContextMenu] = useState<{
     x: number;
     y: number;
   } | null>(null);
 
-  const [filters, setFilters] = useState<Filter>({
-    page: 1,
-    limit: 30,
-    search: '',
-    filters: filterScheduleDetail,
-    sortBy: 'id',
-    sortDirection: 'asc'
-  });
-
-  const {
-    data: allDataDetail,
-    isLoading,
-    refetch
-  } = useGetScheduleDetail(headerData?.id ?? 0, { ...filters, page: 1 });
-
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    cancelPreviousRequest(abortControllerRef);
     const searchValue = e.target.value;
     setInputValue(searchValue);
     setFilters((prev) => ({
       ...prev,
-      filters: filterScheduleDetail,
+      filters: { ...filterScheduleDetail },
       search: searchValue,
       page: 1
     }));
-
     setTimeout(() => {
       gridRef?.current?.selectCell({ rowIdx: 0, idx: 1 });
     }, 100);
@@ -114,31 +190,38 @@ const GridScheduleDetail = () => {
 
     setSelectedRow(0);
     setRows([]);
+    // Hasil pencarian = himpunan baris yang berbeda, jadi window & buffer lama
+    // tidak lagi valid. Tanpa reset, halaman 2..5 hasil query LAMA masih
+    // menempel di cache dan ikut tergabung ke `rows`.
+    resetBufferingCache();
   };
 
   const debouncedFilterUpdate = useRef(
     debounce((colKey: string, value: string) => {
+      setInputValue('');
       setFilters((prev) => ({
         ...prev,
+        search: '',
         filters: { ...prev.filters, [colKey]: value },
         page: 1
       }));
       setRows([]);
-      setCurrentPage(1);
-      setSelectedRow(0);
+      resetBufferingCache();
     }, 300) // Bisa dikurangi jadi 250-300ms
   ).current;
 
   const handleFilterInputChange = useCallback(
     (colKey: string, value: string) => {
-      cancelPreviousRequest(abortControllerRef);
       debouncedFilterUpdate(colKey, value);
+      setTimeout(() => {
+        setSelectedRow(0);
+        gridRef?.current?.selectCell({ rowIdx: 0, idx: 1 });
+      }, 400);
     },
     []
   );
 
   const handleClearFilter = useCallback((colKey: string) => {
-    cancelPreviousRequest(abortControllerRef);
     debouncedFilterUpdate.cancel(); // Cancel pending updates
 
     setFilters((prev) => ({
@@ -147,32 +230,18 @@ const GridScheduleDetail = () => {
       page: 1
     }));
     setRows([]);
-    setCurrentPage(1);
+    resetBufferingCache();
   }, []);
 
-  const handleClearInput = () => {
-    setFilters((prev) => ({
-      ...prev,
-      filters: {
-        ...prev.filters
-      },
-      search: '',
-      page: 1
-    }));
-    setInputValue('');
-  };
-
   const handleSort = (column: string) => {
-    cancelPreviousRequest(abortControllerRef);
     const originalIndex = columns.findIndex((col) => col.key === column);
 
-    // 2. hitung index tampilan berdasar columnsOrder
-    //    jika belum ada reorder (columnsOrder kosong), fallback ke originalIndex
+    // index tampilan berdasar columnsOrder; jika belum ada reorder
+    // (columnsOrder kosong), fallback ke originalIndex
     const displayIndex =
       columnsOrder.length > 0
         ? columnsOrder.findIndex((idx) => idx === originalIndex)
         : originalIndex;
-
     const newSortOrder =
       filters.sortBy === column && filters.sortDirection === 'asc'
         ? 'desc'
@@ -186,10 +255,12 @@ const GridScheduleDetail = () => {
     }));
     setTimeout(() => {
       gridRef?.current?.selectCell({ rowIdx: 0, idx: displayIndex });
-    }, 250);
+    }, 200);
     setSelectedRow(0);
-    setCurrentPage(1);
+
     setRows([]);
+    // Sort berubah -> urutan seluruh hasil berubah, halaman lama tidak valid.
+    resetBufferingCache();
   };
 
   const columns = useMemo((): Column<ScheduleDetail>[] => {
@@ -199,7 +270,7 @@ const GridScheduleDetail = () => {
         name: 'NO',
         width: 50,
         headerCellClass: 'column-headers',
-        renderHeaderCell: (column: any) => (
+        renderHeaderCell: () => (
           <div className="flex h-full flex-col items-center gap-1">
             <div className="headers-cell h-[50%] items-center justify-center text-center">
               <p className="text-sm font-normal">No.</p>
@@ -211,9 +282,11 @@ const GridScheduleDetail = () => {
                 setFilters({
                   ...filters,
                   search: '',
-                  filters: filterScheduleDetail
+                  page: 1,
+                  filters: { ...filterScheduleDetail }
                 }),
                   setInputValue('');
+                resetBufferingCache();
                 setTimeout(() => {
                   gridRef?.current?.selectCell({ rowIdx: 0, idx: 1 });
                 }, 0);
@@ -224,10 +297,17 @@ const GridScheduleDetail = () => {
           </div>
         ),
         renderCell: (props: any) => {
-          const rowIndex = rows.findIndex((row) => row.id === props.row.id);
+          // Nomor ABSOLUT, bukan index dalam window. `rows` hanya memuat
+          // WINDOW_SIZE halaman yang sedang terlihat, jadi index lokal akan
+          // mengulang dari 1 tiap kali window bergeser.
+          const localIndex = rows.findIndex((row) => row.id === props.row.id);
+          const absoluteNumber =
+            localIndex === -1
+              ? '—'
+              : (minVisiblePage - 1) * filters.limit + localIndex + 1;
           return (
             <div className="flex h-full w-full cursor-pointer items-center justify-center text-sm">
-              {rowIndex + 1}
+              {absoluteNumber}
             </div>
           );
         }
@@ -239,7 +319,7 @@ const GridScheduleDetail = () => {
         resizable: true,
         draggable: true,
         width: 200,
-        renderHeaderCell: (column: any) => (
+        renderHeaderCell: () => (
           <div className="flex h-full cursor-pointer flex-col items-center gap-1">
             <div
               className="headers-cell h-[50%] px-8"
@@ -285,21 +365,12 @@ const GridScheduleDetail = () => {
           const columnFilter = filters.filters.nobukti || '';
           const cellValue = props.row.nobukti || '';
           return (
-            <TooltipProvider delayDuration={0}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="m-0 flex h-full cursor-pointer items-center p-0 text-sm">
-                    {highlightText(cellValue, filters.search, columnFilter)}
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent
-                  side="right"
-                  className="rounded-none border border-zinc-400 bg-white text-sm text-zinc-900"
-                >
-                  <p>{cellValue}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <div
+              title={cellValue}
+              className="m-0 flex h-full cursor-pointer items-center p-0 text-sm"
+            >
+              {highlightText(cellValue, filters.search, columnFilter)}
+            </div>
           );
         }
       },
@@ -310,7 +381,7 @@ const GridScheduleDetail = () => {
         resizable: true,
         draggable: true,
         width: 150,
-        renderHeaderCell: (column: any) => (
+        renderHeaderCell: () => (
           <div className="flex h-full cursor-pointer flex-col items-center gap-1">
             <div
               className="headers-cell h-[50%] px-8"
@@ -324,7 +395,7 @@ const GridScheduleDetail = () => {
                   filters.sortBy === 'pelayaran' ? 'font-bold' : 'font-normal'
                 }`}
               >
-                PElAYARAN
+                PELAYARAN
               </p>
               <div className="ml-2">
                 {filters.sortBy === 'pelayaran' &&
@@ -338,6 +409,7 @@ const GridScheduleDetail = () => {
                 )}
               </div>
             </div>
+
             <div className="relative h-[50%] w-full px-1">
               <FilterInput
                 colKey="pelayaran"
@@ -357,21 +429,12 @@ const GridScheduleDetail = () => {
           const columnFilter = filters.filters.pelayaran || '';
           const cellValue = props.row.pelayaran_nama || '';
           return (
-            <TooltipProvider delayDuration={0}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="m-0 flex h-full cursor-pointer items-center p-0 text-sm">
-                    {highlightText(cellValue, filters.search, columnFilter)}
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent
-                  side="right"
-                  className="rounded-none border border-zinc-400 bg-white text-sm text-zinc-900"
-                >
-                  <p>{cellValue}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <div
+              title={cellValue}
+              className="m-0 flex h-full cursor-pointer items-center p-0 text-sm"
+            >
+              {highlightText(cellValue, filters.search, columnFilter)}
+            </div>
           );
         }
       },
@@ -382,7 +445,7 @@ const GridScheduleDetail = () => {
         resizable: true,
         draggable: true,
         width: 150,
-        renderHeaderCell: (column: any) => (
+        renderHeaderCell: () => (
           <div className="flex h-full cursor-pointer flex-col items-center gap-1">
             <div
               className="headers-cell h-[50%] px-8"
@@ -410,6 +473,7 @@ const GridScheduleDetail = () => {
                 )}
               </div>
             </div>
+
             <div className="relative h-[50%] w-full px-1">
               <FilterInput
                 colKey="kapal"
@@ -427,21 +491,12 @@ const GridScheduleDetail = () => {
           const columnFilter = filters.filters.kapal || '';
           const cellValue = props.row.kapal_nama || '';
           return (
-            <TooltipProvider delayDuration={0}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="m-0 flex h-full cursor-pointer items-center p-0 text-sm">
-                    {highlightText(cellValue, filters.search, columnFilter)}
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent
-                  side="right"
-                  className="rounded-none border border-zinc-400 bg-white text-sm text-zinc-900"
-                >
-                  <p>{cellValue}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <div
+              title={cellValue}
+              className="m-0 flex h-full cursor-pointer items-center p-0 text-sm"
+            >
+              {highlightText(cellValue, filters.search, columnFilter)}
+            </div>
           );
         }
       },
@@ -452,7 +507,7 @@ const GridScheduleDetail = () => {
         resizable: true,
         draggable: true,
         width: 150,
-        renderHeaderCell: (column: any) => (
+        renderHeaderCell: () => (
           <div className="flex h-full cursor-pointer flex-col items-center gap-1">
             <div
               className="headers-cell h-[50%] px-8"
@@ -480,6 +535,7 @@ const GridScheduleDetail = () => {
                 )}
               </div>
             </div>
+
             <div className="relative h-[50%] w-full px-1">
               <FilterInput
                 colKey="tujuankapal"
@@ -499,21 +555,12 @@ const GridScheduleDetail = () => {
           const columnFilter = filters.filters.tujuankapal || '';
           const cellValue = props.row.tujuankapal_nama || '';
           return (
-            <TooltipProvider delayDuration={0}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="m-0 flex h-full cursor-pointer items-center p-0 text-sm">
-                    {highlightText(cellValue, filters.search, columnFilter)}
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent
-                  side="right"
-                  className="rounded-none border border-zinc-400 bg-white text-sm text-zinc-900"
-                >
-                  <p>{cellValue}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <div
+              title={cellValue}
+              className="m-0 flex h-full cursor-pointer items-center p-0 text-sm"
+            >
+              {highlightText(cellValue, filters.search, columnFilter)}
+            </div>
           );
         }
       },
@@ -524,7 +571,7 @@ const GridScheduleDetail = () => {
         resizable: true,
         draggable: true,
         width: 150,
-        renderHeaderCell: (column: any) => (
+        renderHeaderCell: () => (
           <div className="flex h-full cursor-pointer flex-col items-center gap-1">
             <div
               className="headers-cell h-[50%] px-8"
@@ -574,21 +621,12 @@ const GridScheduleDetail = () => {
           const columnFilter = filters.filters.tglberangkat || '';
           const cellValue = props.row.tglberangkat || '';
           return (
-            <TooltipProvider delayDuration={0}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="m-0 flex h-full cursor-pointer items-center p-0 text-sm">
-                    {highlightText(cellValue, filters.search, columnFilter)}
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent
-                  side="right"
-                  className="rounded-none border border-zinc-400 bg-white text-sm text-zinc-900"
-                >
-                  <p>{cellValue}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <div
+              title={cellValue}
+              className="m-0 flex h-full cursor-pointer items-center p-0 text-sm"
+            >
+              {highlightText(cellValue, filters.search, columnFilter)}
+            </div>
           );
         }
       },
@@ -599,7 +637,7 @@ const GridScheduleDetail = () => {
         resizable: true,
         draggable: true,
         width: 150,
-        renderHeaderCell: (column: any) => (
+        renderHeaderCell: () => (
           <div className="flex h-full cursor-pointer flex-col items-center gap-1">
             <div
               className="headers-cell h-[50%] px-8"
@@ -645,21 +683,12 @@ const GridScheduleDetail = () => {
           const columnFilter = filters.filters.tgltiba || '';
           const cellValue = props.row.tgltiba || '';
           return (
-            <TooltipProvider delayDuration={0}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="m-0 flex h-full cursor-pointer items-center p-0 text-sm">
-                    {highlightText(cellValue, filters.search, columnFilter)}
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent
-                  side="right"
-                  className="rounded-none border border-zinc-400 bg-white text-sm text-zinc-900"
-                >
-                  <p>{cellValue}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <div
+              title={cellValue}
+              className="m-0 flex h-full cursor-pointer items-center p-0 text-sm"
+            >
+              {highlightText(cellValue, filters.search, columnFilter)}
+            </div>
           );
         }
       },
@@ -670,7 +699,7 @@ const GridScheduleDetail = () => {
         resizable: true,
         draggable: true,
         width: 150,
-        renderHeaderCell: (column: any) => (
+        renderHeaderCell: () => (
           <div className="flex h-full cursor-pointer flex-col items-center gap-1">
             <div
               className="headers-cell h-[50%] px-8"
@@ -697,6 +726,7 @@ const GridScheduleDetail = () => {
                 )}
               </div>
             </div>
+
             <div className="relative h-[50%] w-full px-1">
               <FilterInput
                 colKey="etb"
@@ -714,21 +744,12 @@ const GridScheduleDetail = () => {
           const columnFilter = filters.filters.etb || '';
           const cellValue = props.row.etb || '';
           return (
-            <TooltipProvider delayDuration={0}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="m-0 flex h-full cursor-pointer items-center p-0 text-sm">
-                    {highlightText(cellValue, filters.search, columnFilter)}
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent
-                  side="right"
-                  className="rounded-none border border-zinc-400 bg-white text-sm text-zinc-900"
-                >
-                  <p>{cellValue}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <div
+              title={cellValue}
+              className="m-0 flex h-full cursor-pointer items-center p-0 text-sm"
+            >
+              {highlightText(cellValue, filters.search, columnFilter)}
+            </div>
           );
         }
       },
@@ -739,7 +760,7 @@ const GridScheduleDetail = () => {
         resizable: true,
         draggable: true,
         width: 150,
-        renderHeaderCell: (column: any) => (
+        renderHeaderCell: () => (
           <div className="flex h-full cursor-pointer flex-col items-center gap-1">
             <div
               className="headers-cell h-[50%] px-8"
@@ -766,6 +787,7 @@ const GridScheduleDetail = () => {
                 )}
               </div>
             </div>
+
             <div className="relative h-[50%] w-full px-1">
               <FilterInput
                 colKey="eta"
@@ -783,21 +805,12 @@ const GridScheduleDetail = () => {
           const columnFilter = filters.filters.eta || '';
           const cellValue = props.row.eta || '';
           return (
-            <TooltipProvider delayDuration={0}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="m-0 flex h-full cursor-pointer items-center p-0 text-sm">
-                    {highlightText(cellValue, filters.search, columnFilter)}
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent
-                  side="right"
-                  className="rounded-none border border-zinc-400 bg-white text-sm text-zinc-900"
-                >
-                  <p>{cellValue}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <div
+              title={cellValue}
+              className="m-0 flex h-full cursor-pointer items-center p-0 text-sm"
+            >
+              {highlightText(cellValue, filters.search, columnFilter)}
+            </div>
           );
         }
       },
@@ -808,7 +821,7 @@ const GridScheduleDetail = () => {
         resizable: true,
         draggable: true,
         width: 150,
-        renderHeaderCell: (column: any) => (
+        renderHeaderCell: () => (
           <div className="flex h-full cursor-pointer flex-col items-center gap-1">
             <div
               className="headers-cell h-[50%] px-8"
@@ -835,6 +848,7 @@ const GridScheduleDetail = () => {
                 )}
               </div>
             </div>
+
             <div className="relative h-[50%] w-full px-1">
               <FilterInput
                 colKey="etd"
@@ -852,32 +866,23 @@ const GridScheduleDetail = () => {
           const columnFilter = filters.filters.etd || '';
           const cellValue = props.row.etd || '';
           return (
-            <TooltipProvider delayDuration={0}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="m-0 flex h-full cursor-pointer items-center p-0 text-sm">
-                    {highlightText(cellValue, filters.search, columnFilter)}
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent
-                  side="right"
-                  className="rounded-none border border-zinc-400 bg-white text-sm text-zinc-900"
-                >
-                  <p>{cellValue}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <div
+              title={cellValue}
+              className="m-0 flex h-full cursor-pointer items-center p-0 text-sm"
+            >
+              {highlightText(cellValue, filters.search, columnFilter)}
+            </div>
           );
         }
       },
       {
-        key: 'voy berangkat',
+        key: 'voyberangkat',
         name: 'voy berangkat',
         headerCellClass: 'column-headers',
         resizable: true,
         draggable: true,
         width: 150,
-        renderHeaderCell: (column: any) => (
+        renderHeaderCell: () => (
           <div className="flex h-full cursor-pointer flex-col items-center gap-1">
             <div
               className="headers-cell h-[50%] px-8"
@@ -927,21 +932,12 @@ const GridScheduleDetail = () => {
           const columnFilter = filters.filters.voyberangkat || '';
           const cellValue = props.row.voyberangkat || '';
           return (
-            <TooltipProvider delayDuration={0}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="m-0 flex h-full cursor-pointer items-center p-0 text-sm">
-                    {highlightText(cellValue, filters.search, columnFilter)}
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent
-                  side="right"
-                  className="rounded-none border border-zinc-400 bg-white text-sm text-zinc-900"
-                >
-                  <p>{cellValue}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <div
+              title={cellValue}
+              className="m-0 flex h-full cursor-pointer items-center p-0 text-sm"
+            >
+              {highlightText(cellValue, filters.search, columnFilter)}
+            </div>
           );
         }
       },
@@ -952,7 +948,7 @@ const GridScheduleDetail = () => {
         resizable: true,
         draggable: true,
         width: 150,
-        renderHeaderCell: (column: any) => (
+        renderHeaderCell: () => (
           <div className="flex h-full cursor-pointer flex-col items-center gap-1">
             <div
               className="headers-cell h-[50%] px-8"
@@ -998,21 +994,12 @@ const GridScheduleDetail = () => {
           const columnFilter = filters.filters.voytiba || '';
           const cellValue = props.row.voytiba || '';
           return (
-            <TooltipProvider delayDuration={0}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="m-0 flex h-full cursor-pointer items-center p-0 text-sm">
-                    {highlightText(cellValue, filters.search, columnFilter)}
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent
-                  side="right"
-                  className="rounded-none border border-zinc-400 bg-white text-sm text-zinc-900"
-                >
-                  <p>{cellValue}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <div
+              title={cellValue}
+              className="m-0 flex h-full cursor-pointer items-center p-0 text-sm"
+            >
+              {highlightText(cellValue, filters.search, columnFilter)}
+            </div>
           );
         }
       },
@@ -1023,7 +1010,7 @@ const GridScheduleDetail = () => {
         resizable: true,
         draggable: true,
         width: 150,
-        renderHeaderCell: (column: any) => (
+        renderHeaderCell: () => (
           <div className="flex h-full cursor-pointer flex-col items-center gap-1">
             <div
               className="headers-cell h-[50%] px-8"
@@ -1069,21 +1056,12 @@ const GridScheduleDetail = () => {
           const columnFilter = filters.filters.closing || '';
           const cellValue = props.row.closing || '';
           return (
-            <TooltipProvider delayDuration={0}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="m-0 flex h-full cursor-pointer items-center p-0 text-sm">
-                    {highlightText(cellValue, filters.search, columnFilter)}
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent
-                  side="right"
-                  className="rounded-none border border-zinc-400 bg-white text-sm text-zinc-900"
-                >
-                  <p>{cellValue}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <div
+              title={cellValue}
+              className="m-0 flex h-full cursor-pointer items-center p-0 text-sm"
+            >
+              {highlightText(cellValue, filters.search, columnFilter)}
+            </div>
           );
         }
       },
@@ -1094,7 +1072,7 @@ const GridScheduleDetail = () => {
         resizable: true,
         draggable: true,
         width: 150,
-        renderHeaderCell: (column: any) => (
+        renderHeaderCell: () => (
           <div className="flex h-full cursor-pointer flex-col items-center gap-1">
             <div
               className="headers-cell h-[50%] px-8"
@@ -1142,21 +1120,12 @@ const GridScheduleDetail = () => {
           const columnFilter = filters.filters.etatujuan || '';
           const cellValue = props.row.etatujuan || '';
           return (
-            <TooltipProvider delayDuration={0}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="m-0 flex h-full cursor-pointer items-center p-0 text-sm">
-                    {highlightText(cellValue, filters.search, columnFilter)}
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent
-                  side="right"
-                  className="rounded-none border border-zinc-400 bg-white text-sm text-zinc-900"
-                >
-                  <p>{cellValue}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <div
+              title={cellValue}
+              className="m-0 flex h-full cursor-pointer items-center p-0 text-sm"
+            >
+              {highlightText(cellValue, filters.search, columnFilter)}
+            </div>
           );
         }
       },
@@ -1167,7 +1136,7 @@ const GridScheduleDetail = () => {
         resizable: true,
         draggable: true,
         width: 150,
-        renderHeaderCell: (column: any) => (
+        renderHeaderCell: () => (
           <div className="flex h-full cursor-pointer flex-col items-center gap-1">
             <div
               className="headers-cell h-[50%] px-8"
@@ -1215,21 +1184,12 @@ const GridScheduleDetail = () => {
           const columnFilter = filters.filters.etdtujuan || '';
           const cellValue = props.row.etdtujuan || '';
           return (
-            <TooltipProvider delayDuration={0}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="m-0 flex h-full cursor-pointer items-center p-0 text-sm">
-                    {highlightText(cellValue, filters.search, columnFilter)}
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent
-                  side="right"
-                  className="rounded-none border border-zinc-400 bg-white text-sm text-zinc-900"
-                >
-                  <p>{cellValue}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <div
+              title={cellValue}
+              className="m-0 flex h-full cursor-pointer items-center p-0 text-sm"
+            >
+              {highlightText(cellValue, filters.search, columnFilter)}
+            </div>
           );
         }
       },
@@ -1240,7 +1200,7 @@ const GridScheduleDetail = () => {
         resizable: true,
         draggable: true,
         width: 150,
-        renderHeaderCell: (column: any) => (
+        renderHeaderCell: () => (
           <div className="flex h-full cursor-pointer flex-col items-center gap-1">
             <div
               className="headers-cell h-[50%] px-8"
@@ -1288,61 +1248,55 @@ const GridScheduleDetail = () => {
           const columnFilter = filters.filters.keterangan || '';
           const cellValue = props.row.keterangan || '';
           return (
-            <TooltipProvider delayDuration={0}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="m-0 flex h-full cursor-pointer items-center p-0 text-sm">
-                    {highlightText(cellValue, filters.search, columnFilter)}
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent
-                  side="right"
-                  className="rounded-none border border-zinc-400 bg-white text-sm text-zinc-900"
-                >
-                  <p>{cellValue}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <div
+              title={cellValue}
+              className="m-0 flex h-full cursor-pointer items-center p-0 text-sm"
+            >
+              {highlightText(cellValue, filters.search, columnFilter)}
+            </div>
           );
         }
       }
     ];
-  }, [rows, rows, filters.filters]);
+  }, [rows, filters, minVisiblePage]);
 
-  const orderedColumns = useMemo(() => {
-    if (Array.isArray(columnsOrder) && columnsOrder.length > 0) {
-      // filter key columns dengan key yg ada di columnsWidth
-      const filteredColumns = columns.filter((col) =>
-        Object.prototype.hasOwnProperty.call(columnsWidth, col.key)
-      );
-      // Mapping dan filter untuk menghindari undefined
-      return columnsOrder
-        .map((orderIndex) => filteredColumns[orderIndex])
-        .filter((col) => col !== undefined);
+  function getRowClass(row: ScheduleDetail) {
+    const rowIndex = rows.findIndex((r) => r.id === row.id);
+    return rowIndex === selectedRow ? 'selected-row' : '';
+  }
+
+  function rowKeyGetter(row: ScheduleDetail) {
+    return row.id;
+  }
+
+  function handleCellClick(args: { row: ScheduleDetail }) {
+    const clickedRow = args.row;
+    const rowIndex = rows.findIndex((r) => r.id === clickedRow.id);
+    if (rowIndex !== -1) {
+      setSelectedRow(rowIndex);
+      // Ref ikut disinkronkan: dia yang jadi acuan saat window bergeser.
+      selectedRowRef.current = rowIndex;
     }
-    return columns;
-  }, [columns, columnsOrder]);
-
-  const finalColumns = useMemo(() => {
-    return orderedColumns.map((col) => ({
-      ...col,
-      width: columnsWidth[col.key] ?? col.width
-    }));
-  }, [orderedColumns, columnsWidth]);
+  }
 
   const onColumnResize = (index: number, width: number) => {
-    const columnKey = columns[columnsOrder[index]].key; // 1) Dapatkan key kolom yang di-resize
-    const newWidthMap = { ...columnsWidth, [columnKey]: width }; // 2) Update state width seketika (biar kolom langsung responsif)
+    // 1) Dapatkan key kolom yang di-resize
+    const columnKey = columns[columnsOrder[index]].key;
+
+    // 2) Update state width seketika (biar kolom langsung responsif)
+    const newWidthMap = { ...columnsWidth, [columnKey]: width };
     setColumnsWidth(newWidthMap);
 
+    // 3) Bersihkan timeout sebelumnya agar tidak menumpuk
     if (resizeDebounceTimeout.current) {
-      // 3) Bersihkan timeout sebelumnya agar tidak menumpuk
       clearTimeout(resizeDebounceTimeout.current);
     }
-    // 4) Set ulang timer: hanya ketika 300ms sejak resize terakhir berlalu, saveGridConfig akan dipanggil
+
+    // 4) Set ulang timer: hanya ketika 300ms sejak resize terakhir berlalu,
+    //    saveGridConfig akan dipanggil
     resizeDebounceTimeout.current = setTimeout(() => {
       saveGridConfig(
-        user.id,
+        String(session?.user?.id),
         'GridScheduleDetail',
         [...columnsOrder],
         newWidthMap
@@ -1363,13 +1317,23 @@ const GridScheduleDetail = () => {
       newOrder.splice(targetIndex, 0, newOrder.splice(sourceIndex, 1)[0]);
 
       saveGridConfig(
-        user.id,
+        String(session?.user?.id),
         'GridScheduleDetail',
         [...newOrder],
         columnsWidth
       );
       return newOrder;
     });
+  };
+
+  const handleClearInput = () => {
+    setFilters((prev) => ({
+      ...prev,
+      search: '',
+      page: 1
+    }));
+    setInputValue('');
+    resetBufferingCache();
   };
 
   const handleClickOutside = (event: MouseEvent) => {
@@ -1381,6 +1345,502 @@ const GridScheduleDetail = () => {
     }
   };
 
+  const mapDetailRows = useCallback(
+    (data: any[] | undefined | null): ScheduleDetail[] =>
+      (data ?? []).map((item: any) => ({
+        id: item.id,
+        schedule_id: item.schedule_id,
+        nobukti: item.nobukti,
+        pelayaran_id: item.pelayaran_id,
+        pelayaran_nama: item.pelayaran_nama,
+        kapal_id: item.kapal_id,
+        kapal_nama: item.kapal_nama,
+        tujuankapal_id: item.tujuankapal_id,
+        tujuankapal_nama: item.tujuankapal_nama,
+        schedulekapal_id: item.schedulekapal_id ?? null,
+        tglberangkat: item.tglberangkat,
+        tgltiba: item.tgltiba,
+        etb: item.etb,
+        eta: item.eta,
+        etd: item.etd,
+        voyberangkat: item.voyberangkat,
+        voytiba: item.voytiba,
+        closing: item.closing,
+        closingForDateTime: item.closingForDateTime ?? null,
+        etatujuan: item.etatujuan,
+        etdtujuan: item.etdtujuan,
+        keterangan: item.keterangan,
+        modifiedby: item.modifiedby ?? '',
+        created_at: item.created_at ?? '',
+        updated_at: item.updated_at ?? ''
+      })),
+    []
+  );
+
+  // Tarik halaman-halaman berikutnya diam-diam ke streamBuffer. Saat window
+  // nanti bergeser ke salah satunya, datanya sudah ada -> tidak ada spinner &
+  // tidak ada network latency di jalur scroll.
+  const prefetchPages = useCallback(
+    async (
+      pagesToFetch: number[],
+      existingCache?: Map<number, ScheduleDetail[]>,
+      knownTotalPages?: number
+    ) => {
+      if (!scheduleId) return;
+
+      const cacheToCheck = existingCache ?? pageDataCache;
+      const effectiveTotalPages = knownTotalPages ?? totalPages;
+
+      const validPages = pagesToFetch.filter(
+        (p) =>
+          p >= 1 &&
+          p <= effectiveTotalPages &&
+          !streamBufferRef.current.has(p) &&
+          !cacheToCheck.has(p) &&
+          !prefetchingPagesRef.current.has(p)
+      );
+
+      if (validPages.length === 0) return;
+
+      validPages.forEach((p) => prefetchingPagesRef.current.add(p));
+
+      await Promise.allSettled(
+        validPages.map(async (pageNum) => {
+          try {
+            const data = await getScheduleDetailFn(scheduleId, {
+              ...queryParams,
+              page: pageNum,
+              limit: filters.limit
+            });
+
+            if (data?.data && data.data.length > 0) {
+              streamBufferRef.current = new Map(streamBufferRef.current);
+              streamBufferRef.current.set(pageNum, mapDetailRows(data.data));
+            }
+          } catch (err) {
+            // Silent fail — prefetch gagal bukan error yang perlu dilihat user;
+            // window tetap bisa bergeser lewat jalur fetch normal.
+            console.warn(
+              `[StreamBuffer] Prefetch detail page ${pageNum} gagal:`,
+              err
+            );
+          } finally {
+            prefetchingPagesRef.current.delete(pageNum);
+          }
+        })
+      );
+    },
+    [
+      scheduleId,
+      queryParams,
+      filters.limit,
+      totalPages,
+      pageDataCache,
+      mapDetailRows
+    ]
+  );
+
+  async function handleScroll(event: React.UIEvent<HTMLDivElement>) {
+    if (isLoading || rows.length === 0 || isTransitioning || isFetching) return;
+
+    const { currentTarget } = event;
+    const scrollTop = currentTarget.scrollTop;
+    const clientHeight = currentTarget.clientHeight;
+
+    const hasScrolled = Math.abs(scrollTop - lastScrollTopRef.current) > 5;
+    if (!hasScrolled) return;
+
+    lastScrollTopRef.current = scrollTop;
+    isScrollingRef.current = true;
+
+    if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
+    scrollTimeoutRef.current = setTimeout(() => {
+      isScrollingRef.current = false;
+    }, 150);
+
+    scrollPositionRef.current = scrollTop;
+    scrollContainerRef.current = currentTarget;
+
+    const firstVisibleRow = Math.floor(scrollTop / ROW_HEIGHT);
+    const lastVisibleRow = Math.floor((scrollTop + clientHeight) / ROW_HEIGHT);
+
+    const THRESHOLD_ROWS = 50;
+
+    // SCROLL KE BAWAH
+    if (rows.length - lastVisibleRow <= THRESHOLD_ROWS) {
+      const nextPage = Math.max(...visiblePages) + 1;
+
+      if (nextPage <= totalPages && !isFetching && isScrollingRef.current) {
+        if (streamBufferRef.current.has(nextPage)) {
+          // Buffer hit — geser window langsung tanpa request.
+          setIsFetching(true);
+          setIsTransitioning(true);
+          hasAdjustedScrollRef.current = false;
+
+          const bufferedData = streamBufferRef.current.get(nextPage)!;
+
+          setPageDataCache((prev) => {
+            const updated = new Map(prev);
+            updated.set(nextPage, bufferedData);
+            return updated;
+          });
+
+          streamBufferRef.current = new Map(streamBufferRef.current);
+          streamBufferRef.current.delete(nextPage);
+
+          isPageTransitionRef.current = true;
+          pendingScrollAdjustment.current = -(filters.limit * ROW_HEIGHT);
+          shiftSelectionForWindow(-filters.limit);
+          setVisiblePages((prevVisible) => {
+            const removedPage = prevVisible[0];
+            const newPages = [...prevVisible.slice(1), nextPage];
+
+            setPageDataCache((prev) => {
+              const updated = new Map(prev);
+              updated.delete(removedPage);
+              return updated;
+            });
+
+            return newPages;
+          });
+
+          setTimeout(() => {
+            setIsTransitioning(false);
+            setIsFetching(false);
+          }, 50);
+
+          prefetchPages(
+            Array.from(
+              { length: STREAM_BUFFER_SIZE },
+              (_, i) => nextPage + 1 + i
+            )
+          );
+        } else if (!pageDataCache.has(nextPage)) {
+          // Buffer miss — fallback ke fetch normal (effect #2 yang merakit).
+          setIsFetching(true);
+          setIsTransitioning(true);
+          hasAdjustedScrollRef.current = false;
+          setCurrentPage(nextPage);
+        }
+      }
+    }
+
+    // SCROLL KE ATAS
+    if (firstVisibleRow <= THRESHOLD_ROWS) {
+      const prevPage = Math.min(...visiblePages) - 1;
+
+      if (prevPage >= 1 && !isFetching && isScrollingRef.current) {
+        if (streamBufferRef.current.has(prevPage)) {
+          setIsFetching(true);
+          setIsTransitioning(true);
+          hasAdjustedScrollRef.current = false;
+
+          const bufferedData = streamBufferRef.current.get(prevPage)!;
+
+          setPageDataCache((prev) => {
+            const updated = new Map(prev);
+            updated.set(prevPage, bufferedData);
+            return updated;
+          });
+
+          streamBufferRef.current = new Map(streamBufferRef.current);
+          streamBufferRef.current.delete(prevPage);
+
+          isPageTransitionRef.current = true;
+          pendingScrollAdjustment.current = filters.limit * ROW_HEIGHT;
+          shiftSelectionForWindow(filters.limit);
+          setVisiblePages((prevVisible) => {
+            const removedPage = prevVisible[prevVisible.length - 1];
+            const newPages = [
+              prevPage,
+              ...prevVisible.slice(0, WINDOW_SIZE - 1)
+            ];
+
+            setPageDataCache((prev) => {
+              const updated = new Map(prev);
+              updated.delete(removedPage);
+              return updated;
+            });
+
+            return newPages;
+          });
+
+          setTimeout(() => {
+            setIsTransitioning(false);
+            setIsFetching(false);
+          }, 50);
+
+          prefetchPages(
+            Array.from(
+              { length: STREAM_BUFFER_SIZE },
+              (_, i) => prevPage - 1 - i
+            ).filter((p) => p >= 1)
+          );
+        } else if (!pageDataCache.has(prevPage)) {
+          setIsFetching(true);
+          setIsTransitioning(true);
+          hasAdjustedScrollRef.current = false;
+          // Reset ke 0 dulu supaya setCurrentPage(prevPage) tetap memicu effect
+          // walau prevPage kebetulan sama dengan currentPage yang basi.
+          setCurrentPage(0);
+          setTimeout(() => setCurrentPage(prevPage), 0);
+        }
+      }
+    }
+  }
+
+  const orderedColumns = useMemo(() => {
+    if (Array.isArray(columnsOrder) && columnsOrder.length > 0) {
+      // filter key columns dengan key yg ada di columnsWidth
+      const filteredColumns = columns.filter((col) =>
+        Object.prototype.hasOwnProperty.call(columnsWidth, col.key)
+      );
+      // Mapping dan filter untuk menghindari undefined
+      return columnsOrder
+        .map((orderIndex) => filteredColumns[orderIndex])
+        .filter((col) => col !== undefined);
+    }
+    return columns;
+  }, [columns, columnsOrder]);
+
+  // Update properti width pada setiap kolom berdasarkan state columnsWidth
+  const finalColumns = useMemo(() => {
+    return orderedColumns.map((col) => ({
+      ...col,
+      width: columnsWidth[col.key] ?? col.width
+    }));
+  }, [orderedColumns, columnsWidth]);
+
+  useEffect(() => {
+    if (!session?.user?.id) return;
+    loadGridConfig(
+      String(session?.user?.id),
+      'GridScheduleDetail',
+      columns,
+      setColumnsOrder,
+      setColumnsWidth
+    );
+  }, [session]);
+
+  useEffect(() => {
+    window.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      window.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
+  // ── 1. Bulk fetch awal ────────────────────────────────────────────────────
+  // Request pertama menarik WINDOW_SIZE halaman sekaligus lalu dipecah di
+  // memori jadi cache per-halaman. Satu round-trip untuk mengisi seluruh window.
+  useEffect(() => {
+    if (!shouldBulkFetch || !detail) return;
+
+    const bulkData = mapDetailRows(detail.data);
+
+    const newCache = new Map<number, ScheduleDetail[]>();
+    for (let i = 0; i < WINDOW_SIZE; i++) {
+      const pageNum = i + 1;
+      const pageData = bulkData.slice(
+        i * filters.limit,
+        i * filters.limit + filters.limit
+      );
+      if (pageData.length > 0) newCache.set(pageNum, pageData);
+    }
+
+    setPageDataCache(newCache);
+    setVisiblePages(Array.from({ length: WINDOW_SIZE }, (_, i) => i + 1));
+
+    const totalItems = detail.pagination?.totalItems ?? bulkData.length;
+    // pagination.totalPages dari backend dihitung memakai limit bulk
+    // (limit * WINDOW_SIZE), jadi TIDAK bisa dipakai langsung — hitung ulang
+    // dengan limit per-halaman yang sebenarnya.
+    const totalPgs = Math.max(1, Math.ceil(totalItems / filters.limit));
+
+    setTotalPages(totalPgs);
+    setShouldBulkFetch(false);
+    setIsFetching(false);
+
+    if (bulkData.length === 0) {
+      setRows([]);
+      return;
+    }
+
+    const initialPrefetch = Array.from(
+      { length: STREAM_BUFFER_SIZE },
+      (_, i) => WINDOW_SIZE + 1 + i
+    ).filter((p) => p <= totalPgs);
+
+    if (initialPrefetch.length > 0) {
+      prefetchPages(initialPrefetch, newCache, totalPgs);
+    }
+  }, [detail, shouldBulkFetch, filters.limit]);
+
+  // ── 2. Fetch per-halaman saat window bergeser (buffer miss) ───────────────
+  useEffect(() => {
+    if (shouldBulkFetch || !detail) return;
+    // currentPage 0 = fase antara dari trik setCurrentPage(0) di handleScroll
+    // (memaksa effect jalan ulang walau halaman tujuan == halaman sekarang).
+    // Query untuk page 0 tidak pernah dijalankan (guard di useGetScheduleDetail),
+    // jadi `detail` di sini masih milik halaman lama.
+    if (currentPage < 1) return;
+
+    const newRows = mapDetailRows(detail.data);
+
+    setPageDataCache((prevCache) => {
+      const newCache = new Map(prevCache);
+      newCache.set(currentPage, newRows);
+      return newCache;
+    });
+
+    isPageTransitionRef.current = true;
+    const maxVisible = Math.max(...visiblePages);
+    const minVisible = Math.min(...visiblePages);
+
+    if (currentPage > maxVisible && currentPage <= maxVisible + 1) {
+      // SCROLL KE BAWAH: buang halaman teratas, sisipkan halaman baru di bawah.
+      const removedPage = visiblePages[0];
+      pendingScrollAdjustment.current = -(filters.limit * ROW_HEIGHT);
+      shiftSelectionForWindow(-filters.limit);
+
+      setPageDataCache((prev) => {
+        const updated = new Map(prev);
+        updated.delete(removedPage);
+        return updated;
+      });
+      setVisiblePages((prevVisible) => [...prevVisible.slice(1), currentPage]);
+    } else if (currentPage < minVisible && currentPage >= minVisible - 1) {
+      // SCROLL KE ATAS: kebalikannya.
+      const removedPage = visiblePages[visiblePages.length - 1];
+      pendingScrollAdjustment.current = filters.limit * ROW_HEIGHT;
+      shiftSelectionForWindow(filters.limit);
+
+      setPageDataCache((prev) => {
+        const updated = new Map(prev);
+        updated.delete(removedPage);
+        return updated;
+      });
+      setVisiblePages((prevVisible) => [
+        currentPage,
+        ...prevVisible.slice(0, WINDOW_SIZE - 1)
+      ]);
+    }
+
+    if (detail.pagination?.totalPages) {
+      setTotalPages(detail.pagination.totalPages);
+    }
+
+    setTimeout(() => {
+      setIsTransitioning(false);
+      setIsFetching(false);
+
+      const isScrollDown = currentPage >= Math.max(...visiblePages);
+      const pagesToPrefetch = isScrollDown
+        ? Array.from(
+            { length: STREAM_BUFFER_SIZE },
+            (_, i) => currentPage + 1 + i
+          ).filter((p) => p <= totalPages)
+        : Array.from(
+            { length: STREAM_BUFFER_SIZE },
+            (_, i) => currentPage - 1 - i
+          ).filter((p) => p >= 1);
+
+      if (pagesToPrefetch.length > 0) {
+        setTimeout(() => prefetchPages(pagesToPrefetch), 200);
+      }
+    }, 100);
+  }, [detail, currentPage, shouldBulkFetch]);
+
+  // ── 2b. Data di-refresh dari luar (invalidateQueries setelah header diedit) ─
+  // Refetch semacam ini cuma membawa data currentPage, sedangkan halaman lain di
+  // window masih hasil bulk fetch sebelum edit. Reset window supaya seluruhnya
+  // dirakit ulang; tanpa ini baris detail yang baru diedit tetap tampil lama.
+  // Penandanya adalah query key yang TIDAK berubah: fetch milik grid sendiri
+  // (bulk -> per-halaman, geser window, filter/sort) selalu mengubah key,
+  // sedangkan invalidateQueries me-refetch key yang sama. Tanpa perbandingan key
+  // ini, pergantian limit bulk -> per-halaman ikut terbaca sebagai refresh luar
+  // dan reset-nya memicu bulk fetch lagi — loop request tanpa henti.
+  const lastFetchRef = useRef({ key: '', updatedAt: 0 });
+  useEffect(() => {
+    if (!dataUpdatedAt) return;
+
+    const key = hashQueryKey(['scheduledetail', scheduleId, queryParams]);
+    const previous = lastFetchRef.current;
+    lastFetchRef.current = { key, updatedAt: dataUpdatedAt };
+
+    if (previous.updatedAt === 0 || key !== previous.key) return;
+    if (dataUpdatedAt === previous.updatedAt) return;
+    if (shouldBulkFetch || isFetching || isTransitioning) return;
+
+    resetBufferingCache();
+  }, [dataUpdatedAt, scheduleId, queryParams]);
+
+  // ── 3. Row combiner: gabungkan halaman-halaman window jadi `rows` ─────────
+  useEffect(() => {
+    const combinedRows: ScheduleDetail[] = [];
+    visiblePages?.forEach((page) => {
+      const pageData = pageDataCache.get(page);
+      if (pageData) combinedRows.push(...pageData);
+    });
+
+    if (combinedRows.length === 0) {
+      // Window kosong (header tidak punya baris / filter tidak match): jangan
+      // biarkan hasil bukti sebelumnya tetap terpampang.
+      setRows((prev) => (prev.length > 0 ? [] : prev));
+      selectedRowRef.current = 0;
+      setSelectedRow(0);
+      isPageTransitionRef.current = false;
+      pendingScrollAdjustment.current = 0;
+      return;
+    }
+
+    setRows(combinedRows);
+
+    if (isPageTransitionRef.current) {
+      isPageTransitionRef.current = false;
+      // Commit selectedRow yang sudah digeser BERSAMAAN dengan setRows, supaya
+      // highlight (getRowClass) tidak berkedip di frame antara.
+      const targetRow = Math.min(
+        Math.max(selectedRowRef.current, 0),
+        combinedRows.length - 1
+      );
+      selectedRowRef.current = targetRow;
+      setSelectedRow(targetRow);
+    }
+  }, [visiblePages, pageDataCache]);
+
+  // ── 4. Kompensasi scroll setelah window bergeser ──────────────────────────
+  // Window geser 1 halaman = `rows` bertambah/berkurang filters.limit baris di
+  // salah satu ujung. Tanpa menggeser scrollTop sebesar tinggi halaman itu,
+  // konten akan melompat di bawah kursor user.
+  useLayoutEffect(() => {
+    if (pendingScrollAdjustment.current !== 0 && scrollContainerRef.current) {
+      const container = scrollContainerRef.current;
+
+      container.scrollTop += pendingScrollAdjustment.current;
+
+      // Sinkronkan referensi supaya handleScroll tidak mengira ini scroll manual.
+      scrollPositionRef.current = container.scrollTop;
+      lastScrollTopRef.current = container.scrollTop;
+      hasAdjustedScrollRef.current = true;
+
+      pendingScrollAdjustment.current = 0;
+    }
+  }, [rows]);
+
+  // Header berganti (user pindah baris di grid header) = dataset benar-benar
+  // lain. Buang seluruh window + buffer beserta filter kolomnya, jangan sampai
+  // rincian bukti sebelumnya ikut tergabung ke grid.
+  useEffect(() => {
+    setFilters((prev) => ({
+      ...prev,
+      filters: { ...filterScheduleDetail },
+      page: 1
+    }));
+    setRows([]);
+    setSelectedRow(0);
+    resetBufferingCache();
+  }, [scheduleId, resetBufferingCache]);
+
   async function handleKeyDown(
     args: CellKeyDownArgs<ScheduleDetail>,
     event: React.KeyboardEvent
@@ -1390,72 +1850,6 @@ const GridScheduleDetail = () => {
     }
   }
 
-  function handleCellClick(args: { row: ScheduleDetail }) {
-    const clickedRow = args.row;
-    const rowIndex = rows.findIndex((r) => r.id === clickedRow.id);
-    if (rowIndex !== -1) {
-      setSelectedRow(rowIndex);
-    }
-  }
-
-  function getRowClass(row: ScheduleDetail) {
-    const rowIndex = rows.findIndex((r) => r.id === row.id);
-    return rowIndex === selectedRow ? 'selected-row' : '';
-  }
-
-  function rowKeyGetter(row: ScheduleDetail) {
-    return row.id;
-  }
-
-  useEffect(() => {
-    // useEffect untuk trigger grid yg kesipan di config kalo ada
-    loadGridConfig(
-      user.id,
-      'GridScheduleDetail',
-      columns,
-      setColumnsOrder,
-      setColumnsWidth
-    );
-  }, []);
-
-  useEffect(() => {
-    window.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      window.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (allDataDetail) {
-      const formattedRows = allDataDetail?.data?.map((item: any) => ({
-        id: item.id,
-        schedule_id: item.schedule_id,
-        nobukti: item.nobukti, // Updated to match the field name
-        pelayaran_id: item.pelayaran_id, // Updated to match the field name
-        pelayaran_nama: item.pelayaran_nama, // Updated to match the field name
-        kapal_id: item.kapal_id, // Updated to match the field name
-        kapal_nama: item.kapal_nama, // Updated to match the field name
-        tujuankapal_id: item.tujuankapal_id, // Updated to match the field name
-        tujuankapal_nama: item.tujuankapal_nama, // Updated to match the field name
-        tglberangkat: item.tglberangkat, // Updated to match the field name
-        tgltiba: item.tgltiba, // Updated to match the field name
-        etb: item.etb, // Updated to match the field name
-        eta: item.eta, // Updated to match the field name
-        etd: item.etd, // Updated to match the field name
-        voyberangkat: item.voyberangkat, // Updated to match the field name
-        voytiba: item.voytiba, // Updated to match the field name
-        closing: item.closing, // Updated to match the field name
-        etatujuan: item.etatujuan, // Updated to match the field name
-        etdtujuan: item.etdtujuan, // Updated to match the field name
-        keterangan: item.keterangan // Updated to match the field name
-      }));
-
-      setRows(formattedRows);
-    } else if (!headerData?.id) {
-      setRows([]);
-    }
-  }, [allDataDetail, headerData?.id]);
-
   useEffect(() => {
     const headerCells = document.querySelectorAll('.rdg-header-row .rdg-cell');
     headerCells.forEach((cell) => {
@@ -1464,10 +1858,10 @@ const GridScheduleDetail = () => {
   }, []);
 
   useEffect(() => {
-    if (headerData) {
-      refetch();
-    }
-  }, [headerData]);
+    return () => {
+      debouncedFilterUpdate.cancel();
+    };
+  }, []);
 
   return (
     <div className={`flex h-[100%] w-full justify-center`}>
@@ -1503,7 +1897,7 @@ const GridScheduleDetail = () => {
             <DraggableColumn
               defaultColumns={columns}
               saveColumns={finalColumns}
-              userId={user.id}
+              userId={String(session?.user?.id)}
               gridName="GridScheduleDetail"
               setColumnsOrder={setColumnsOrder}
               setColumnsWidth={setColumnsWidth}
@@ -1520,56 +1914,62 @@ const GridScheduleDetail = () => {
           columns={finalColumns}
           onColumnResize={onColumnResize}
           onColumnsReorder={onColumnsReorder}
-          rows={rows}
-          headerRowHeight={70}
-          onCellKeyDown={handleKeyDown}
-          rowHeight={30}
-          renderers={{ noRowsFallback: <EmptyRowsRenderer /> }}
-          className={`${isDark ? 'rdg-dark' : 'rdg-light'} fill-grid text-xs`}
-          enableVirtualization={false}
-          rowKeyGetter={rowKeyGetter}
+          rows={rows ?? []}
           rowClass={getRowClass}
-          onCellClick={handleCellClick}
           onSelectedCellChange={(args) => {
             handleCellClick({ row: args.row });
           }}
+          rowKeyGetter={rowKeyGetter}
+          headerRowHeight={HEADER_ROW_HEIGHT}
+          onCellKeyDown={handleKeyDown}
+          rowHeight={ROW_HEIGHT}
+          onScroll={handleScroll}
+          renderers={{ noRowsFallback: <EmptyRowsRenderer /> }}
+          className={`${isDark ? 'rdg-dark' : 'rdg-light'} fill-grid`}
+          enableVirtualization={false}
         />
-        <div className="flex flex-row justify-between border border-x-0 border-b-0 border-border bg-background-grid-header p-2">
-          {isLoading ? <LoadRowsRenderer /> : null}
-
-          {contextMenu && (
-            <div
-              ref={contextMenuRef}
-              className="bg-background-input"
-              style={{
-                position: 'fixed', // Fixed agar koordinat sesuai dengan viewport
-                top: contextMenu.y, // Pastikan contextMenu.y berasal dari event.clientY
-                left: contextMenu.x, // Pastikan contextMenu.x berasal dari event.clientX
-                boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.2)',
-                padding: '8px',
-                borderRadius: '4px',
-                zIndex: 1000
+        {contextMenu && (
+          <div
+            ref={contextMenuRef}
+            className="bg-background-input"
+            style={{
+              position: 'fixed', // Fixed agar koordinat sesuai dengan viewport
+              top: contextMenu.y, // Pastikan contextMenu.y berasal dari event.clientY
+              left: contextMenu.x, // Pastikan contextMenu.x berasal dari event.clientX
+              boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.2)',
+              padding: '8px',
+              borderRadius: '4px',
+              zIndex: 1000
+            }}
+          >
+            <Button
+              variant="default"
+              onClick={() => {
+                resetGridConfig(
+                  String(session?.user?.id),
+                  'GridScheduleDetail',
+                  columns,
+                  setColumnsOrder,
+                  setColumnsWidth
+                );
+                setContextMenu(null);
+                setDataGridKey((prevKey) => prevKey + 1);
+                gridRef?.current?.selectCell({ rowIdx: 0, idx: 0 });
               }}
             >
-              <Button
-                variant="default"
-                onClick={() => {
-                  resetGridConfig(
-                    user.id,
-                    'GridScheduleDetail',
-                    columns,
-                    setColumnsOrder,
-                    setColumnsWidth
-                  );
-                  setContextMenu(null);
-                  setDataGridKey((prevKey) => prevKey + 1);
-                  gridRef?.current?.selectCell({ rowIdx: 0, idx: 0 });
-                }}
-              >
-                Reset
-              </Button>
-            </div>
-          )}
+              Reset
+            </Button>
+          </div>
+        )}
+        <div className="flex flex-row items-center justify-between border border-x-0 border-b-0 border-border bg-background-grid-header p-2">
+          <span className="text-xs">
+            {rows.length > 0
+              ? `Menampilkan ${startRow} - ${startRow + rows.length - 1} dari ${
+                  detail?.pagination?.totalItems ?? rows.length
+                } data`
+              : ''}
+          </span>
+          {isLoading ? <LoadRowsRenderer /> : null}
         </div>
       </div>
     </div>

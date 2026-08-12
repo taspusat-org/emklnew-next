@@ -6,6 +6,11 @@ import {
 import { buildQueryParams } from '../utils';
 import { api2 } from '../utils/AxiosInstance';
 import { ScheduleHeaderInput } from '../validations/schedule.validation';
+import {
+  BuktiJobPayload,
+  ExportBuktiJobPayload,
+  ReportJobResponse
+} from './report.api';
 
 interface UpdateParams {
   id: string;
@@ -25,7 +30,8 @@ export const getScheduleHeaderFn = async (
     const queryParams = buildQueryParams(filters);
 
     const response = await api2.get('/schedule-header', {
-      params: queryParams
+      params: queryParams,
+      signal
     });
     //
 
@@ -51,11 +57,13 @@ export const getScheduleById = async (id: any) => {
 
 export const getScheduleDetailFn = async (
   id: string,
-  filters: GetParams = {}
+  filters: GetParams = {},
+  signal?: AbortSignal
 ): Promise<IAllScheduleDetail> => {
   const queryParams = buildQueryParams(filters);
   const response = await api2.get(`/schedule-detail/${id}`, {
-    params: queryParams
+    params: queryParams,
+    signal
   });
 
   return response.data;
@@ -84,7 +92,7 @@ export const deleteScheduleFn = async (id: string) => {
 export const checkValidationScheduleFn = async (fields: validationFields) => {
   const response = await api2.post(`/schedule-header/check-validation`, fields);
 
-  return response;
+  return response.data;
 };
 
 export const exportScheduleFn = async (
@@ -103,4 +111,21 @@ export const exportScheduleFn = async (
     console.error('Error exporting data schedule:', error);
     throw new Error('Failed to export data schedule');
   }
+};
+// Cetak bukti per transaksi: payloadnya hanya id baris yang dicentang plus
+// nama template .mrt-nya.
+export const generateScheduleReportFn = async (
+  payload: BuktiJobPayload
+): Promise<ReportJobResponse> => {
+  const response = await api2.post('/schedule-header/report', payload);
+  return response.data;
+};
+
+// Export per transaksi: satu bukti + rinciannya, bukan daftar grid — payloadnya
+// hanya id baris yang dicentang.
+export const generateScheduleExportFn = async (
+  payload: ExportBuktiJobPayload
+): Promise<ReportJobResponse> => {
+  const response = await api2.post('/schedule-header/export', payload);
+  return response.data;
 };

@@ -187,9 +187,11 @@ export const useUpdateHutang = () => {
   // "setelah update grid balik ke baris 1").
   return useMutation(updateHutangFn, {
     onSuccess: () => {
-      // Key 'jurnalumumdetail' aman di-invalidate: nobukti header tidak berubah
-      // saat edit, jadi tab Jurnal Umum Detail tidak akan me-refetch sendiri
-      // padahal isinya ikut berubah di backend.
+      // Key 'hutangdetail' dan 'jurnalumumdetail' aman di-invalidate: nobukti
+      // header tidak berubah saat edit, jadi kedua tab detail tidak akan
+      // me-refetch sendiri padahal isinya ikut berubah di backend. Keduanya
+      // tidak match 'hutang', jadi grid header tidak ikut ter-refetch.
+      void queryClient.invalidateQueries('hutangdetail');
       void queryClient.invalidateQueries('jurnalumumdetail');
     },
     onError: (error: AxiosError) => {

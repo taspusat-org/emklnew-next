@@ -110,7 +110,12 @@ import {
   generateBiayaExtraHeaderReportFn
 } from '@/lib/apis/report.api';
 import { useReportPdfContext } from '@/hooks/ReportPdfProvider';
-import { HEADER_ROW_HEIGHT, LIMIT, ROW_HEIGHT } from '@/constants/constant';
+import {
+  HEADER_ROW_HEIGHT,
+  LIMIT,
+  NOMOR_CELL_BOX,
+  ROW_HEIGHT
+} from '@/constants/constant';
 
 interface Filter {
   page: number;
@@ -432,79 +437,76 @@ const GridBiayaExtraHeader = () => {
       {
         key: 'nomor',
         name: 'NO',
-        width: 50,
+        width: 40,
         headerCellClass: 'column-headers',
-        renderHeaderCell: (column: any) => (
-          <div className="flex h-full flex-col items-center gap-1">
-            <div className="headers-cell h-[50%] items-center justify-center text-center">
-              <p className="text-sm font-normal">No.</p>
+        renderHeaderCell: () => (
+          // gap-1 WAJIB sama dengan kolom lain: dua anak h-[50%] + gap 4px
+          // melebihi tinggi container, keduanya menyusut 2px, dan garis bawah
+          // baris judul berhenti di H/2-2. Tanpa gap garisnya di H/2 — meleset
+          // 2px dari garis bawah kolom sebelahnya.
+          <div className="flex h-full w-full flex-col gap-1">
+            <div
+              className="headers-cell h-[50%] w-full"
+              onContextMenu={(event) =>
+                setContextMenu(handleContextMenu(event))
+              }
+            >
+              <p className="w-full text-center text-sm font-normal">No.</p>
             </div>
 
-            <div
-              className="flex h-[50%] w-full cursor-pointer items-center justify-center"
-              onClick={() => {
-                setFilters((prev) => ({
-                  ...prev, // ← ubah dari spread langsung ke functional update
-                  search: '',
-                  filters: {
-                    ...filterBiayaExtraHeader,
-                    tglDari: prev.filters.tglDari,
-                    tglSampai: prev.filters.tglSampai,
-                    jenisOrderan: prev.filters.jenisOrderan // ✅ tambahkan ini
-                  }
-                }));
-                setInputValue('');
-                setTimeout(() => {
-                  gridRef?.current?.selectCell({ rowIdx: 0, idx: 1 });
-                }, 0);
-              }}
-            >
-              <FaTimes className="bg-red-500 text-white" />
+            <div className={`h-[50%] w-[calc(100%+2px)] ${NOMOR_CELL_BOX}`}>
+              <div className="flex justify-center">
+                <Checkbox
+                  checked={isAllSelected}
+                  onCheckedChange={() => handleSelectAll()}
+                  id="header-checkbox"
+                />
+              </div>
+              <div
+                className="flex cursor-pointer items-center justify-center"
+                onClick={() => {
+                  setFilters((prev) => ({
+                    ...prev, // ← ubah dari spread langsung ke functional update
+                    search: '',
+                    filters: {
+                      ...filterBiayaExtraHeader,
+                      tglDari: prev.filters.tglDari,
+                      tglSampai: prev.filters.tglSampai,
+                      jenisOrderan: prev.filters.jenisOrderan // ✅ tambahkan ini
+                    }
+                  }));
+                  setInputValue('');
+                  setTimeout(() => {
+                    gridRef?.current?.selectCell({ rowIdx: 0, idx: 1 });
+                  }, 0);
+                }}
+              >
+                <FaTimes className="bg-red-500 text-white" />
+              </div>
             </div>
           </div>
         ),
         renderCell: (props: any) => {
+          const rowId = props.row.id;
           const absoluteNumber =
             (minVisiblePage - 1) * filters.limit + props.rowIdx + 1;
           return (
-            <div className="flex h-full w-full cursor-pointer items-center justify-center text-sm">
-              {absoluteNumber}
+            <div
+              className={`-ml-[5px] h-full w-[calc(100%+9px)] cursor-pointer ${NOMOR_CELL_BOX}`}
+            >
+              <div className="flex justify-center">
+                <Checkbox
+                  checked={checkedRows.has(rowId)}
+                  onCheckedChange={() => handleRowSelect(rowId)}
+                  id={`row-checkbox-${rowId}`}
+                />
+              </div>
+              <div className="flex justify-center text-sm">
+                {absoluteNumber}
+              </div>
             </div>
           );
         }
-      },
-      {
-        key: 'select',
-        name: '',
-        width: 50,
-        headerCellClass: 'column-headers',
-        renderHeaderCell: (column: any) => (
-          <div className="flex h-full cursor-pointer flex-col items-center gap-1">
-            <div
-              className="headers-cell h-[50%]"
-              onContextMenu={(event) =>
-                setContextMenu(handleContextMenu(event))
-              }
-            ></div>
-            <div className="flex h-[50%] w-full items-center justify-center">
-              <Checkbox
-                checked={isAllSelected}
-                onCheckedChange={() => handleSelectAll()}
-                id="header-checkbox"
-                className="mb-2"
-              />
-            </div>
-          </div>
-        ),
-        renderCell: ({ row }: { row: BiayaExtraHeader }) => (
-          <div className="flex h-full items-center justify-center">
-            <Checkbox
-              checked={checkedRows.has(row.id)}
-              onCheckedChange={() => handleRowSelect(row.id)}
-              id={`row-checkbox-${row.id}`}
-            />
-          </div>
-        )
       },
 
       {
@@ -1927,19 +1929,22 @@ const GridBiayaExtraHeader = () => {
               });
               streamBufferRef.current = newBuffer;
 
-              // 4. Move cursor
-              if (selectedRow === 0) {
-                setSelectedRow(0);
-                gridRef?.current?.selectCell({ rowIdx: 0, idx: 1 });
-              } else if (selectedRow === rows.length - 1) {
-                setSelectedRow(selectedRow - 1);
-                gridRef?.current?.selectCell({
-                  rowIdx: selectedRow - 1,
-                  idx: 1
-                });
+              // 4. Fokus baris BERIKUTNYA (by-id). Setelah baris dihapus,
+              // baris tepat di bawahnya naik mengisi slot yang sama -> itulah
+              // yang difokuskan. Jika yang dihapus baris paling bawah window,
+              // jatuh ke baris di atasnya. Pemfokusan dilakukan via
+              // pendingFocusIdRef (BY-ID), bukan selectCell by-index: Row
+              // Combiner jalan ulang setelah cache di-update, dan tanpa
+              // pendingFocusIdRef cabang else-nya men-scroll & men-select balik
+              // ke row 0.
+              const nextFocusRow =
+                rows[selectedRow + 1] ?? rows[selectedRow - 1];
+              if (nextFocusRow) {
+                pendingFocusIdRef.current = String(nextFocusRow.id);
               } else {
-                setSelectedRow(selectedRow);
-                gridRef?.current?.selectCell({ rowIdx: selectedRow, idx: 1 });
+                // Tidak ada baris tersisa pada window ini.
+                setSelectedRow(0);
+                selectedRowRef.current = 0;
               }
             }
           });
@@ -2910,12 +2915,14 @@ const GridBiayaExtraHeader = () => {
             customActions={[
               {
                 label: 'Print',
+                shortcut: 'P',
                 icon: <FaPrint />,
                 onClick: () => handleReport(),
                 className: 'bg-cyan-500 hover:bg-cyan-700'
               },
               {
                 label: 'Export',
+                shortcut: 'E',
                 icon: <FaFileExport />,
                 onClick: () => handleExportExcel(),
                 className: 'bg-green-600 hover:bg-green-700'

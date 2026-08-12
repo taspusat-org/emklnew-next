@@ -2,7 +2,7 @@ import { GetParams } from '../types/all.type';
 import { IAllTypeAkuntansi } from '../types/typeakuntansi.type';
 import { buildQueryParams } from '../utils';
 import { api2 } from '../utils/AxiosInstance';
-import { TypeakuntansiInput } from '../validations/typeakuntansi';
+import { TypeakuntansiInput } from '../validations/typeakuntansi.validation';
 
 interface UpdateTypeAkuntansiParams {
   id: string;

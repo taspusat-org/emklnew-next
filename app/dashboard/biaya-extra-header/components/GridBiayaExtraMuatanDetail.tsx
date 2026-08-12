@@ -42,6 +42,7 @@ import {
 } from '@/lib/types/biayaextraheader.type';
 import { useGetBiayaExtraMuatanDetail } from '@/lib/server/useBiayaExtraHeader';
 import { getBiayaExtraMuatanDetailFn } from '@/lib/apis/biayaextraheader.api';
+import { hashQueryKey } from 'react-query';
 import { HEADER_ROW_HEIGHT, LIMIT, ROW_HEIGHT } from '@/constants/constant';
 
 interface Filter {
@@ -203,10 +204,11 @@ const GridBiayaExtraMuatanDetail = () => {
     [filters, shouldBulkFetch, currentPage, effectiveLimit]
   );
 
-  const { data: allDataDetail, isLoading } = useGetBiayaExtraMuatanDetail(
-    headerData?.id,
-    queryParams
-  );
+  const {
+    data: allDataDetail,
+    isLoading,
+    dataUpdatedAt
+  } = useGetBiayaExtraMuatanDetail(headerData?.id, queryParams);
 
   const [rows, setRows] = useState<BiayaExtraMuatanDetail[]>([]);
   const [selectedRow, setSelectedRow] = useState<number>(0);
@@ -1388,6 +1390,34 @@ const GridBiayaExtraMuatanDetail = () => {
       }
     }, 100);
   }, [allDataDetail, currentPage, shouldBulkFetch]);
+
+  // ── 2b. Data di-refresh dari luar (invalidateQueries setelah header disimpan) ─
+  // Refetch semacam ini cuma membawa data currentPage, sedangkan halaman lain di
+  // window masih hasil bulk fetch sebelum edit. Reset window supaya seluruhnya
+  // dirakit ulang; tanpa ini baris detail yang baru diedit tetap tampil lama.
+  // Penandanya adalah query key yang TIDAK berubah: fetch milik grid sendiri
+  // (bulk -> per-halaman, geser window, filter/sort) selalu mengubah key,
+  // sedangkan invalidateQueries me-refetch key yang sama. Tanpa perbandingan key
+  // ini, pergantian limit bulk -> per-halaman ikut terbaca sebagai refresh luar
+  // dan reset-nya memicu bulk fetch lagi — loop request tanpa henti.
+  const lastFetchRef = useRef({ key: '', updatedAt: 0 });
+  useEffect(() => {
+    if (!dataUpdatedAt) return;
+
+    const key = hashQueryKey([
+      'biayaextramuatandetail',
+      headerData?.id,
+      queryParams
+    ]);
+    const previous = lastFetchRef.current;
+    lastFetchRef.current = { key, updatedAt: dataUpdatedAt };
+
+    if (previous.updatedAt === 0 || key !== previous.key) return;
+    if (dataUpdatedAt === previous.updatedAt) return;
+    if (shouldBulkFetch || isFetching || isTransitioning) return;
+
+    resetBufferingCache();
+  }, [dataUpdatedAt, queryParams, headerData?.id]);
 
   // ── 3. Row combiner: gabungkan halaman-halaman window jadi `rows` ─────────
   useEffect(() => {

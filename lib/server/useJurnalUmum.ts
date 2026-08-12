@@ -42,17 +42,7 @@ export const useGetJurnalUmumHeader = (
     ['jurnalumum', filters],
     async () => await getJurnalUmumHeaderFn(filters, signal),
     {
-      // Guard page >= 1 disamakan dengan usePengeluaran. GridJurnalUmumHeader
-      // memakai trik setCurrentPage(0) di handleScroll untuk memaksa effect
-      // jalan ulang saat halaman tujuan kebetulan == currentPage yang basi.
-      // Tanpa guard ini, fase antara itu benar-benar mengirim request page=0;
-      // FindAllSchema meng-clamp-nya ke 1, jadi yang balik adalah data halaman 1
-      // yang lalu tersimpan ke pageDataCache dengan key 0 — satu request sia-sia
-      // plus entri cache yang tidak pernah dirender.
       enabled: !signal?.aborted && (filters.page ?? 1) >= 1,
-      // staleTime/cacheTime 0: window pagination dikelola sendiri oleh grid.
-      // Tanpa ini refetch pasca-update sempat memakai cache lama sehingga baris
-      // yang baru disimpan tampil dengan nilai basi.
       staleTime: 0,
       cacheTime: 0
     }
@@ -76,26 +66,14 @@ export const useGetJurnalUmumDetail = (
   } = {},
   signal?: AbortSignal
 ) => {
-  // Key 'jurnalumumdetail', BUKAN 'jurnalumum'. Dulu detail memakai key yang
-  // sama persis dengan useGetJurnalUmumHeader, sehingga
-  // invalidateQueries('jurnalumum') (useUpdateJurnalUmum, useDeleteJurnalUmum,
-  // useHutang, useKasGantung) ikut membatalkan cache detail — dan sebaliknya,
-  // cache detail ikut di-refetch tiap kali header berubah walau isinya tidak
-  // terkait. Sama seperti usePengeluaran / useHutang.
   return useQuery(
     ['jurnalumumdetail', filters],
     async () => await getJurnalUmumDetailFn(filters, signal),
     {
-      // Jangan fetch saat page < 1 (trik setCurrentPage(0) di grid untuk memaksa
-      // refetch). Backend meng-clamp page<1 ke 1, jadi tanpa guard ini halaman 0
-      // memulangkan halaman 1 dan mengotori window cache.
       enabled:
         !!filters.filters?.nobukti &&
         !signal?.aborted &&
         (filters.page ?? 1) >= 1,
-      // staleTime/cacheTime 0: window pagination dikelola sendiri oleh grid
-      // (pageDataCache + streamBuffer). Cache react-query di atasnya hanya
-      // membuat data lama sempat terpakai saat filter/sort berubah.
       staleTime: 0,
       cacheTime: 0
     }
@@ -208,14 +186,22 @@ export const useGetKasGantungHeaderPengembalian = (
   );
 };
 export const useUpdateJurnalUmum = () => {
+  const queryClient = useQueryClient();
   const { alert } = useAlert();
   const { setError } = useFormError();
 
-  // Sama seperti useCreateJurnalUmum: JANGAN invalidateQueries di sini.
+  // Sama seperti useCreateJurnalUmum: JANGAN invalidateQueries('jurnalumum').
   // onSuccess di GridJurnalUmumHeader yang mengatur data + posisi baris;
   // refetch dari invalidate mendarat belakangan dan menimpa fokus tersebut
   // (gejala "setelah update grid balik ke baris 1").
   return useMutation(updateJurnalUmumFn, {
+    // Detail WAJIB di-invalidate: key-nya tidak berubah saat edit (nobukti tetap
+    // sama) sehingga tanpa ini grid detail terus menampilkan baris lama walau
+    // simpan sukses. Key 'jurnalumumdetail' tidak match 'jurnalumum', jadi query
+    // header tidak ikut ter-refetch.
+    onSuccess: () => {
+      void queryClient.invalidateQueries('jurnalumumdetail');
+    },
     onError: (error: AxiosError) => {
       const errorResponse = error.response?.data as IErrorResponse;
       if (errorResponse !== undefined) {
