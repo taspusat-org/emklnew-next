@@ -106,6 +106,7 @@ import {
   generateHargatruckingExportFn,
   generateHargatruckingReportFn
 } from '@/lib/apis/report.api';
+import { LIMIT, ROW_HEIGHT, HEADER_ROW_HEIGHT } from '@/constants/constant';
 
 interface Filter {
   page: number;
@@ -227,7 +228,6 @@ const GridHargatrucking = () => {
   const prefetchingPagesRef = useRef<Set<string>>(new Set());
   const STREAM_BUFFER_SIZE = 5;
   const WINDOW_SIZE = 5;
-  const ROW_HEIGHT = 27;
   const jumpToLastRef = useRef(false);
   const jumpToFirstRef = useRef(false);
   const interactionModeRef = useRef<'keyboard' | 'pointer'>('pointer');
@@ -268,7 +268,7 @@ const GridHargatrucking = () => {
   const router = useRouter();
   const [filters, setFilters] = useState<Filter>({
     page: 1,
-    limit: 50,
+    limit: LIMIT,
     filters: {
       tarifdetail_id: '',
       tujuankapal_text: '',
@@ -452,9 +452,7 @@ const GridHargatrucking = () => {
           </div>
         ),
         renderCell: (props: any) => {
-          const memoData = props.row.statusaktif_memo
-            ? JSON.parse(props.row.statusaktif_memo)
-            : null;
+          const memoData = props.row.memo ? JSON.parse(props.row.memo) : null;
           if (memoData) {
             return (
               <div
@@ -2664,6 +2662,7 @@ const GridHargatrucking = () => {
       forms.setValue('jenisorder_text', String(rowData?.jenisorder_text ?? ''));
       forms.setValue('nominal', formatCurrency(rowData?.nominal));
       forms.setValue('statusaktif', rowData?.statusaktif ?? '');
+      forms.setValue('text', rowData?.text ?? '');
     }
   }, [forms, selectedRow, rows, mode]);
   useEffect(() => {
@@ -2786,8 +2785,8 @@ const GridHargatrucking = () => {
             setSelectedCellKey(args.column.key);
             handleCellClick({ row: args.row });
           }}
-          headerRowHeight={70}
-          rowHeight={27}
+          headerRowHeight={HEADER_ROW_HEIGHT}
+          rowHeight={ROW_HEIGHT}
           className={`${isDark ? 'rdg-dark' : 'rdg-light'} fill-grid`}
           enableVirtualization={true}
           onColumnResize={onColumnResize}
@@ -2818,6 +2817,7 @@ const GridHargatrucking = () => {
               },
               {
                 label: 'Export',
+                shortcut: 'X',
                 icon: <FaFileExport />,
                 onClick: () => handleExportExcel(),
                 className: 'bg-green-600 hover:bg-green-700'

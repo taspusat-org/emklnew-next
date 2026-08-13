@@ -478,9 +478,7 @@ const GridAsuransi = () => {
           </div>
         ),
         renderCell: (props: any) => {
-          const memoData = props.row.statusaktif_memo
-            ? JSON.parse(props.row.statusaktif_memo)
-            : null;
+          const memoData = props.row.memo ? JSON.parse(props.row.memo) : null;
           if (memoData) {
             return (
               <div
@@ -3834,7 +3832,8 @@ const GridAsuransi = () => {
       forms.setValue('materai2', rowData?.materai2);
       forms.setValue('materai3', rowData?.materai3);
 
-      forms.setValue('statusaktif', String(rowData?.statusaktif ?? ''));
+      forms.setValue('statusaktif', rowData?.statusaktif ?? '');
+      forms.setValue('text', rowData?.text ?? '');
     }
   }, [forms, selectedRow, rows, mode]);
 
@@ -4006,6 +4005,7 @@ const GridAsuransi = () => {
               {
                 label: 'Export',
                 icon: <FaFileExport />,
+                shortcut: 'X',
                 onClick: () => handleExportExcel(),
                 className: 'bg-green-600 hover:bg-green-700'
               }
