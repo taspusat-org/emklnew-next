@@ -16,6 +16,19 @@ import {
  */
 const WS_BASE = process.env.NEXT_PUBLIC_BASE_URL2 ?? 'http://localhost:5004';
 
+/**
+ * Id sementara toast, dipakai hanya sampai jobId asli datang dari backend.
+ *
+ * `crypto.randomUUID` cuma tersedia di secure context (https / localhost).
+ * Saat app dibuka lewat IP LAN (http://192.168.x.x:5000) fungsinya undefined,
+ * dan dulu itu membuat tombol Cetak/Export mati total tanpa pesan apa pun.
+ */
+function createTempJobId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
+    return crypto.randomUUID();
+  return `tmp-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
 export type ReportToastStatus =
   | 'connecting'
   | 'processing'
@@ -181,7 +194,7 @@ export function useReportPdf() {
     async (opts: GenerateReportOptions, kind: ReportToastKind) => {
       // Toast muncul sebelum jobId ada supaya user langsung dapat feedback;
       // id sementara ini ditukar dengan jobId asli begitu request balas.
-      const tempId = crypto.randomUUID();
+      const tempId = createTempJobId();
 
       setToasts((prev) => [
         ...prev,
