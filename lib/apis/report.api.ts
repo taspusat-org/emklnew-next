@@ -1,7 +1,6 @@
 import { api2 } from '../utils/AxiosInstance';
 
 export interface ReportJobPayload {
-  /** Nama file template .mrt yang ada di folder `reports` milik backend. */
   mrtName: string;
   search?: string;
   filters?: Record<string, string | number | null>;
@@ -14,11 +13,6 @@ export interface ReportJobResponse {
   jobId: string;
 }
 
-/**
- * Meminta backend mencetak laporan Group Biaya Extra di background.
- * Balasannya hanya jobId — progres render datang lewat socket `/report`
- * (event `report:progress`), lalu PDF-nya diambil via downloadReportPdfFn.
- */
 export const generateGroupbiayaextraReportFn = async (
   payload: ReportJobPayload
 ): Promise<ReportJobResponse> => {
@@ -26,7 +20,6 @@ export const generateGroupbiayaextraReportFn = async (
   return response.data;
 };
 
-/** Cetak laporan Parameter di background — lihat generateGroupbiayaextraReportFn. */
 export const generateParameterReportFn = async (
   payload: ReportJobPayload
 ): Promise<ReportJobResponse> => {
@@ -34,7 +27,6 @@ export const generateParameterReportFn = async (
   return response.data;
 };
 
-/** Cetak laporan User di background — lihat generateGroupbiayaextraReportFn. */
 export const generateUserReportFn = async (
   payload: ReportJobPayload
 ): Promise<ReportJobResponse> => {
@@ -55,9 +47,7 @@ export const generateTypeAkuntansiReportFn = async (
   return response.data;
 };
 export interface BuktiJobPayload {
-  /** Nama file template .mrt yang ada di folder `reports` milik backend. */
   mrtName: string;
-  /** id baris yang dicetak. */
   id: string;
   judullaporan?: string;
 }
@@ -67,11 +57,6 @@ export const generateHutangReportFn = async (
   const response = await api2.post('/hutangheader/report', payload);
   return response.data;
 };
-/**
- * Cetak Harga trucking di background — alurnya sama dengan laporan daftar
- * (balas jobId, progres lewat socket `/report`), hanya datanya satu bukti
- * beserta rinciannya sesuai dua datasource di LaporanHutang.mrt.
- */
 export const generateHargatruckingReportFn = async (
   payload: BuktiJobPayload
 ): Promise<ReportJobResponse> => {
@@ -85,7 +70,6 @@ export const generateLabaRugiKalkulasiReportFn = async (
   return response.data;
 };
 
-/** Cetak bukti Pengeluaran di background — lihat generateHutangReportFn. */
 export const generatePengeluaranReportFn = async (
   payload: BuktiJobPayload
 ): Promise<ReportJobResponse> => {
@@ -93,22 +77,43 @@ export const generatePengeluaranReportFn = async (
   return response.data;
 };
 
-/** Cetak bukti Biaya Extra di background — lihat generateHutangReportFn. */
 export const generateBiayaExtraHeaderReportFn = async (
   payload: BuktiJobPayload
 ): Promise<ReportJobResponse> => {
   const response = await api2.post('/biayaextraheader/report', payload);
   return response.data;
 };
-/**
- * Payload export Excel per transaksi — satu bukti beserta rinciannya, jadi
- * yang dikirim hanya id barisnya (sama seperti cetak bukti).
- */
 export interface ExportBuktiJobPayload {
   id: string;
 }
 
-/** Payload export Excel background — sama seperti report, tanpa template .mrt. */
+export interface ReportByIdJobPayload {
+  mrtName: string;
+  id: string | number;
+  judullaporan?: string;
+}
+
+export const generateShippingInstructionReportFn = async (
+  payload: ReportByIdJobPayload
+): Promise<ReportJobResponse> => {
+  const response = await api2.post('/shippinginstruction/report', payload);
+  return response.data;
+};
+
+export const generatePanjarHeaderReportFn = async (
+  payload: ReportByIdJobPayload
+): Promise<ReportJobResponse> => {
+  const response = await api2.post('/panjarheader/report', payload);
+  return response.data;
+};
+
+export const generateBlHeaderReportFn = async (
+  payload: ReportByIdJobPayload
+): Promise<ReportJobResponse> => {
+  const response = await api2.post('/blheader/report', payload);
+  return response.data;
+};
+
 export interface ExportJobPayload {
   search?: string;
   filters?: Record<string, string | number | null>;
@@ -130,7 +135,6 @@ export const generateGroupbiayaextraExportFn = async (
   return response.data;
 };
 
-/** Export Excel Parameter di background — lihat generateAlatbayarExportFn. */
 export const generateParameterExportFn = async (
   payload: ExportJobPayload
 ): Promise<ReportJobResponse> => {
@@ -145,7 +149,6 @@ export const generateUserExportFn = async (
   return response.data;
 };
 
-/** Export Excel Menu di background — lihat generateAlatbayarExportFn. */
 export const generateMenuExportFn = async (
   payload: ExportJobPayload
 ): Promise<ReportJobResponse> => {
@@ -153,7 +156,6 @@ export const generateMenuExportFn = async (
   return response.data;
 };
 
-/** Export Excel daftar Hutang di background — lihat generateAlatbayarExportFn. */
 export const generateHutangExportFn = async (
   payload: ExportJobPayload
 ): Promise<ReportJobResponse> => {
@@ -161,7 +163,6 @@ export const generateHutangExportFn = async (
   return response.data;
 };
 
-/** Export Excel daftar Pengeluaran di background — lihat generateAlatbayarExportFn. */
 export const generatePengeluaranExportFn = async (
   payload: ExportJobPayload
 ): Promise<ReportJobResponse> => {
@@ -169,7 +170,6 @@ export const generatePengeluaranExportFn = async (
   return response.data;
 };
 
-/** Export Excel daftar Biaya Extra di background — lihat generateAlatbayarExportFn. */
 export const generateBiayaExtraHeaderExportFn = async (
   payload: ExportJobPayload
 ): Promise<ReportJobResponse> => {
@@ -177,7 +177,6 @@ export const generateBiayaExtraHeaderExportFn = async (
   return response.data;
 };
 
-/** Export Excel Harga Trucking di background — lihat generateAlatbayarExportFn. */
 export const generateHargatruckingExportFn = async (
   payload: ExportJobPayload
 ): Promise<ReportJobResponse> => {
@@ -185,7 +184,6 @@ export const generateHargatruckingExportFn = async (
   return response.data;
 };
 
-/** Export Excel Asuransi di background — lihat generateAlatbayarExportFn. */
 export const generateAsuransiExportFn = async (
   payload: ExportJobPayload
 ): Promise<ReportJobResponse> => {
@@ -200,22 +198,37 @@ export const generateLabaRugiKalkulasiExportFn = async (
   return response.data;
 };
 
+export const generateShippingInstructionExportFn = async (
+  payload: ExportJobPayload
+): Promise<ReportJobResponse> => {
+  const response = await api2.post('/shippinginstruction/export', payload);
+  return response.data;
+};
+
+export const generatePanjarHeaderExportFn = async (
+  payload: ExportJobPayload
+): Promise<ReportJobResponse> => {
+  const response = await api2.post('/panjarheader/export', payload);
+  return response.data;
+};
+
+export const generateBlHeaderExportFn = async (
+  payload: ExportJobPayload
+): Promise<ReportJobResponse> => {
+  const response = await api2.post('/blheader/export', payload);
+  return response.data;
+};
+
 export const PDF_MIME = 'application/pdf';
 export const EXCEL_MIME =
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
-/** Ambil nama file dari header Content-Disposition, mis. attachment; filename="a.xlsx". */
 const parseFilename = (disposition?: string): string | undefined => {
   if (!disposition) return undefined;
   const match = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(disposition);
   return match?.[1] ? decodeURIComponent(match[1]) : undefined;
 };
 
-/**
- * Mengunduh hasil job. `downloadPath` diambil apa adanya dari event socket
- * (`/report/download/<jobId>`) supaya frontend tidak menebak-nebak URL-nya.
- * Nama file diambil dari header supaya konsisten dengan yang dibuat backend.
- */
 export const downloadReportFileFn = async (
   downloadPath: string,
   mimeType: string

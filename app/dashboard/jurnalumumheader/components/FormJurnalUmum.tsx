@@ -50,6 +50,7 @@ import LookUpModal from '@/components/custom-ui/LookUpModal';
 import { useGetJurnalUmumDetail } from '@/lib/server/useJurnalUmum';
 import { JurnalUmumDetail } from '@/lib/types/jurnalumumheader.type';
 import { useTheme } from 'next-themes';
+import { useShiftHorizontalScroll } from '@/hooks/use-shift-horizontal-scroll';
 
 const FormJurnalUmum = ({
   popOver,
@@ -64,6 +65,10 @@ const FormJurnalUmum = ({
 }: any) => {
   const { theme, resolvedTheme } = useTheme();
   const isDark = theme === 'dark' || resolvedTheme === 'dark';
+  // Shift + scroll = geser horizontal. Grid ini lebih lebar dari modal dan
+  // react-remove-scroll bawaan Radix Dialog membatalkan wheel-nya.
+  useShiftHorizontalScroll();
+
   const [selectedRow, setSelectedRow] = useState<number>(0);
   const [popOverTglSampai, setPopOverTglSampai] = useState<boolean>(false);
   const [editingRowId, setEditingRowId] = useState<number | null>(null); // Menyimpan ID baris yang sedang diedit

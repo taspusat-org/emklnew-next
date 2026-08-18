@@ -8,12 +8,6 @@ import {
   PDF_MIME
 } from '@/lib/apis/report.api';
 
-/**
- * Socket report menempel di backend EMKL (NEXT_PUBLIC_BASE_URL2), namespace
- * `/report` — sama dengan endpoint REST-nya, jadi tidak perlu env baru.
- * Export Excel memakai kanal yang sama; yang membedakan hanya jenis berkas
- * hasilnya (lihat ReportToastKind).
- */
 const WS_BASE = process.env.NEXT_PUBLIC_BASE_URL2 ?? 'http://localhost:5004';
 
 export type ReportToastStatus =
@@ -23,10 +17,8 @@ export type ReportToastStatus =
   | 'done'
   | 'error';
 
-/** pdf = cetak laporan (dibuka di viewer), excel = export (diunduh). */
 export type ReportToastKind = 'pdf' | 'excel';
 
-/** Aksi tombol Export di toolbar viewer — dipasok modul pemanggil. */
 export type ReportExportHandler = () => void | Promise<void>;
 
 export interface ReportToast {
@@ -37,7 +29,6 @@ export interface ReportToast {
   percent: number;
   status: ReportToastStatus;
   blobUrl?: string;
-  /** Nama file saat diunduh (job excel) — diambil dari header backend. */
   filename?: string;
   onExport?: ReportExportHandler;
   error?: string;
@@ -50,19 +41,12 @@ export interface ReportViewer {
 }
 
 export interface GenerateReportOptions {
-  /** Judul yang tampil di toast & judul modal viewer, mis. "Group Biaya Extra". */
   label: string;
-  /** Payload untuk endpoint report; boleh berupa fungsi async bila perlu fetch dulu. */
   payload: any | (() => Promise<any>);
   apiFn: (payload: any) => Promise<{ jobId: string }>;
-  /**
-   * Dipanggil saat tombol Export di toolbar viewer ditekan. Modul pemanggil
-   * yang tahu endpoint & filter mana yang harus diekspor.
-   */
   onExport?: ReportExportHandler;
 }
 
-/** Opsi export Excel — sama seperti report, hanya tanpa viewer/onExport. */
 export type GenerateExportOptions = Omit<GenerateReportOptions, 'onExport'>;
 
 const KIND_MIME: Record<ReportToastKind, string> = {
@@ -75,10 +59,6 @@ const KIND_LABEL: Record<ReportToastKind, string> = {
   excel: 'Excel'
 };
 
-/**
- * Mengelola antrean job cetak PDF dan export Excel: kirim request, dengarkan
- * progres lewat socket, unduh hasilnya, dan sediakan state untuk toast.
- */
 export function useReportPdf() {
   const [toasts, setToasts] = useState<ReportToast[]>([]);
   const [viewer, setViewer] = useState<ReportViewer | null>(null);
@@ -142,12 +122,6 @@ export function useReportPdf() {
     [updateToast]
   );
 
-  /**
-   * Membuang toast dari daftar. Untuk job excel blobUrl langsung di-revoke
-   * (tidak ada pemilik lain), sedangkan untuk pdf TIDAK — dismiss juga
-   * dipanggil tepat setelah "Lihat Laporan" dan url-nya sudah dipegang state
-   * viewer. Revoke pdf terjadi di closeViewer.
-   */
   const dismissToast = useCallback(
     (jobId: string) => {
       disconnectJob(jobId);
@@ -162,7 +136,6 @@ export function useReportPdf() {
     [disconnectJob]
   );
 
-  /** Tampilkan PDF di modal viewer (bukan tab/halaman baru). */
   const openViewer = useCallback(
     (url: string, title: string, onExport?: ReportExportHandler) => {
       setViewer({ url, title, onExport });
@@ -289,7 +262,6 @@ export function useReportPdf() {
     [runJob]
   );
 
-  /** Export Excel background — toast-nya berakhir dengan tombol Download. */
   const generateExport = useCallback(
     (opts: GenerateExportOptions) => runJob(opts, 'excel'),
     [runJob]

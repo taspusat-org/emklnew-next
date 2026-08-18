@@ -1,29 +1,10 @@
 import { RefObject, useEffect } from 'react';
 
 type FormFocusNavigationOptions = {
-  /**
-   * Enable/disable this behavior (useful when a popover/modal is open).
-   * Defaults to true.
-   */
   enabled?: boolean;
-  /**
-   * Elements considered focusable inside the form.
-   * Defaults to common form controls + custom tabindex.
-   */
   includeSelector?: string;
-  /**
-   * Elements to exclude from navigation.
-   * Defaults to '#image-dropzone, #file-input'.
-   */
   excludeSelector?: string;
-  /**
-   * When true (default), buttons are skipped so Tab/Arrow keys move only between inputs.
-   */
   skipButtons?: boolean;
-  /**
-   * When true (default), navigation stops at the first/last element.
-   * When false, it wraps around.
-   */
   stopAtEnds?: boolean;
 };
 

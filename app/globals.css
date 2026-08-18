@@ -464,6 +464,9 @@ table {
 .rincian-block-cell .rdg > .rdg-row:not(:last-child) > .rdg-cell {
   border-bottom: 1px solid hsla(var(--border));
 }
+.rincian-block-cell .rdg > .rdg-row:not(:has(~ .rdg-row)) > .rdg-cell {
+  border-bottom: none;
+}
 .s8wc6fl7-0-0-beta-47[tabindex='0'] {
   color: black;
 }

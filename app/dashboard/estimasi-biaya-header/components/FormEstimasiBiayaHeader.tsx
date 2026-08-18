@@ -18,6 +18,7 @@ import DataGrid, { Column, DataGridHandle } from 'react-data-grid';
 import InputDatePicker from '@/components/custom-ui/InputDatePicker';
 import { setSubmitClicked } from '@/lib/store/lookupSlice/lookupSlice';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
+import { useShiftHorizontalScroll } from '@/hooks/use-shift-horizontal-scroll';
 import {
   EstimasiBiayaDetailBiaya,
   EstimasiBiayaDetailInvoice
@@ -52,6 +53,10 @@ const FormEstimasiBiayaHeader = ({
   const todayDate = new Date();
   const { theme, resolvedTheme } = useTheme();
   const isDark = theme === 'dark' || resolvedTheme === 'dark';
+  // Shift + scroll = geser horizontal. Grid ini lebih lebar dari modal dan
+  // react-remove-scroll bawaan Radix Dialog membatalkan wheel-nya.
+  useShiftHorizontalScroll();
+
   const [dataGridKey, setDataGridKey] = useState(0);
   const [editingRowId, setEditingRowId] = useState(0); // Menyimpan ID baris yang sedang diedit
   const [editableValues, setEditableValues] = useState<Map<number, string>>(
@@ -466,11 +471,7 @@ const FormEstimasiBiayaHeader = ({
                     {...orderan}
                     label={`BIAYAEMKL_${props.rowIdx}_LOOKUP`} // Ensure you use row.id or rowIdx for unique labeling
                     lookupValue={(id) => {
-                      handleInputChange(
-                        props.rowIdx,
-                        'biayaemkl_id',
-                        id
-                      ); // Use props.rowIdx to get the correct index
+                      handleInputChange(props.rowIdx, 'biayaemkl_id', id); // Use props.rowIdx to get the correct index
                     }}
                     onSelectRow={(val) => {
                       handleInputChange(

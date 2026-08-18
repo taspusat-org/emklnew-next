@@ -3,7 +3,12 @@ import { useDispatch } from 'react-redux';
 import { useAlert } from '../store/client/useAlert';
 import { IErrorResponse } from '../types/blheader.type';
 import { useFormError } from '../hooks/formErrorContext';
-import { useMutation, useQuery, useQueryClient } from 'react-query';
+import {
+  QueryClient,
+  useMutation,
+  useQuery,
+  useQueryClient
+} from 'react-query';
 import {
   setProcessed,
   setProcessing
@@ -17,10 +22,17 @@ import {
   updateBlHeaderFn
 } from '../apis/blheader.api';
 
+const invalidateBlHeader = (queryClient: QueryClient) => {
+  void queryClient.invalidateQueries('blheader');
+  void queryClient.invalidateQueries('bldetail');
+  void queryClient.invalidateQueries('bldetailrincian');
+};
+
 export const useGetAllBlHeader = (
   filters: {
     page?: number;
     limit?: number;
+    customOffset?: number;
     search?: string;
     sortBy?: string;
     sortDirection?: string;
@@ -64,7 +76,9 @@ export const useGetAllBlHeader = (
       }
     },
     {
-      enabled: !signal?.aborted
+      enabled: !signal?.aborted && (filters.page ?? 1) >= 1,
+      staleTime: 0,
+      cacheTime: 0
     }
   );
 };
@@ -94,11 +108,18 @@ export const useGetBlDetail = (
   } = {},
   signal?: AbortSignal
 ) => {
+  // Key 'bldetail', BUKAN 'blheader'. Dulu detail memakai prefix yang sama
+  // dengan useGetAllBlHeader dan useGetBlDetailRincian, sehingga cache
+  // ketiganya saling menimpa/membatalkan walau isinya tidak terkait.
   return useQuery(
-    ['blheader', id, filters],
+    ['bldetail', id, filters],
     async () => await getBlDetailFn(id!, filters),
     {
-      enabled: !!id || !signal?.aborted
+      // HARUS `&&`. Dengan `||`, `!signal?.aborted` bernilai true saat signal
+      // undefined sehingga query tetap jalan walau id kosong — request jadi
+      // `/bldetail/0`. Guard page >= 1 dipakai saat scroll ke atas menekan
+      // currentPage ke 0 sesaat untuk memaksa refetch.
+      enabled: !!id && !signal?.aborted && (filters.page ?? 1) >= 1
     }
   );
 };
@@ -120,11 +141,14 @@ export const useGetBlDetailRincian = (
   } = {},
   signal?: AbortSignal
 ) => {
+  // Key & guard sama alasannya dengan useGetBlDetail: prefix sendiri supaya
+  // tidak bertabrakan, dan `&&` supaya tidak pernah request `/bldetailrincian/0`
+  // saat belum ada detail terpilih.
   return useQuery(
-    ['blheader', id, filters],
+    ['bldetailrincian', id, filters],
     async () => await getBlDetailRincianFn(id!, filters),
     {
-      enabled: !!id || !signal?.aborted
+      enabled: !!id && !signal?.aborted
     }
   );
 };
@@ -142,7 +166,7 @@ export const useCreateBlHeader = () => {
     },
     onSuccess: () => {
       // on success, invalidate + clear loading
-      void queryClient.invalidateQueries(['blheader']);
+      invalidateBlHeader(queryClient);
       dispatch(setProcessed());
     },
     onError: (error: AxiosError) => {
@@ -184,7 +208,7 @@ export const useUpdateBlHeader = () => {
       dispatch(setProcessing());
     },
     onSuccess: () => {
-      void queryClient.invalidateQueries('blheader');
+      invalidateBlHeader(queryClient);
       dispatch(setProcessed());
     },
     onError: (error: AxiosError) => {
@@ -221,7 +245,7 @@ export const useDeleteBlHeader = () => {
 
   return useMutation(deleteBlHeaderFn, {
     onSuccess: () => {
-      void queryClient.invalidateQueries('blheader');
+      invalidateBlHeader(queryClient);
     },
     onError: (error: AxiosError) => {
       const errorResponse = error.response?.data as IErrorResponse;

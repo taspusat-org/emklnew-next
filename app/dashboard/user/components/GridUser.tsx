@@ -353,7 +353,6 @@ const GridUser = () => {
   };
 
   const columns = useMemo((): Column<IUser>[] => {
-    /** Header kolom teks biasa: judul + sort indicator + FilterInput. */
     const textColumn = (
       key: keyof Filter['filters'],
       title: string,

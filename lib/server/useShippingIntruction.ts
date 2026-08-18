@@ -22,12 +22,6 @@ import {
 } from '../apis/shippinginstruction.api';
 import { IErrorResponse } from '../types/shippingIntruction.type';
 
-/**
- * Header, detail, dan rincian punya prefix key masing-masing supaya cache-nya
- * tidak saling menimpa. Konsekuensinya simpan/hapus harus membatalkan ketiganya
- * secara eksplisit — satu `invalidateQueries('shippinginstruction')` tidak lagi
- * menjangkau detail & rincian.
- */
 const invalidateShippingInstruction = (queryClient: QueryClient) => {
   void queryClient.invalidateQueries('shippinginstruction');
   void queryClient.invalidateQueries('shippinginstructiondetail');
@@ -81,7 +75,9 @@ export const useGetAllShippingInstructionHeader = (
       }
     },
     {
-      enabled: !signal?.aborted
+      enabled: !signal?.aborted && (filters.page ?? 1) >= 1,
+      staleTime: 0,
+      cacheTime: 0
     }
   );
 };

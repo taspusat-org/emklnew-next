@@ -10,22 +10,6 @@ import FilterGrid from './components/FilterGrid';
 import GridPanjarHeader from './components/GridPanjarHeader';
 import GridPanjarMuatanDetail from './components/GridPanjarMuatanDetail';
 
-/**
- * Hanya ADA SATU grid detail.
- *
- * Sebelumnya halaman ini memilih komponen detail lewat `switch (selectedJenisOrderan)`
- * memakai konstanta JENISORDER* (1,2,3,4). Dua hal membuatnya tidak pernah benar:
- *
- *  1. jenisorder_id di database sudah uuid v7 bertipe text, jadi tidak akan
- *     pernah sama dengan angka 1..4 — switch-nya SELALU jatuh ke `default`.
- *  2. Database cuma punya satu tabel detail (`panjarmuatandetail`), dan
- *     PanjarheaderService memang menulis detail SEMUA jenis orderan ke sana.
- *     Endpoint `/panjarbongkarandetail` yang dipanggil GridPanjaranBongkaranDetail
- *     tidak pernah ada.
- *
- * Jadi detail panjar apa pun jenis orderannya dibaca dari grid yang sama.
- * GridPanjaranBongkaranDetail.tsx dibiarkan di repo tapi sudah tidak dirender.
- */
 const Page = () => {
   const dispatch = useDispatch();
 

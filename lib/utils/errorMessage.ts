@@ -101,11 +101,6 @@ const RULES: Array<{ test: RegExp; build: (m: RegExpMatchArray) => string }> = [
 export const isTechnicalErrorMessage = (message: string): boolean =>
   TECHNICAL_SIGNALS.some((pattern) => pattern.test(message));
 
-/**
- * Terjemahkan pesan error teknis (SQL, constraint, stack trace) jadi kalimat
- * yang bisa dimengerti user. Pesan yang memang sudah ditulis untuk user
- * dikembalikan apa adanya.
- */
 export const getFriendlyErrorMessage = (message: unknown): string => {
   if (typeof message !== 'string' || message.trim() === '')
     return GENERIC_ERROR_MESSAGE;
@@ -120,12 +115,6 @@ export const getFriendlyErrorMessage = (message: unknown): string => {
   return GENERIC_ERROR_MESSAGE;
 };
 
-/**
- * Ganti `response.data.message` di tempat saat backend membocorkan pesan
- * teknis, supaya semua hook di `lib/server` yang menampilkan
- * `errorResponse.message` otomatis ikut bersih. Pesan aslinya disimpan di
- * `rawMessage` untuk debugging.
- */
 export const sanitizeAxiosError = (error: unknown): void => {
   const data = (error as AxiosError)?.response?.data as
     | Record<string, unknown>

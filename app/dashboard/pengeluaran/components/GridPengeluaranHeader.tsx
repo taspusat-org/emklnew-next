@@ -2477,14 +2477,6 @@ const GridPengeluaranHeader = () => {
     });
   };
 
-  /**
-   * Export Excel dijalankan di BACKEND (background job + socket). Frontend
-   * hanya mengirim filter yang sedang aktif di grid; progresnya muncul di
-   * toast, dan setelah selesai toast menampilkan tombol Download.
-   *
-   * Beda dengan Print yang mencetak SATU bukti terpilih, export ini mengambil
-   * seluruh baris yang lolos filter.
-   */
   const handleExportExcel = async () => {
     const { page, limit, ...filtersWithoutLimit } = filters;
 

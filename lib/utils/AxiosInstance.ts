@@ -77,9 +77,6 @@ class SessionTokenCache {
     return SessionTokenCache.instance;
   }
 
-  /**
-   * ✅ Helper: Check if current route is public
-   */
   private isPublicRoute(): boolean {
     if (typeof window === 'undefined') return false;
 
@@ -245,9 +242,6 @@ class SessionTokenCache {
     }
   }
 
-  /**
-   * ✅ Centralized logout handler
-   */
   private async handleLogout(): Promise<void> {
     this.clearCache();
 

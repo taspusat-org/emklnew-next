@@ -55,6 +55,7 @@ import {
   setSelectedPengeluaranEmklNama
 } from '@/lib/store/filterSlice/filterSlice';
 import { useDispatch } from 'react-redux';
+import { useShiftHorizontalScroll } from '@/hooks/use-shift-horizontal-scroll';
 const FormPengeluaranEmkl = ({
   popOver,
   setPopOver,
@@ -70,6 +71,9 @@ const FormPengeluaranEmkl = ({
     (state: RootState) => state.filter
   );
   const dispatch = useDispatch();
+  // Shift + scroll = geser horizontal. Grid ini lebih lebar dari modal dan
+  // react-remove-scroll bawaan Radix Dialog membatalkan wheel-nya.
+  useShiftHorizontalScroll();
 
   const formRef = useRef<HTMLFormElement | null>(null); // Ref untuk form
   const openName = useSelector((state: RootState) => state.lookup.openName);

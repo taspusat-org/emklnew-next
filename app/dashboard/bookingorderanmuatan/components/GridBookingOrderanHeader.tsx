@@ -29,6 +29,7 @@ import { FaPrint, FaSort, FaSortDown, FaSortUp, FaTimes } from 'react-icons/fa';
 import React, {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState
@@ -69,6 +70,7 @@ import {
 } from '@/lib/types/bookingOrderanHeader.type';
 import {
   checkValidationBookingOrderanHeaderFn,
+  getAllBookingOrderanMuatanFn,
   getBookingOrderanMuatanByIdFn
 } from '@/lib/apis/bookingOrderanHeader.api';
 import { getParameterFn } from '@/lib/apis/parameter.api';
@@ -94,6 +96,7 @@ import {
 import DraggableColumn from '@/components/custom-ui/DraggableColumns';
 import { highlightText } from '@/components/custom-ui/HighlightText';
 import { useTheme } from 'next-themes';
+import { useGridRowNavigation } from '@/hooks/use-grid-row-navigation';
 import {
   Select,
   SelectContent,
@@ -159,7 +162,6 @@ const GridBookingMuatan = () => {
   const [isFetchingManually, setIsFetchingManually] = useState(false);
   const [checkedRows, setCheckedRows] = useState<Set<string>>(new Set());
   const [columnsOrder, setColumnsOrder] = useState<readonly number[]>([]);
-  const [fetchedPages, setFetchedPages] = useState<Set<number>>(new Set([1]));
   const [contextMenu, setContextMenu] = useState<{
     x: number;
     y: number;
@@ -169,7 +171,9 @@ const GridBookingMuatan = () => {
   );
   const [filters, setFilters] = useState<Filter>({
     page: 1,
-    limit: 30,
+    // 50 supaya bulk awal = 1 request × 5 halaman = 250 baris, sama seperti
+    // boilerplate GridGroupbiayaextra.
+    limit: 50,
     filters: {
       ...filterBookingOrderanMuatan,
       tglDari: selectedDate,
@@ -182,14 +186,117 @@ const GridBookingMuatan = () => {
   });
   const [prevFilters, setPrevFilters] = useState<Filter>(filters);
 
+  // ── Lazy loading berjendela (pola GridGroupbiayaextra) ────────────────────
+  // Grid hanya menyimpan WINDOW_SIZE halaman di memori (`visiblePages`), isinya
+  // di `pageDataCache`. Halaman di luar window dibuang; halaman berikutnya
+  // di-prefetch diam-diam ke `streamBufferRef` supaya saat user scroll sampai
+  // ambang batas, window bergeser tanpa spinner.
+  const WINDOW_SIZE = 5;
+  const STREAM_BUFFER_SIZE = 5;
+  const ROW_HEIGHT = 30;
+
+  const [shouldBulkFetch, setShouldBulkFetch] = useState(true);
+  const [bulkStartPage, setBulkStartPage] = useState(1);
+  const [isFetching, setIsFetching] = useState(false);
+  const [isTransitioning, setIsTransitioning] = useState(false);
+  const [visiblePages, setVisiblePages] = useState<number[]>([1, 2, 3, 4, 5]);
+  const [pageDataCache, setPageDataCache] = useState<
+    Map<number, BookingOrderanMuatan[]>
+  >(new Map());
+
+  const streamBufferRef = useRef<Map<number, BookingOrderanMuatan[]>>(
+    new Map()
+  );
+  const prefetchingPagesRef = useRef<Set<number>>(new Set());
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const scrollPositionRef = useRef<number>(0);
+  const lastScrollTopRef = useRef<number>(0);
+  const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isScrollingRef = useRef(false);
+  const pendingScrollAdjustment = useRef<number>(0);
+  const hasAdjustedScrollRef = useRef<boolean>(false);
+  const isPageTransitionRef = useRef(false);
+  // Penanda Ctrl+Home / Ctrl+End: dibaca Row Combiner setelah data window
+  // baru tiba, supaya baris pertama/terakhir yang difokuskan.
+  const jumpToLastRef = useRef(false);
+  const jumpToFirstRef = useRef(false);
+  const pendingSelectIdxRef = useRef<number>(1);
+  const selectedRowRef = useRef<number>(0);
+  const lastDispatchedId = useRef<string | null>(null);
+  const pendingInitialFocusRef = useRef(true);
+  const headerClearedRef = useRef(false);
+  // Jangkar pilihan user (BY-ID). Saat window bergeser karena scroll, index
+  // tiap baris ikut bergeser — tanpa jangkar, baris yang ter-highlight berubah
+  // diam-diam. Hanya berpindah kalau user memang mengubah pilihan.
+  const selectedRowIdRef = useRef<string | null>(null);
+  const selectedRowDataRef = useRef<BookingOrderanMuatan | null>(null);
+  // Diisi setelah simpan/hapus: id baris yang harus difokuskan begitu data
+  // baru tiba.
+  const pendingFocusIdRef = useRef<string | null>(null);
+
+  const anchorSelection = (row?: BookingOrderanMuatan | null) => {
+    if (!row) return;
+    selectedRowIdRef.current = String(row.id);
+    selectedRowDataRef.current = row;
+  };
+
+  const clearSelectionAnchor = () => {
+    selectedRowIdRef.current = null;
+    selectedRowDataRef.current = null;
+  };
+
+  const getSelectedRowData = (): BookingOrderanMuatan | undefined =>
+    selectedRowDataRef.current ?? rows[selectedRow];
+
+  useEffect(() => {
+    selectedRowRef.current = selectedRow;
+  }, [selectedRow]);
+
+  const shiftSelectionForWindow = (deltaRows: number) => {
+    selectedRowRef.current = Math.max(0, selectedRowRef.current + deltaRows);
+  };
+
+  const currentMinPage =
+    visiblePages.length > 0 ? Math.min(...visiblePages) : 1;
+  const startRow = (currentMinPage - 1) * filters.limit + 1;
+
+  const effectiveLimit = shouldBulkFetch
+    ? filters.limit * WINDOW_SIZE
+    : filters.limit;
+
   const {
     data: allDataBookingMuatan,
     isLoading: isLoadingBookingMuatan,
     refetch
   } = useGetAllBookingOrderanHeader(
-    { ...filters, page: currentPage },
+    {
+      ...filters,
+      page: shouldBulkFetch ? bulkStartPage : currentPage,
+      limit: effectiveLimit,
+      // Awal window ditentukan offset absolut supaya window bisa mulai di
+      // halaman mana pun (mis. setelah simpan, baris baru di halaman terakhir).
+      ...(shouldBulkFetch
+        ? { customOffset: (bulkStartPage - 1) * filters.limit }
+        : {})
+    },
     abortControllerRef.current?.signal
   );
+
+  // startPage = HALAMAN LOGIS awal window (boleh berapa saja).
+  const resetBufferingCache = (startPage = 1) => {
+    const logicalStartPage = Math.max(1, startPage);
+    setShouldBulkFetch(true);
+    setBulkStartPage(logicalStartPage);
+    setPageDataCache(new Map());
+    setVisiblePages(
+      Array.from({ length: WINDOW_SIZE }, (_, i) => logicalStartPage + i)
+    );
+    setIsFetching(false);
+    setIsTransitioning(false);
+    streamBufferRef.current = new Map();
+    prefetchingPagesRef.current = new Set();
+    clearSelectionAnchor();
+  };
 
   const { mutateAsync: createBookingMuatan, isLoading: isLoadingCreate } =
     useCreateBookingOrderanHeader();
@@ -415,8 +522,8 @@ const GridBookingMuatan = () => {
     }, 250);
     setSelectedRow(0);
     setCurrentPage(1);
-    setFetchedPages(new Set([1]));
     setRows([]);
+    resetBufferingCache();
   };
 
   const handleRowSelect = (rowId: number) => {
@@ -452,6 +559,82 @@ const GridBookingMuatan = () => {
     }, 1000);
   };
 
+  // PageUp/PageDown saat lazy loading — pola GridGroupbiayaextra.
+  // scrollToCell-nya yang membuat window ikut bergeser & memuat halaman
+  // berikutnya, sama seperti saat user menggulung dengan mouse.
+  // Ctrl+Home — bangun ulang window dari halaman 1.
+  const handleGoToFirstPage = useCallback(() => {
+    jumpToFirstRef.current = true;
+    setRows([]);
+    setCurrentPage(1);
+    resetBufferingCache(1);
+  }, []);
+
+  // Ctrl+End — WINDOW_SIZE halaman terakhir. Tidak bisa lewat bulk-fetch
+  // biasa karena halaman terakhir jarang sejajar dengan batas blok bulk,
+  // jadi tiap halaman diambil sendiri lalu cache & window dirakit manual.
+  const handleGoToLastPage = useCallback(async () => {
+    if (totalPages < 1) return;
+
+    jumpToLastRef.current = true;
+    setRows([]);
+
+    if (totalPages <= WINDOW_SIZE) {
+      resetBufferingCache(1);
+      return;
+    }
+
+    setIsFetching(true);
+    setShouldBulkFetch(false);
+    setBulkStartPage(1);
+    setPageDataCache(new Map());
+    streamBufferRef.current = new Map();
+    prefetchingPagesRef.current = new Set();
+
+    const startPage = totalPages - WINDOW_SIZE + 1;
+    const pagesToFetch = Array.from(
+      { length: WINDOW_SIZE },
+      (_, i) => startPage + i
+    );
+
+    try {
+      const results = await Promise.all(
+        pagesToFetch.map((p) =>
+          getAllBookingOrderanMuatanFn({
+            ...filters,
+            page: p,
+            limit: filters.limit
+          })
+        )
+      );
+
+      const newCache = new Map<number, any[]>();
+      results.forEach((res: any, i: number) => {
+        if (res?.data && res.data.length > 0) {
+          newCache.set(pagesToFetch[i], res.data);
+        }
+      });
+
+      setPageDataCache(newCache);
+      setVisiblePages(pagesToFetch);
+      setCurrentPage(totalPages);
+    } catch (err) {
+      console.error('Failed to load last pages:', err);
+    } finally {
+      setIsFetching(false);
+    }
+  }, [totalPages, filters]);
+
+  const { handleKeyDownCapture } = useGridRowNavigation({
+    rowCount: rows.length,
+    gridRef,
+    selectedRowRef,
+    setSelectedRow,
+    searchInputRef: inputRef,
+    onGoToFirstPage: handleGoToFirstPage,
+    onGoToLastPage: handleGoToLastPage
+  });
+
   const columns = useMemo((): Column<BookingOrderanMuatan>[] => {
     return [
       {
@@ -484,10 +667,17 @@ const GridBookingMuatan = () => {
           </div>
         ),
         renderCell: (props: any) => {
-          const rowIndex = rows.findIndex((row) => row.id === props.row.id);
+          // Nomor ABSOLUT lintas window, bukan index di dalam `rows`: window
+          // hanya memuat 5 halaman, jadi index lokal akan mengulang dari 1
+          // setiap kali window bergeser.
+          const localIndex = rows.findIndex((row) => row.id === props.row.id);
+          const absoluteNumber =
+            localIndex === -1
+              ? '—'
+              : (currentMinPage - 1) * filters.limit + localIndex + 1;
           return (
             <div className="flex h-full w-full cursor-pointer items-center justify-center text-sm">
-              {rowIndex + 1}
+              {absoluteNumber}
             </div>
           );
         }
@@ -3763,7 +3953,8 @@ const GridBookingMuatan = () => {
   const onSuccess = async (
     indexOnPage: any,
     pageNumber: any,
-    keepOpenModal: any = false
+    keepOpenModal: any = false,
+    savedId?: any
   ) => {
     dispatch(setClearLookup(true));
     clearError();
@@ -3777,25 +3968,39 @@ const GridBookingMuatan = () => {
         forms.reset();
         setPopOver(false);
 
-        // setRows([]);
         if (mode !== 'delete') {
-          const response = await api2.get(
-            `/redis/get/bookingorderanheader-allItems`
+          // Bangun ulang window dari halaman tempat baris hasil simpan berada.
+          //
+          // `indexOnPage` sebenarnya dataIndex dari backend: index ABSOLUT di
+          // seluruh daftar terfilter, BUKAN index di dalam halaman.
+          const absoluteIndex = Math.max(0, Number(indexOnPage) || 0);
+          const pageOfRow = Math.max(1, Number(pageNumber) || 1);
+
+          // Window dibuat BERAKHIR di halaman baris tersebut supaya baris yang
+          // jatuh di halaman terakhir tidak menghasilkan window berisi satu
+          // baris (dan tanpa scrollbar, tidak bisa scroll balik ke atas).
+          const logicalStartPage = Math.max(1, pageOfRow - WINDOW_SIZE + 1);
+          const rowIdxInWindow = Math.max(
+            0,
+            absoluteIndex - (logicalStartPage - 1) * filters.limit
           );
-          // Set the rows only if the data has changed
-          if (JSON.stringify(response.data) !== JSON.stringify(rows)) {
-            setRows(response.data);
-            setIsDataUpdated(true);
-            setCurrentPage(pageNumber);
-            setFetchedPages(new Set([pageNumber]));
-            setSelectedRow(indexOnPage);
-            setTimeout(() => {
-              gridRef?.current?.selectCell({
-                rowIdx: indexOnPage,
-                idx: 1
-              });
-            }, 200);
-          }
+
+          // Fokus dikunci BY-ID: sampai data baru tiba, `rows` masih window
+          // lama, jadi index yang sama menunjuk baris milik booking lain.
+          pendingFocusIdRef.current = savedId != null ? String(savedId) : null;
+
+          setCurrentPage(pageOfRow);
+          resetBufferingCache(logicalStartPage);
+          setSelectedRow(rowIdxInWindow);
+          selectedRowRef.current = rowIdxInWindow;
+
+          setTimeout(() => {
+            gridRef?.current?.scrollToCell?.({
+              rowIdx: rowIdxInWindow,
+              idx: 1
+            });
+            gridRef?.current?.selectCell({ rowIdx: rowIdxInWindow, idx: 1 });
+          }, 200);
         }
 
         setIsDataUpdated(false);
@@ -3807,6 +4012,30 @@ const GridBookingMuatan = () => {
       // dispatch(setClearLookup(false));
       setIsDataUpdated(false);
     }
+  };
+
+  // Tanpa ini, gagal validasi zod = tombol SIMPAN diam saja. Error pada field
+  // tersembunyi atau pada baris detail yang sedang tidak terlihat tidak pernah
+  // sampai ke user. Dipakai bersama untuk form booking biasa & form JOB PARTY.
+  const onInvalid = (errors: any) => {
+    const kumpulkan = (obj: any, jalur: string[] = []): string[] => {
+      if (!obj || typeof obj !== 'object') return [];
+      if (typeof obj.message === 'string') {
+        return [`${jalur.join('.')}: ${obj.message}`];
+      }
+      return Object.entries(obj).flatMap(([kunci, nilai]) =>
+        kumpulkan(nilai, [...jalur, kunci])
+      );
+    };
+
+    const daftar = kumpulkan(errors);
+    console.warn('[BOOKING ORDERAN] validasi gagal:', daftar);
+
+    alert({
+      title: daftar.length > 0 ? daftar.join('\n') : 'DATA BELUM LENGKAP',
+      variant: 'danger',
+      submitText: 'OK'
+    });
   };
 
   const onSubmit = async (
@@ -3829,19 +4058,54 @@ const GridBookingMuatan = () => {
             {
               onSuccess: () => {
                 setPopOver(false);
+
+                // Menghapus dari `rows` saja TIDAK cukup: Row Combiner
+                // menyusun ulang `rows` dari pageDataCache setiap kali
+                // cache/window berubah, jadi baris yang dihapus muncul lagi.
+                // Pola ini dari GridGroupbiayaextra.
+
+                // 1. Baris yang sedang tampil
                 setRows((prevRows) =>
                   prevRows.filter((row) => row.id !== selectedRowId)
                 );
-                if (selectedRow === 0) {
-                  setSelectedRow(selectedRow);
-                  gridRef?.current?.selectCell({ rowIdx: selectedRow, idx: 1 });
-                } else {
-                  setSelectedRow(selectedRow - 1);
-                  gridRef?.current?.selectCell({
-                    rowIdx: selectedRow - 1,
-                    idx: 1
+
+                // 2. Cache seluruh halaman di window
+                setPageDataCache((prevCache) => {
+                  const updated = new Map(prevCache);
+                  updated.forEach((pageRows, pageNum) => {
+                    const filtered = pageRows.filter(
+                      (row) => row.id !== selectedRowId
+                    );
+                    if (filtered.length !== pageRows.length) {
+                      updated.set(pageNum, filtered);
+                    }
                   });
+                  return updated;
+                });
+
+                // 3. Halaman hasil prefetch
+                const newBuffer = new Map(streamBufferRef.current);
+                newBuffer.forEach((pageRows, pageNum) => {
+                  const filtered = pageRows.filter(
+                    (row) => row.id !== selectedRowId
+                  );
+                  if (filtered.length !== pageRows.length) {
+                    newBuffer.set(pageNum, filtered);
+                  }
+                });
+                streamBufferRef.current = newBuffer;
+
+                // 4. Fokus baris berikutnya BY-ID (selectCell by-index akan
+                // ditimpa Row Combiner yang jalan lagi setelah cache berubah).
+                const nextFocusRow =
+                  rows[selectedRow + 1] ?? rows[selectedRow - 1];
+                if (nextFocusRow) {
+                  pendingFocusIdRef.current = String(nextFocusRow.id);
+                } else {
+                  setSelectedRow(0);
+                  selectedRowRef.current = 0;
                 }
+                clearSelectionAnchor();
               }
             }
           );
@@ -3984,44 +4248,182 @@ const GridBookingMuatan = () => {
     return row.id;
   }
 
-  function isAtTop({ currentTarget }: React.UIEvent<HTMLDivElement>): boolean {
-    return currentTarget.scrollTop <= 10;
-  }
+  const prefetchPages = useCallback(
+    async (
+      pagesToFetch: number[],
+      existingCache?: Map<number, BookingOrderanMuatan[]>,
+      knownTotalPages?: number
+    ) => {
+      const cacheToCheck = existingCache ?? pageDataCache;
+      const effectiveTotalPages = knownTotalPages ?? totalPages;
 
-  function isAtBottom(event: React.UIEvent<HTMLDivElement>): boolean {
-    const { currentTarget } = event;
-    if (!currentTarget) return false;
+      const validPages = pagesToFetch.filter(
+        (p) =>
+          p >= 1 &&
+          p <= effectiveTotalPages &&
+          !streamBufferRef.current.has(p) &&
+          !cacheToCheck.has(p) &&
+          !prefetchingPagesRef.current.has(p)
+      );
 
-    return (
-      currentTarget.scrollTop + currentTarget.clientHeight >=
-      currentTarget.scrollHeight - 2
-    );
-  }
+      if (validPages.length === 0) return;
+
+      validPages.forEach((p) => prefetchingPagesRef.current.add(p));
+
+      await Promise.allSettled(
+        validPages.map(async (pageNum) => {
+          try {
+            const data = await getAllBookingOrderanMuatanFn({
+              ...filters,
+              page: pageNum,
+              limit: filters.limit
+            });
+
+            if (data?.data && data.data.length > 0) {
+              streamBufferRef.current = new Map(streamBufferRef.current);
+              streamBufferRef.current.set(pageNum, data.data);
+            }
+          } catch (err) {
+            console.warn(`[StreamBuffer] Prefetch page ${pageNum} gagal:`, err);
+          } finally {
+            prefetchingPagesRef.current.delete(pageNum);
+          }
+        })
+      );
+    },
+    [filters, totalPages, pageDataCache]
+  );
 
   async function handleScroll(event: React.UIEvent<HTMLDivElement>) {
-    if (isLoadingBookingMuatan || !hasMore || rows.length === 0) return;
+    if (
+      isLoadingBookingMuatan ||
+      rows.length === 0 ||
+      isTransitioning ||
+      isFetching
+    )
+      return;
 
-    const findUnfetchedPage = (pageOffset: number) => {
-      let page = currentPage + pageOffset;
-      while (page > 0 && fetchedPages.has(page)) {
-        page += pageOffset;
-      }
-      return page > 0 ? page : null;
-    };
+    const { currentTarget } = event;
+    const scrollTop = currentTarget.scrollTop;
+    const clientHeight = currentTarget.clientHeight;
 
-    if (isAtBottom(event)) {
-      const nextPage = findUnfetchedPage(1);
+    const hasScrolled = Math.abs(scrollTop - lastScrollTopRef.current) > 5;
+    if (!hasScrolled) return;
 
-      if (nextPage && nextPage <= totalPages && !fetchedPages.has(nextPage)) {
-        setCurrentPage(nextPage);
-        setIsAllSelected(false);
+    lastScrollTopRef.current = scrollTop;
+    isScrollingRef.current = true;
+
+    if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
+    scrollTimeoutRef.current = setTimeout(() => {
+      isScrollingRef.current = false;
+    }, 150);
+
+    scrollPositionRef.current = scrollTop;
+    scrollContainerRef.current = currentTarget;
+
+    const firstVisibleRow = Math.floor(scrollTop / ROW_HEIGHT);
+    const lastVisibleRow = Math.floor((scrollTop + clientHeight) / ROW_HEIGHT);
+    const THRESHOLD_ROWS = 50;
+
+    // SCROLL KE BAWAH
+    if (rows.length - lastVisibleRow <= THRESHOLD_ROWS) {
+      const nextPage = Math.max(...visiblePages) + 1;
+
+      if (nextPage <= totalPages && !isFetching && isScrollingRef.current) {
+        if (streamBufferRef.current.has(nextPage)) {
+          setIsFetching(true);
+          setIsTransitioning(true);
+          hasAdjustedScrollRef.current = false;
+
+          const bufferedData = streamBufferRef.current.get(nextPage)!;
+          setPageDataCache((prev) => new Map(prev).set(nextPage, bufferedData));
+
+          streamBufferRef.current = new Map(streamBufferRef.current);
+          streamBufferRef.current.delete(nextPage);
+
+          isPageTransitionRef.current = true;
+          pendingScrollAdjustment.current = -(filters.limit * ROW_HEIGHT);
+          shiftSelectionForWindow(-filters.limit);
+
+          setVisiblePages((prevVisible) => {
+            const removedPage = prevVisible[0];
+            setPageDataCache((prev) => {
+              const updated = new Map(prev);
+              updated.delete(removedPage);
+              return updated;
+            });
+            return [...prevVisible.slice(1), nextPage];
+          });
+
+          setTimeout(() => {
+            setIsTransitioning(false);
+            setIsFetching(false);
+          }, 50);
+
+          prefetchPages(
+            Array.from(
+              { length: STREAM_BUFFER_SIZE },
+              (_, i) => nextPage + 1 + i
+            )
+          );
+        } else if (!pageDataCache.has(nextPage)) {
+          setIsFetching(true);
+          setIsTransitioning(true);
+          hasAdjustedScrollRef.current = false;
+          setCurrentPage(nextPage);
+        }
       }
     }
 
-    if (isAtTop(event)) {
-      const prevPage = findUnfetchedPage(-1);
-      if (prevPage && !fetchedPages.has(prevPage)) {
-        setCurrentPage(prevPage);
+    // SCROLL KE ATAS
+    if (firstVisibleRow <= THRESHOLD_ROWS) {
+      const prevPage = Math.min(...visiblePages) - 1;
+
+      if (prevPage >= 1 && !isFetching && isScrollingRef.current) {
+        if (streamBufferRef.current.has(prevPage)) {
+          setIsFetching(true);
+          setIsTransitioning(true);
+          hasAdjustedScrollRef.current = false;
+
+          const bufferedData = streamBufferRef.current.get(prevPage)!;
+          setPageDataCache((prev) => new Map(prev).set(prevPage, bufferedData));
+
+          streamBufferRef.current = new Map(streamBufferRef.current);
+          streamBufferRef.current.delete(prevPage);
+
+          isPageTransitionRef.current = true;
+          pendingScrollAdjustment.current = filters.limit * ROW_HEIGHT;
+          shiftSelectionForWindow(filters.limit);
+
+          setVisiblePages((prevVisible) => {
+            const removedPage = prevVisible[prevVisible.length - 1];
+            setPageDataCache((prev) => {
+              const updated = new Map(prev);
+              updated.delete(removedPage);
+              return updated;
+            });
+            return [prevPage, ...prevVisible.slice(0, WINDOW_SIZE - 1)];
+          });
+
+          setTimeout(() => {
+            setIsTransitioning(false);
+            setIsFetching(false);
+          }, 50);
+
+          prefetchPages(
+            Array.from(
+              { length: STREAM_BUFFER_SIZE },
+              (_, i) => prevPage - 1 - i
+            ).filter((p) => p >= 1)
+          );
+        } else if (!pageDataCache.has(prevPage)) {
+          setIsFetching(true);
+          setIsTransitioning(true);
+          hasAdjustedScrollRef.current = false;
+          // Reset dulu supaya setCurrentPage(prevPage) pasti memicu refetch.
+          setCurrentPage(0);
+          setTimeout(() => setCurrentPage(prevPage), 0);
+        }
       }
     }
   }
@@ -4154,36 +4556,259 @@ const GridBookingMuatan = () => {
     }
   }, [selectedDate, selectedDate2, filters, onReload, isFirstLoad]);
 
+  // 1. Bulk Fetch — sekali ambil WINDOW_SIZE halaman, lalu dipecah ke cache.
   useEffect(() => {
-    if (!allDataBookingMuatan || isDataUpdated) return;
+    if (!shouldBulkFetch || !allDataBookingMuatan || isDataUpdated) return;
+
+    const bulkData = allDataBookingMuatan.data || [];
+    if (bulkData.length === 0) {
+      setShouldBulkFetch(false);
+      setIsFirstLoad(false);
+      setIsFetching(false);
+      setRows([]);
+      return;
+    }
+
+    const pageSize = filters.limit;
+    const wasJumpingToLast = jumpToLastRef.current;
+    const newCache = new Map<number, BookingOrderanMuatan[]>();
+    const logicalStartPage = bulkStartPage;
+
+    for (let i = 0; i < WINDOW_SIZE; i++) {
+      const pageData = bulkData.slice(i * pageSize, (i + 1) * pageSize);
+      if (pageData.length > 0) newCache.set(logicalStartPage + i, pageData);
+    }
+
+    setPageDataCache(newCache);
+    setVisiblePages(
+      Array.from({ length: WINDOW_SIZE }, (_, i) => logicalStartPage + i)
+    );
+
+    const totalItems = allDataBookingMuatan.pagination?.totalItems || 0;
+    const totalPgs = Math.ceil(totalItems / filters.limit) || 1;
+
+    setTotalPages(totalPgs);
+    setHasMore(bulkData.length === filters.limit * WINDOW_SIZE);
+    setShouldBulkFetch(false);
+    setIsFirstLoad(false);
+    setIsFetching(false);
+    setPrevFilters(filters);
+
+    const lastLogicalPage = Math.min(
+      logicalStartPage + WINDOW_SIZE - 1,
+      totalPgs
+    );
+    const initialPrefetch = Array.from(
+      { length: STREAM_BUFFER_SIZE },
+      (_, i) => lastLogicalPage + 1 + i
+    ).filter((p) => p <= totalPgs);
+
+    if (initialPrefetch.length > 0) {
+      prefetchPages(initialPrefetch, newCache, totalPgs);
+    }
+
+    if (wasJumpingToLast) {
+      setCurrentPage(lastLogicalPage);
+    }
+  }, [
+    allDataBookingMuatan,
+    shouldBulkFetch,
+    isDataUpdated,
+    filters.limit,
+    bulkStartPage
+  ]);
+
+  // 2. Pagination Fetch — hasil fetch satu halaman (buffer miss) masuk cache
+  //    dan window digeser satu langkah.
+  useEffect(() => {
+    if (shouldBulkFetch || isDataUpdated || isFetchingManually) return;
+    if (!allDataBookingMuatan) return;
 
     const newRows = allDataBookingMuatan.data || [];
 
-    setRows((prevRows) => {
-      if (currentPage === 1 || filters !== prevFilters) {
-        // Reset data jika filter berubah (halaman pertama)
-        setCurrentPage(1); // Reset currentPage ke 1
-        setFetchedPages(new Set([1])); // Reset fetchedPages ke [1]
-        return newRows; // Pakai data baru langsung
-      }
+    setPageDataCache((prevCache) =>
+      new Map(prevCache).set(currentPage, newRows)
+    );
 
-      // Tambah data baru di bawah untuk infinite scroll
-      if (!fetchedPages.has(currentPage)) {
-        return [...prevRows, ...newRows];
-      }
+    isPageTransitionRef.current = true;
+    const maxVisible = Math.max(...visiblePages);
+    const minVisible = Math.min(...visiblePages);
 
-      return prevRows;
-    });
+    if (currentPage > maxVisible && currentPage <= maxVisible + 1) {
+      const removedPage = visiblePages[0];
+      pendingScrollAdjustment.current = -(filters.limit * ROW_HEIGHT);
+      shiftSelectionForWindow(-filters.limit);
 
-    if (allDataBookingMuatan.pagination.totalPages) {
+      setPageDataCache((prev) => {
+        const updated = new Map(prev);
+        updated.delete(removedPage);
+        return updated;
+      });
+      setVisiblePages((prevVisible) => [...prevVisible.slice(1), currentPage]);
+    } else if (currentPage < minVisible && currentPage >= minVisible - 1) {
+      const removedPage = visiblePages[visiblePages.length - 1];
+      pendingScrollAdjustment.current = filters.limit * ROW_HEIGHT;
+      shiftSelectionForWindow(filters.limit);
+
+      setPageDataCache((prev) => {
+        const updated = new Map(prev);
+        updated.delete(removedPage);
+        return updated;
+      });
+      setVisiblePages((prevVisible) => [
+        currentPage,
+        ...prevVisible.slice(0, WINDOW_SIZE - 1)
+      ]);
+    }
+
+    if (allDataBookingMuatan.pagination?.totalPages) {
       setTotalPages(allDataBookingMuatan.pagination.totalPages);
     }
 
     setHasMore(newRows.length === filters.limit);
-    setFetchedPages((prev) => new Set(prev).add(currentPage));
-    setIsFirstLoad(false);
     setPrevFilters(filters);
-  }, [allDataBookingMuatan, currentPage, filters, isDataUpdated]);
+
+    setTimeout(() => {
+      setIsTransitioning(false);
+      setIsFetching(false);
+
+      const isScrollDown = currentPage >= Math.max(...visiblePages);
+      const pagesToPrefetch = isScrollDown
+        ? Array.from(
+            { length: STREAM_BUFFER_SIZE },
+            (_, i) => currentPage + 1 + i
+          ).filter((p) => p <= totalPages)
+        : Array.from(
+            { length: STREAM_BUFFER_SIZE },
+            (_, i) => currentPage - 1 - i
+          ).filter((p) => p >= 1);
+
+      if (pagesToPrefetch.length > 0) {
+        setTimeout(() => prefetchPages(pagesToPrefetch), 200);
+      }
+    }, 100);
+  }, [
+    allDataBookingMuatan,
+    currentPage,
+    filters,
+    isDataUpdated,
+    shouldBulkFetch
+  ]);
+
+  // 3. Row Combiner — gabungkan halaman yang sedang terlihat jadi `rows`.
+  useEffect(() => {
+    const combinedRows: BookingOrderanMuatan[] = [];
+    visiblePages?.forEach((page) => {
+      const pageData = pageDataCache.get(page);
+      if (pageData) combinedRows.push(...pageData);
+    });
+
+    if (combinedRows.length === 0) return;
+
+    setRows(combinedRows);
+
+    // Fokus baris hasil simpan/hapus: cari BY-ID di data yang baru datang.
+    if (pendingFocusIdRef.current != null) {
+      const idFokus = pendingFocusIdRef.current;
+      const idx = combinedRows.findIndex((r) => String(r.id) === idFokus);
+
+      if (idx >= 0) {
+        pendingFocusIdRef.current = null;
+        isPageTransitionRef.current = false;
+        selectedRowRef.current = idx;
+        setSelectedRow(idx);
+        anchorSelection(combinedRows[idx]);
+
+        setTimeout(() => {
+          gridRef.current?.scrollToCell?.({ rowIdx: idx, idx: 1 });
+          gridRef.current?.selectCell?.({ rowIdx: idx, idx: 1 });
+        }, 50);
+        return;
+      }
+    }
+
+    if (jumpToFirstRef.current) {
+      // Ctrl+Home — selalu baris pertama window baru.
+      jumpToFirstRef.current = false;
+      selectedRowRef.current = 0;
+      setSelectedRow(0);
+      anchorSelection(combinedRows[0]);
+      setTimeout(() => {
+        gridRef.current?.scrollToCell?.({ rowIdx: 0, idx: 1 });
+        gridRef.current?.selectCell?.({ rowIdx: 0, idx: 1 });
+      }, 50);
+      return;
+    }
+
+    if (jumpToLastRef.current) {
+      // Ctrl+End — baris terakhir window baru.
+      jumpToLastRef.current = false;
+      const lastIdx = combinedRows.length - 1;
+      selectedRowRef.current = lastIdx;
+      setSelectedRow(lastIdx);
+      anchorSelection(combinedRows[lastIdx]);
+      setTimeout(() => {
+        gridRef.current?.scrollToCell?.({ rowIdx: lastIdx, idx: 1 });
+        gridRef.current?.selectCell?.({ rowIdx: lastIdx, idx: 1 });
+      }, 50);
+      return;
+    }
+
+    if (isPageTransitionRef.current) {
+      isPageTransitionRef.current = false;
+      // Window bergeser: kunci ulang index ke baris jangkar kalau masih ada.
+      const anchoredIdx =
+        selectedRowIdRef.current != null
+          ? combinedRows.findIndex(
+              (r) => String(r.id) === selectedRowIdRef.current
+            )
+          : -1;
+
+      const targetRow =
+        anchoredIdx >= 0
+          ? anchoredIdx
+          : Math.min(
+              Math.max(selectedRowRef.current, 0),
+              combinedRows.length - 1
+            );
+
+      selectedRowRef.current = targetRow;
+      setSelectedRow(targetRow);
+
+      if (selectedRowIdRef.current == null) {
+        anchorSelection(combinedRows[targetRow]);
+      }
+    } else if (pendingInitialFocusRef.current) {
+      pendingInitialFocusRef.current = false;
+      selectedRowRef.current = 0;
+      setSelectedRow(0);
+      anchorSelection(combinedRows[0]);
+      setTimeout(() => {
+        gridRef.current?.scrollToCell?.({
+          rowIdx: 0,
+          idx: pendingSelectIdxRef.current
+        });
+        gridRef.current?.selectCell?.({
+          rowIdx: 0,
+          idx: pendingSelectIdxRef.current
+        });
+      }, 50);
+    }
+  }, [visiblePages, pageDataCache]);
+
+  // Kompensasi scrollTop setelah window bergeser, supaya baris yang sedang
+  // dilihat user tetap di posisi visual yang sama (tidak meloncat).
+  useLayoutEffect(() => {
+    if (pendingScrollAdjustment.current !== 0 && scrollContainerRef.current) {
+      const container = scrollContainerRef.current;
+      container.scrollTop += pendingScrollAdjustment.current;
+
+      scrollPositionRef.current = container.scrollTop;
+      lastScrollTopRef.current = container.scrollTop;
+      hasAdjustedScrollRef.current = true;
+      pendingScrollAdjustment.current = 0;
+    }
+  }, [rows]);
 
   useEffect(() => {
     const headerCells = document.querySelectorAll('.rdg-header-row .rdg-cell');
@@ -4370,8 +4995,8 @@ const GridBookingMuatan = () => {
       setIsFirstLoad(true);
       setCheckedRows(new Set());
       setCurrentPage(1);
-      setFetchedPages(new Set([1]));
       setHasMore(true);
+      resetBufferingCache();
       setFilters((prevFilters) => ({
         ...prevFilters,
         page: 1
@@ -4380,7 +5005,13 @@ const GridBookingMuatan = () => {
   }, [successApproved]);
 
   return (
-    <div className={`flex h-[100%] w-full justify-center`}>
+    <div
+      // PageUp/PageDown ditangkap di pembungkus, bukan di <DataGrid>:
+      // react-data-grid tidak meneruskan prop DOM sembarangan, dan input
+      // filter/search menelan event keyboard-nya sendiri.
+      onKeyDownCapture={handleKeyDownCapture}
+      className={`flex h-[100%] w-full justify-center`}
+    >
       <div className="flex h-[100%] w-full flex-col rounded-sm border border-border bg-background">
         <div className="flex h-[38px] w-full flex-row items-center justify-between rounded-t-sm border-b border-border bg-background-grid-header px-2">
           <div className="flex flex-row items-center">
@@ -4493,6 +5124,7 @@ const GridBookingMuatan = () => {
                 ? allDataBookingMuatan.pagination.totalItems
                 : 0
             }
+            startRow={startRow}
             customActions={[
               {
                 label: 'Print',
@@ -4552,7 +5184,7 @@ const GridBookingMuatan = () => {
         isLoadingDelete={isLoadingDelete}
         forms={forms}
         mode={mode}
-        onSubmit={forms.handleSubmit(onSubmit as any)}
+        onSubmit={forms.handleSubmit(onSubmit as any, onInvalid)}
         isLoadingCreate={isLoadingCreate}
       />
 
@@ -4566,7 +5198,7 @@ const GridBookingMuatan = () => {
         // isLoadingDelete={isLoadingDelete}
         // popOver={popOver}
         // mode={mode}
-        onSubmit={formsJobParty.handleSubmit(onSubmitParty as any)}
+        onSubmit={formsJobParty.handleSubmit(onSubmitParty as any, onInvalid)}
         isLoadingCreate={isLoadingCreateParty}
       />
     </div>

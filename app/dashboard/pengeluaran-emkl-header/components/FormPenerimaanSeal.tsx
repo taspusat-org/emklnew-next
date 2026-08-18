@@ -37,12 +37,17 @@ import { Button } from '@/components/ui/button';
 import { useAlert } from '@/lib/store/client/useAlert';
 import { IoMdClose } from 'react-icons/io';
 import { useTheme } from 'next-themes';
+import { useShiftHorizontalScroll } from '@/hooks/use-shift-horizontal-scroll';
 
 const FormPenerimaanSeal = ({ forms, mode, popOver }: any) => {
   const { alert } = useAlert();
   const { theme, resolvedTheme } = useTheme();
   const isDark = theme === 'dark' || resolvedTheme === 'dark';
   const headerData = useSelector((state: RootState) => state.header.headerData);
+  // Shift + scroll = geser horizontal. Grid ini lebih lebar dari modal dan
+  // react-remove-scroll bawaan Radix Dialog membatalkan wheel-nya.
+  useShiftHorizontalScroll();
+
   const [rows, setRows] = useState<
     (
       | PengeluaranEmklDetail
@@ -630,9 +635,7 @@ const FormPenerimaanSeal = ({ forms, mode, popOver }: any) => {
                       disabled={
                         mode === 'view' || mode === 'delete' || mode === 'edit'
                       }
-                      lookupValue={(id) =>
-                        forms.setValue('bank_id', id)
-                      }
+                      lookupValue={(id) => forms.setValue('bank_id', id)}
                       inputLookupValue={forms.getValues('bank_id')}
                       lookupNama={forms.getValues('bank_nama')}
                     />

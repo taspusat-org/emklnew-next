@@ -24,6 +24,7 @@ import FormLabel, {
   FormMessage
 } from '@/components/ui/form';
 import { EmptyRowsRenderer } from '@/components/EmptyRows';
+import { useShiftHorizontalScroll } from '@/hooks/use-shift-horizontal-scroll';
 
 const FormMarketingDetail = ({
   forms,
@@ -35,6 +36,10 @@ const FormMarketingDetail = ({
   const dispatch = useDispatch();
   const { theme, resolvedTheme } = useTheme();
   const isDark = theme === 'dark' || resolvedTheme === 'dark';
+  // Shift + scroll = geser horizontal. Grid ini lebih lebar dari modal dan
+  // react-remove-scroll bawaan Radix Dialog membatalkan wheel-nya.
+  useShiftHorizontalScroll();
+
   const [dataGridKey, setDataGridKey] = useState(0);
   const [editingRowId, setEditingRowId] = useState<number | null>(null); // Menyimpan ID baris yang sedang diedit
   const [checkedRows, setCheckedRows] = useState<Set<string>>(new Set());
@@ -384,11 +389,7 @@ const FormMarketingDetail = ({
                       {...statusaktifLookup}
                       label={`STATUSAKTIF ${props.rowIdx}`} // Ensure you use row.id or rowIdx for unique labeling
                       lookupValue={(id) => {
-                        handleInputChange(
-                          props.rowIdx,
-                          'statusaktif',
-                          id
-                        ); // Use props.rowIdx to get the correct index
+                        handleInputChange(props.rowIdx, 'statusaktif', id); // Use props.rowIdx to get the correct index
                       }}
                       lookupNama={
                         props.row.statusaktif_nama

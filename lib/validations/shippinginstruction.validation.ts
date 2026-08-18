@@ -1,16 +1,6 @@
 import { z } from 'zod';
 import { dynamicRequiredMessage } from '../utils';
 
-/**
- * Id di DB ini CAMPUR: sebagian sudah UUIDv7 bertipe teks (schedule, kapal,
- * tujuankapal, daftarbl — mis. "02-5AD39E01-8E6D-…"), sebagian masih angka
- * (emkl 8, pelayaran 44, id detail 395).
- *
- * Karena itu skema id tidak boleh mengunci ke satu tipe: z.number() menolak
- * UUID, z.string() menolak angka, dan `Number(uuid)` menghasilkan NaN yang juga
- * ditolak z.number(). Union + refine menerima keduanya dan tetap menolak nilai
- * kosong/NaN.
- */
 const optionalId = z.union([z.string(), z.number()]).nullable().optional();
 
 const requiredId = (label: string) =>

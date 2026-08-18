@@ -1054,9 +1054,6 @@ const GridPanjarMuatanDetail = () => {
     if (shouldBulkFetch || !detail) return;
     // currentPage 0 = fase antara dari trik setCurrentPage(0) di handleScroll
     // (memaksa effect jalan ulang walau halaman tujuan == halaman sekarang).
-    // Query untuk page 0 tidak pernah dijalankan (guard di useGetPanjarMuatanDetail),
-    // jadi `detail` di sini masih milik halaman lama — kalau tidak dihentikan,
-    // datanya tersimpan ke pageDataCache dengan key 0 yang tak pernah dirender.
     if (currentPage < 1) return;
 
     const newRows = mapDetailRows(detail.data);

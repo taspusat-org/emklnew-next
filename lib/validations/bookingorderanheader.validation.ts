@@ -1,18 +1,6 @@
 import { number, z } from 'zod';
 import { dynamicRequiredMessage } from '../utils';
 
-/**
- * Id di DB ini CAMPUR: sebagian sudah UUIDv7 bertipe teks (schedule, container,
- * shipper, tujuankapal, jenisorder, parameter status, …), sebagian masih angka.
- *
- * Karena itu skema id tidak boleh mengunci ke satu tipe: z.number() menolak
- * UUID, z.string() menolak angka, dan `Number(uuid)` menghasilkan NaN yang
- * ditolak z.number() dengan pesan "Expected number, received nan" — itulah yang
- * muncul di hampir semua field lookup form ini. Union + refine menerima
- * keduanya dan tetap menolak nilai kosong/NaN.
- *
- * Pola yang sama dipakai di shippinginstruction.validation.ts.
- */
 const optionalId = z.union([z.string(), z.number()]).nullable().optional();
 
 const requiredId = (label: string) =>
@@ -88,7 +76,15 @@ export const bookingOrderanMuatanSchema = z.object({
   emkl_id: optionalId,
   emkllain_nama: z.string().nullable().optional(),
 
-  asalmuatan: z.string().nullable().optional(),
+  // WAJIB, sama seperti jobPartyHeaderSchema di bawah. Nilainya mengalir
+  // booking -> orderanmuatan.asalmuatan (disalin saat approval) -> PELABUHAN
+  // ASAL di detail Shipping Instruction, yang schema-nya nonempty. Waktu kolom
+  // ini masih optional di sini, booking bisa tersimpan kosong dan error-nya
+  // baru muncul jauh kemudian saat PROSES di form SI ("PELABUHAN ASAL WAJIB
+  // DIISI") — di modul lain, dengan data yang sudah terlanjur di-approve.
+  asalmuatan: z
+    .string({ message: dynamicRequiredMessage('ASAL MUATAN') })
+    .nonempty({ message: dynamicRequiredMessage('ASAL MUATAN') }),
 
   daftarbl_id: optionalId,
   daftarbl_nama: z.string().nullable().optional(),

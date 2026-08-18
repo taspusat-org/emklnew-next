@@ -32,6 +32,7 @@ export interface DateInputProps
   className?: string;
   disabled?: boolean;
   readOnly?: any;
+  danger?: boolean;
 }
 
 function formatDisplayValue(value: string): string | null {
@@ -57,6 +58,7 @@ const InputDatePicker: React.FC<DateInputProps> = ({
   className = '',
   disabled = false,
   readOnly = false,
+  danger = false,
   ...rest
 }) => {
   const [open, setOpen] = useState(false);
@@ -100,7 +102,11 @@ const InputDatePicker: React.FC<DateInputProps> = ({
       <PopoverAnchor asChild>
         <div
           ref={containerRef}
-          className={`relative flex flex-row items-center rounded-sm border border-input-border focus-within:border-input-border-focus ${className}`}
+          className={`relative flex flex-row items-center rounded-sm border ${
+            danger
+              ? 'border-destructive'
+              : 'border-input-border focus-within:border-input-border-focus'
+          } ${className}`}
         >
           {showDisplayOverlay && (
             <div
@@ -123,7 +129,7 @@ const InputDatePicker: React.FC<DateInputProps> = ({
           <InputMask
             mask={dateMask}
             {...rest}
-            inputRef={maskRef}
+            ref={maskRef as any}
             className={`h-9 w-full rounded-sm px-3 text-sm focus:bg-background-input-focus focus:outline-none focus:ring-0
               ${
                 disabled

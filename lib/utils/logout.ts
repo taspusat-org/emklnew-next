@@ -7,15 +7,6 @@ import { clearSearch } from '@/lib/store/searchLookupSlice/searchLookupSlice';
 import { tokenCache } from './AxiosInstance';
 import { deleteCookie } from './cookie-actions';
 
-/**
- * Single source of truth for logout. Clears:
- * - In-memory token cache (AxiosInstance)
- * - NextAuth session (cookie + server-side)
- * - All persisted Redux slices (auth, menu, search, report, pdfUrl)
- * - localStorage via persistor.purge()
- *
- * Caller is responsible for navigation after this resolves.
- */
 export async function performLogout(): Promise<void> {
   // 1. Clear axios token cache first so no further authenticated requests fire
   tokenCache.clearCache();

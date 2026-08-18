@@ -37,6 +37,7 @@ import { formatCurrency, parseCurrency } from '@/lib/utils';
 import InputCurrency from '@/components/custom-ui/InputCurrency';
 import { setSubmitClicked } from '@/lib/store/lookupSlice/lookupSlice';
 import { EmptyRowsRenderer } from '@/components/EmptyRows';
+import { useShiftHorizontalScroll } from '@/hooks/use-shift-horizontal-scroll';
 
 const FormMarketing = ({
   popOver,
@@ -62,6 +63,10 @@ const FormMarketing = ({
   const headerData = useSelector((state: RootState) => state.header.headerData);
   const tabFormValues = useSelector((state: RootState) => state.tab.tab);
   const openName = useSelector((state: RootState) => state.lookup.openName);
+  // Shift + scroll = geser horizontal. Grid ini lebih lebar dari modal dan
+  // react-remove-scroll bawaan Radix Dialog membatalkan wheel-nya.
+  useShiftHorizontalScroll();
+
   const [dataGridKey, setDataGridKey] = useState(0);
   const [checkedRows, setCheckedRows] = useState<Set<string>>(new Set());
   const [rowsMarketingOrderan, setRowsMarketingOrderan] = useState<

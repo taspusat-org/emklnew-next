@@ -50,13 +50,6 @@ beforeEach(() => {
   jest.clearAllMocks();
 });
 
-/**
- * Grid panjar (header & detail) memakai trik `setCurrentPage(0)` di handleScroll
- * untuk memaksa effect jalan ulang saat halaman tujuan == currentPage yang basi.
- * Fase antara itu TIDAK boleh mengirim request: controller meng-clamp page=0 ke
- * 1, jadi yang balik adalah data halaman 1 yang tersimpan di cache dengan key
- * page=0. Pola ini disamakan dengan useGetAlatbayar/useGetPengeluaranDetail.
- */
 describe('useGetPanjarMuatanDetail', () => {
   const panjarId = '02-abc';
 
@@ -79,9 +72,6 @@ describe('useGetPanjarMuatanDetail', () => {
     await waitFor(() => expect(getPanjarMuatanDetailFn).toHaveBeenCalled());
   });
 
-  // FormPanjarHeader memanggil hook ini TANPA filters karena butuh seluruh
-  // detail (payload simpan dibangun dari daftar itu; baris yang tidak terkirim
-  // dihapus backend). Guard page tidak boleh ikut mematikannya.
   test('tetap fetch saat dipanggil tanpa filters (jalur FormPanjarHeader)', async () => {
     renderHook(() => useGetPanjarMuatanDetail(panjarId), { wrapper });
 

@@ -28,6 +28,7 @@ import InputCurrency from '@/components/custom-ui/InputCurrency';
 import { PenerimaanDetail } from '@/lib/types/penerimaan.type';
 import { useGetPenerimaanDetail } from '@/lib/server/usePenerimaan';
 import { useTheme } from 'next-themes';
+import { useShiftHorizontalScroll } from '@/hooks/use-shift-horizontal-scroll';
 const FormPenerimaan = ({
   popOver,
   setPopOver,
@@ -38,6 +39,10 @@ const FormPenerimaan = ({
 }: any) => {
   const { theme, resolvedTheme } = useTheme();
   const isDark = theme === 'dark' || resolvedTheme === 'dark';
+  // Shift + scroll = geser horizontal. Grid ini lebih lebar dari modal dan
+  // react-remove-scroll bawaan Radix Dialog membatalkan wheel-nya.
+  useShiftHorizontalScroll();
+
   const [selectedRow, setSelectedRow] = useState<number>(0);
   const [popOverTglSampai, setPopOverTglSampai] = useState<boolean>(false);
   const [editingRowId, setEditingRowId] = useState<number | null>(null); // Menyimpan ID baris yang sedang diedit
@@ -769,9 +774,7 @@ const FormPenerimaan = ({
                           {...props}
                           labelLookup="LOOKUP RELASI"
                           disabled={mode === 'view' || mode === 'delete'}
-                          lookupValue={(id) =>
-                            forms.setValue('relasi_id', id)
-                          }
+                          lookupValue={(id) => forms.setValue('relasi_id', id)}
                           inputLookupValue={forms.getValues('relasi_id')}
                           lookupNama={forms.getValues('relasi_nama')}
                         />
@@ -816,9 +819,7 @@ const FormPenerimaan = ({
                           {...props}
                           labelLookup="LOOKUP BANK"
                           disabled={mode === 'view' || mode === 'delete'}
-                          lookupValue={(id) =>
-                            forms.setValue('bank_id', id)
-                          }
+                          lookupValue={(id) => forms.setValue('bank_id', id)}
                           inputLookupValue={forms.getValues('bank_id')}
                           lookupNama={forms.getValues('bank_nama')}
                         />

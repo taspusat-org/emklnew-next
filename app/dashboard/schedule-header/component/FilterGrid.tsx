@@ -12,14 +12,12 @@ import {
   commitFilter
 } from '@/lib/store/filterSlice/filterSlice';
 import PeriodeValidation from '@/components/custom-ui/PeriodeValidate';
-import { RootState } from '@/lib/store/store';
 
 const FilterGrid = () => {
   const dispatch = useDispatch();
   const pending = useSelector((state: RootState) => state.filter.pending);
   const [triggerValidation, setTriggerValidation] = useState(false);
   const { onReload } = useSelector((state: any) => state.filter);
-  const pending = useSelector((state: RootState) => state.filter.pending);
 
   const onSubmit = () => {
     setTriggerValidation(true);
@@ -47,10 +45,6 @@ const FilterGrid = () => {
         <div className="bg-background-header p-4">
           <PeriodeValidation
             label="periode"
-            date1={pending.tglDari}
-            date2={pending.tglSampai}
-            onDate1Change={(val) => dispatch(setPending({ tglDari: val }))}
-            onDate2Change={(val) => dispatch(setPending({ tglSampai: val }))}
             date1={pending.tglDari}
             date2={pending.tglSampai}
             onDate1Change={(val) => dispatch(setPending({ tglDari: val }))}

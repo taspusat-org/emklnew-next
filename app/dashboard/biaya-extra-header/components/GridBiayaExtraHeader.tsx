@@ -2045,16 +2045,6 @@ const GridBiayaExtraHeader = () => {
     setPopOver(true);
   };
 
-  /**
-   * Export Excel dijalankan di BACKEND (background job + socket), sama seperti
-   * di Alat Bayar. Frontend hanya mengirim filter yang sedang aktif di grid —
-   * filter kolom, search global, rentang tanggal, jenis orderan, dan sort —
-   * lalu progresnya muncul di toast. Setelah selesai, toast menampilkan tombol
-   * Download untuk menyimpan file xlsx-nya.
-   *
-   * Beda dengan Print yang mencetak SATU bukti terpilih, export ini mengambil
-   * seluruh baris yang lolos filter.
-   */
   const handleExportExcel = async () => {
     const { page, limit, ...filtersWithoutLimit } = filters;
 

@@ -98,7 +98,8 @@ export const buildQueryParams = ({
   isreload,
   isLookUp = '',
   sortDirection = 'asc',
-  search = ''
+  search = '',
+  customOffset
 }: GetParams) => {
   const params: any = {
     page,
@@ -109,6 +110,11 @@ export const buildQueryParams = ({
     sortDirection,
     ...filters
   };
+
+  // Hanya dikirim kalau memang dipakai, supaya URL modul lain tidak berubah.
+  if (customOffset !== undefined) {
+    params.customOffset = customOffset;
+  }
 
   // Hanya tambahkan isreload jika ada (tidak undefined)
   if (isreload !== undefined) {
@@ -124,12 +130,6 @@ export function dynamicRequiredMessage(fieldName: string) {
   return `${fieldName.toUpperCase()} ${REQUIRED_FIELD}`;
 }
 
-/**
- * Kolom relasi (`*_id`, `coa*`) boleh NULL di db tapi TIDAK boleh string kosong:
- * '' tetap dianggap nilai dan langsung ditolak foreign key. LookUp yang
- * di-clear lewat `String(id ?? '')` dan defaultValues bernilai '' menghasilkan
- * '' itu, jadi payload dinormalkan dulu sebelum dikirim.
- */
 export const blankToNull = <T extends Record<string, unknown>>(
   values: T,
   keys: readonly (keyof T)[]

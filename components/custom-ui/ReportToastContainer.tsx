@@ -18,7 +18,6 @@ interface Props {
   toasts: ReportToast[];
   onDismiss: (jobId: string) => void;
   onView: (url: string, title: string, onExport?: ReportExportHandler) => void;
-  /** Saat modal viewer terbuka, toast PDF disembunyikan agar tidak menutupi PDF. */
   viewerOpen?: boolean;
 }
 
@@ -106,11 +105,6 @@ function ReportToastItem({
     onDismiss(toast.jobId);
   };
 
-  /**
-   * Job excel: file-nya sudah diunduh ke blob saat job selesai, jadi klik
-   * Download tinggal menyimpannya. Toast SENGAJA tidak ditutup supaya user
-   * bisa menyimpan ulang; blobUrl baru di-revoke saat toast ditutup.
-   */
   const handleDownload = () => {
     if (!toast.blobUrl) return;
     const link = document.createElement('a');

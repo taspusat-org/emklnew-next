@@ -27,11 +27,16 @@ import InputCurrency from '@/components/custom-ui/InputCurrency';
 import { KASBANK } from '@/constants/pengeluaranemkl';
 import { useTheme } from 'next-themes';
 import { EmptyRowsRenderer } from '@/components/EmptyRows';
+import { useShiftHorizontalScroll } from '@/hooks/use-shift-horizontal-scroll';
 
 const FormPinjamanEmkl = ({ forms, mode, popOver }: any) => {
   const { theme, resolvedTheme } = useTheme();
   const isDark = theme === 'dark' || resolvedTheme === 'dark';
   const headerData = useSelector((state: RootState) => state.header.headerData);
+  // Shift + scroll = geser horizontal. Grid ini lebih lebar dari modal dan
+  // react-remove-scroll bawaan Radix Dialog membatalkan wheel-nya.
+  useShiftHorizontalScroll();
+
   const [rows, setRows] = useState<
     (
       | PengeluaranEmklDetail
@@ -476,9 +481,7 @@ const FormPinjamanEmkl = ({ forms, mode, popOver }: any) => {
                       disabled={
                         mode === 'view' || mode === 'delete' || mode === 'edit'
                       }
-                      lookupValue={(id) =>
-                        forms.setValue('bank_id', id)
-                      }
+                      lookupValue={(id) => forms.setValue('bank_id', id)}
                       inputLookupValue={forms.getValues('bank_id')}
                       lookupNama={forms.getValues('bank_nama')}
                     />

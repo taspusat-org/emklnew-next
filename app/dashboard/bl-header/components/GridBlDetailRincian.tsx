@@ -1052,8 +1052,10 @@ const GridBlDetailRincian = () => {
 
   useEffect(() => {
     if (allDataRincian) {
+      // id = UUID teks; Number() memulangkan NaN sehingga semua baris memakai
+      // key yang sama. Sama seperti GridShippingInstructionDetailRincian.
       const formattedRows = allDataRincian?.data?.map((item: any) => ({
-        id: Number(item.id),
+        id: item.id,
         nobukti: item.nobukti,
         bldetail_id: item.bldetail_id,
         bldetail_nobukti: item.bldetail_nobukti,

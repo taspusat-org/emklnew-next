@@ -24,6 +24,7 @@ import { useDispatch } from 'react-redux';
 import { useTheme } from 'next-themes';
 import InputDateTimePicker from '@/components/custom-ui/InputDateTimePicker';
 import { EmptyRowsRenderer } from '@/components/EmptyRows';
+import { useShiftHorizontalScroll } from '@/hooks/use-shift-horizontal-scroll';
 
 const FormSchedule = ({
   popOver,
@@ -39,6 +40,10 @@ const FormSchedule = ({
   const todayDate = new Date();
   const { theme, resolvedTheme } = useTheme();
   const isDark = theme === 'dark' || resolvedTheme === 'dark';
+  // Shift + scroll = geser horizontal. Grid ini lebih lebar dari modal dan
+  // react-remove-scroll bawaan Radix Dialog membatalkan wheel-nya.
+  useShiftHorizontalScroll();
+
   const [dataGridKey, setDataGridKey] = useState(0);
   const [editingRowId, setEditingRowId] = useState<number | null>(null); // Menyimpan ID baris yang sedang diedit
   const [checkedRows, setCheckedRows] = useState<Set<string>>(new Set());
@@ -271,11 +276,7 @@ const FormSchedule = ({
                     {...pelayaranLookupProps}
                     label={`PELAYARAN ${props.rowIdx}`} // Ensure you use row.id or rowIdx for unique labeling
                     lookupValue={(id) => {
-                      handleInputChange(
-                        props.rowIdx,
-                        'pelayaran_id',
-                        id
-                      ); // Use props.rowIdx to get the correct index
+                      handleInputChange(props.rowIdx, 'pelayaran_id', id); // Use props.rowIdx to get the correct index
                     }}
                     onSelectRow={(val) =>
                       handleInputChange(
@@ -321,8 +322,7 @@ const FormSchedule = ({
                     {...kapalLookupProps}
                     label={`KAPAL ${props.rowIdx}`} // Ensure you use row.id or rowIdx for unique labeling
                     lookupValue={
-                      (id) =>
-                        handleInputChange(props.rowIdx, 'kapal_id', id) // Use props.rowIdx to get the correct index
+                      (id) => handleInputChange(props.rowIdx, 'kapal_id', id) // Use props.rowIdx to get the correct index
                     }
                     onSelectRow={(val) =>
                       handleInputChange(props.rowIdx, 'kapal_nama', val?.nama)
@@ -372,11 +372,7 @@ const FormSchedule = ({
                     label={`TUJUAN KAPAL ${props.rowIdx}`} // Ensure you use row.id or rowIdx for unique labeling
                     lookupValue={
                       (id) =>
-                        handleInputChange(
-                          props.rowIdx,
-                          'tujuankapal_id',
-                          id
-                        ) // Use props.rowIdx to get the correct index
+                        handleInputChange(props.rowIdx, 'tujuankapal_id', id) // Use props.rowIdx to get the correct index
                     }
                     onSelectRow={(val) =>
                       handleInputChange(

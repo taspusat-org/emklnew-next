@@ -31,6 +31,7 @@ import FilterInput from '@/components/custom-ui/FilterInput';
 import { getAllOrderanMuatanFn } from '@/lib/apis/orderanHeader.api';
 import { cancelPreviousRequest } from '@/lib/utils';
 import { EmptyRowsRenderer } from '@/components/EmptyRows';
+import { useShiftHorizontalScroll } from '@/hooks/use-shift-horizontal-scroll';
 
 interface Filter {
   page: number;
@@ -60,6 +61,10 @@ const FormStatusJobMasukGudang = ({
   const todayDate = new Date();
   const { theme, resolvedTheme } = useTheme();
   const isDark = theme === 'dark' || resolvedTheme === 'dark';
+  // Shift + scroll = geser horizontal. Grid ini lebih lebar dari modal dan
+  // react-remove-scroll bawaan Radix Dialog membatalkan wheel-nya.
+  useShiftHorizontalScroll();
+
   const [dataGridKey, setDataGridKey] = useState(0);
   // const [endpointLookup, setEndpointLookup] = useState('');
   // const [enabledNoSeal, setEnabledNoSeal] = useState(false);

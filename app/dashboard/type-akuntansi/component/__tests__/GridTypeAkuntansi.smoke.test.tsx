@@ -1,10 +1,4 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-/**
- * Smoke test: memastikan GridTypeAkuntansi bisa mount tanpa error inisialisasi.
- * Menangkap kelas bug "Cannot access 'X' before initialization" (TDZ) yang
- * muncul kalau deps array useMemo/useCallback menyebut const yang dideklarasikan
- * lebih bawah — tsc & next build TIDAK menangkap ini karena murni runtime.
- */
 import React from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 import { Provider } from 'react-redux';
@@ -99,12 +93,6 @@ it('mounts without initialization errors', () => {
   expect(screen.getByPlaceholderText('Type to search...')).toBeInTheDocument();
 });
 
-/**
- * Sel harus memakai atribut `title` bawaan browser (pola GridGroupbiayaextra),
- * bukan Radix Tooltip. Selain beda tampilan, satu TooltipProvider per sel
- * sangat mahal di grid ini karena enableVirtualization={false} menahan seluruh
- * window (5 halaman) tetap ter-mount.
- */
 it('renders cells with native title tooltips, not radix tooltips', async () => {
   const { container } = renderGrid();
 

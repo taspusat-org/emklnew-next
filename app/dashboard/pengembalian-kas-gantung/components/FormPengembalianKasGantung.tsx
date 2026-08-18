@@ -53,6 +53,7 @@ import { PengembalianKasGantungHeader } from '@/lib/types/pengembaliankasgantung
 import { useAlert } from '@/lib/store/client/useAlert';
 import { EmptyRowsRenderer } from '@/components/EmptyRows';
 import { useTheme } from 'next-themes';
+import { useShiftHorizontalScroll } from '@/hooks/use-shift-horizontal-scroll';
 const FormPengembalianKasGantung = ({
   popOver,
   setPopOver,
@@ -74,6 +75,10 @@ const FormPengembalianKasGantung = ({
   });
   const { theme, resolvedTheme } = useTheme();
   const isDark = theme === 'dark' || resolvedTheme === 'dark';
+  // Shift + scroll = geser horizontal. Grid ini lebih lebar dari modal dan
+  // react-remove-scroll bawaan Radix Dialog membatalkan wheel-nya.
+  useShiftHorizontalScroll();
+
   const [selectedRow, setSelectedRow] = useState<number>(0);
   const [isReload, setIsReload] = useState<boolean>(false);
   const [popOverTglDari, setPopOverTglDari] = useState<boolean>(false);
@@ -1104,9 +1109,7 @@ const FormPengembalianKasGantung = ({
                         <LookUp
                           key={index}
                           {...props}
-                          lookupValue={(id) =>
-                            forms.setValue('relasi_id', id)
-                          }
+                          lookupValue={(id) => forms.setValue('relasi_id', id)}
                           inputLookupValue={forms.getValues('relasi_id')}
                           lookupNama={forms.getValues('relasi_nama')}
                         />

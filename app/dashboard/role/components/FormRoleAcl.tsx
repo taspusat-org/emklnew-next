@@ -39,6 +39,7 @@ import { debounce } from 'lodash';
 import FilterInput from '@/components/custom-ui/FilterInput';
 import { highlightText } from '@/components/custom-ui/HighlightText';
 import { IAcos } from '@/lib/types/acos.type';
+import { useShiftHorizontalScroll } from '@/hooks/use-shift-horizontal-scroll';
 
 interface Filter {
   page: number;
@@ -77,6 +78,10 @@ const FormRoleAcl = ({
   const { theme, resolvedTheme } = useTheme();
   const isDark = theme === 'dark' || resolvedTheme === 'dark';
   const gridRef = useRef<DataGridHandle>(null);
+
+  // Shift + scroll = geser horizontal. Grid ini lebih lebar dari modal dan
+  // react-remove-scroll bawaan Radix Dialog membatalkan wheel-nya.
+  useShiftHorizontalScroll();
 
   const [rows, setRows] = useState<IAcos[]>([]);
   const [selectedRow, setSelectedRow] = useState<number>(0);

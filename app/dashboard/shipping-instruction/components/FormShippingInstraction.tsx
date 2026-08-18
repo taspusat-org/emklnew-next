@@ -36,6 +36,7 @@ import {
   getShippingInstructionDetailRincianFn
 } from '@/lib/apis/shippinginstruction.api';
 import { EmptyRowsRenderer } from '@/components/EmptyRows';
+import { useShiftHorizontalScroll } from '@/hooks/use-shift-horizontal-scroll';
 
 const JUMLAH_KOLOM_TREE = 9;
 
@@ -43,15 +44,9 @@ const TINGGI_BARIS_DETAIL = 55;
 const TINGGI_TAB_RINCIAN = 32;
 const TINGGI_HEADER_RINCIAN = 27;
 const TINGGI_BARIS_RINCIAN = 40;
-/** <DataGrid> memakai box-sizing: border-box + border 1px atas & bawah. */
 const TINGGI_BORDER_GRID_RINCIAN = 2;
-/** Sisa tinggi baris tree di luar grid rincian: padding & border pembungkus. */
 const TINGGI_PEMBUNGKUS_RINCIAN = 14;
 
-/**
- * Dipakai bersama kolom detail dan kolom rincian supaya pola selnya sama:
- * kontrol di tengah sel, pesan error menempel tepat di bawahnya.
- */
 const cellWithError = (
   value: string,
   error: string | undefined,
@@ -93,12 +88,16 @@ const FormShippingInstruction = ({
   const todayDate = new Date();
   const { theme, resolvedTheme } = useTheme();
   const isDark = theme === 'dark' || resolvedTheme === 'dark';
+  // Shift + scroll = geser horizontal. Grid ini lebih lebar dari modal dan
+  // react-remove-scroll bawaan Radix Dialog membatalkan wheel-nya.
+  useShiftHorizontalScroll();
+
   const [dataGridKey, setDataGridKey] = useState(0);
   const [daftarBlValue, setDaftarBlValue] = useState(0);
   const [scheduleValue, setScheduleValue] = useState<string>('');
   const [notIn, setNotIn] = useState('');
   const [reloadForm, setReloadForm] = useState<boolean>(false);
-  const [editingRowId, setEditingRowId] = useState(0); // Menyimpan ID baris yang sedang diedit
+  const [editingRowId, setEditingRowId] = useState(0);
   const [rows, setRows] = useState<
     (
       | ShippingInstructionDetail
@@ -115,7 +114,7 @@ const FormShippingInstruction = ({
   const dispatch = useDispatch();
   const { alert } = useAlert();
   const gridRef = useRef<DataGridHandle>(null);
-  const formRef = useRef<HTMLFormElement | null>(null); // Ref untuk form
+  const formRef = useRef<HTMLFormElement | null>(null);
   const openName = useSelector((state: RootState) => state.lookup.openName);
   const headerData = useSelector((state: RootState) => state.header.headerData);
   const detailData = useSelector((state: RootState) => state.header.detailData);
@@ -159,7 +158,6 @@ const FormShippingInstruction = ({
       showOnButton: false,
       showClearButton: false,
       selectedRequired: false,
-      // endpoint: 'tujuankapal',
       singleColumn: false,
       pageSize: 20,
       disabled: true,
@@ -176,8 +174,6 @@ const FormShippingInstruction = ({
       showOnButton: false,
       showClearButton: false,
       selectedRequired: false,
-      // endpoint: `kapal`,
-      // label: 'KAPAL LOOKUP',
       singleColumn: true,
       pageSize: 20,
       disabled: true,
@@ -263,7 +259,7 @@ const FormShippingInstruction = ({
         const lama = detailSebelumnya.get(key);
 
         rowsBaru.push({
-          id: lama?.id ?? 0,
+          id: lama?.id ?? '0',
           orderan_id: item.orderan_id ?? '',
           daftarbl_id: item.daftarbl_id ?? '',
           containerpelayaran_id: item.pelayarancontainer_id ?? '',
@@ -290,7 +286,7 @@ const FormShippingInstruction = ({
           const rLama = rincianSebelumnya.get(rKey);
 
           return {
-            id: rLama?.id ?? 0,
+            id: rLama?.id ?? '0',
             idOrderan: r.shipper_id ?? '',
             orderanmuatan_nobukti: r.orderanmuatan_nobukti ?? '',
             keterangan: '',
@@ -392,8 +388,6 @@ const FormShippingInstruction = ({
       });
 
       if (expandedDetailIdx.has(detailIdx)) {
-        // detailIdx & rincianIdx ditempel ke tiap baris supaya renderCell grid
-        // rincian bisa berdiri sendiri (tidak perlu closure per baris).
         flattened.push({
           isTreeType: 'rincianBlock',
           detailIdx,
@@ -414,10 +408,6 @@ const FormShippingInstruction = ({
 
   const detailErrors = forms.formState.errors?.details as any[] | undefined;
 
-  /**
-   * Kolom grid rincian (tab "Shipping") yang tampil di dalam baris tree.
-   * Tiap baris rincian sudah membawa detailIdx & rincianIdx dari treeRows.
-   */
   const rincianColumns = useMemo((): Column<any>[] => {
     const isReadOnly = mode === 'delete' || mode === 'view';
 
@@ -590,38 +580,38 @@ const FormShippingInstruction = ({
 
       return (
         <div className="w-full bg-background py-1 pl-10 pr-3 text-foreground">
-          <div className="flex w-full flex-row justify-start rounded-t-sm border border-b-0 border-border bg-background-grid-header px-1 pt-1">
-            <div className="rounded-t-sm border border-b-0 border-border bg-background px-4 py-1 text-xs font-bold uppercase text-primary">
-              Shipping
+          <div className="overflow-hidden rounded-sm border border-border">
+            <div className="flex w-full flex-row justify-start border-b border-border bg-background-grid-header px-1 pt-1">
+              <div className="rounded-t-sm border border-b-0 border-border bg-background px-4 py-1 text-xs font-bold uppercase text-primary">
+                Shipping
+              </div>
             </div>
-          </div>
 
-          {/* Klik & tombol di dalam grid rincian tidak diteruskan ke grid
-              induk supaya seleksi sel dan navigasi keyboard tidak dobel. */}
-          <div
-            className="overflow-hidden rounded-b-sm bg-background text-foreground"
-            style={{
-              height:
-                TINGGI_HEADER_RINCIAN +
-                jumlahBaris * TINGGI_BARIS_RINCIAN +
-                TINGGI_BORDER_GRID_RINCIAN
-            }}
-            onClick={(e) => e.stopPropagation()}
-            onKeyDown={(e) => e.stopPropagation()}
-          >
-            <DataGrid
-              columns={rincianColumns as any[]}
-              defaultColumnOptions={{ sortable: false, resizable: true }}
-              rows={rincianRows}
-              rowKeyGetter={(r: any) => `${r.detailIdx}-${r.rincianIdx}`}
-              rowHeight={TINGGI_BARIS_RINCIAN}
-              headerRowHeight={TINGGI_HEADER_RINCIAN}
-              renderers={{ noRowsFallback: <EmptyRowsRenderer /> }}
-              className={`${
-                isDark ? 'rdg-dark' : 'rdg-light'
-              } fill-grid text-xs`}
-              enableVirtualization={false}
-            />
+            {/* Klik & tombol di dalam grid rincian tidak diteruskan ke grid
+                induk supaya seleksi sel dan navigasi keyboard tidak dobel. */}
+            <div
+              className="overflow-hidden bg-background text-foreground"
+              style={{
+                height:
+                  TINGGI_HEADER_RINCIAN + jumlahBaris * TINGGI_BARIS_RINCIAN
+              }}
+              onClick={(e) => e.stopPropagation()}
+              onKeyDown={(e) => e.stopPropagation()}
+            >
+              <DataGrid
+                columns={rincianColumns as any[]}
+                defaultColumnOptions={{ sortable: false, resizable: true }}
+                rows={rincianRows}
+                rowKeyGetter={(r: any) => `${r.detailIdx}-${r.rincianIdx}`}
+                rowHeight={TINGGI_BARIS_RINCIAN}
+                headerRowHeight={TINGGI_HEADER_RINCIAN}
+                renderers={{ noRowsFallback: <EmptyRowsRenderer /> }}
+                className={`${
+                  isDark ? 'rdg-dark' : 'rdg-light'
+                } fill-grid text-xs`}
+                enableVirtualization={false}
+              />
+            </div>
           </div>
         </div>
       );
@@ -781,9 +771,7 @@ const FormShippingInstruction = ({
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      // Fungsi untuk menangani pergerakan fokus berdasarkan tombol
       if (openName) {
-        // Jika popOverDate ada nilainya, jangan lakukan apa-apa
         return;
       }
 
@@ -953,15 +941,19 @@ const FormShippingInstruction = ({
 
         const rowsData = allHeader?.data ?? [];
         const currentScheduleId = String(headerData?.schedule_id ?? '');
-        const id = rowsData
-          .map((row) => String(row?.schedule_id ?? ''))
-          .filter(
-            (scheduleId) =>
-              scheduleId !== '' &&
-              scheduleId !== 'null' &&
-              scheduleId !== 'undefined' &&
-              !(mode !== 'add' && scheduleId === currentScheduleId)
-          );
+        const id = [
+          ...new Set(
+            rowsData
+              .map((row) => String(row?.schedule_id ?? ''))
+              .filter(
+                (scheduleId) =>
+                  scheduleId !== '' &&
+                  scheduleId !== 'null' &&
+                  scheduleId !== 'undefined' &&
+                  !(mode !== 'add' && scheduleId === currentScheduleId)
+              )
+          )
+        ];
 
         const jsonString = JSON.stringify({ id });
         setNotIn(`notIn=${jsonString}`);

@@ -30,6 +30,7 @@ import { FaRegSquarePlus } from 'react-icons/fa6';
 import { PanjarMuatanDetail } from '@/lib/types/panjarheader.type';
 import { useGetPanjarMuatanDetail } from '@/lib/server/usePanjarheader';
 import { api2 } from '@/lib/utils/AxiosInstance';
+import { useShiftHorizontalScroll } from '@/hooks/use-shift-horizontal-scroll';
 
 const FormPanjarHeader = ({
   popOver,
@@ -45,6 +46,10 @@ const FormPanjarHeader = ({
   const todayDate = new Date();
   const { theme, resolvedTheme } = useTheme();
   const isDark = theme === 'dark' || resolvedTheme === 'dark';
+  // Shift + scroll = geser horizontal. Grid ini lebih lebar dari modal dan
+  // react-remove-scroll bawaan Radix Dialog membatalkan wheel-nya.
+  useShiftHorizontalScroll();
+
   const [dataGridKey, setDataGridKey] = useState(0);
   const [editingRowId, setEditingRowId] = useState(0); // Menyimpan ID baris yang sedang diedit
   const [editableValues, setEditableValues] = useState<Map<number, string>>(
@@ -637,19 +642,6 @@ const FormPanjarHeader = ({
     }
   }, [rows]);
 
-  /**
-   * Default field header untuk mode ADD.
-   *
-   * Dulu efek ini menimpa `tglbukti` dengan tanggal hari ini SETIAP KALI modal
-   * dibuka — termasuk saat EDIT/VIEW — sehingga tanggal bukti yang tersimpan
-   * hilang begitu form dibuka lalu disimpan lagi. Sekarang hanya berjalan di
-   * mode add.
-   *
-   * Jenis orderan juga diisi di sini: grid tidak menyalin nilai header ke form
-   * saat mode add, sedangkan `jenisorder_id` wajib (zod min(1)). Diambil dari
-   * filter yang sedang aktif; kalau user belum memilih apa pun, MUATAN dicari
-   * by nama karena id-nya berbeda per database.
-   */
   useEffect(() => {
     if (!popOver || mode !== 'add') return;
 

@@ -88,6 +88,7 @@ import {
 import { useReportPdfContext } from '@/hooks/ReportPdfProvider';
 import { useTheme } from 'next-themes';
 import { clearOnReload } from '@/lib/store/filterSlice/filterSlice';
+import { useGridRowNavigation } from '@/hooks/use-grid-row-navigation';
 import {
   Select,
   SelectContent,
@@ -189,6 +190,10 @@ const GridShippingInstruction = () => {
   const pendingScrollAdjustment = useRef<number>(0);
   const hasAdjustedScrollRef = useRef<boolean>(false);
   const isPageTransitionRef = useRef(false);
+  // Penanda Ctrl+Home / Ctrl+End: dibaca Row Combiner setelah data window
+  // baru tiba, supaya baris pertama/terakhir yang difokuskan.
+  const jumpToLastRef = useRef(false);
+  const jumpToFirstRef = useRef(false);
   const pendingSelectIdxRef = useRef<number>(1);
   const selectedRowRef = useRef<number>(0);
   const lastDispatchedId = useRef<string | null>(null);
@@ -423,6 +428,82 @@ const GridShippingInstruction = () => {
       setIsFilteringRows(false);
     }, 1000);
   };
+
+  // PageUp/PageDown saat lazy loading — pola GridGroupbiayaextra.
+  // scrollToCell-nya yang membuat window ikut bergeser & memuat halaman
+  // berikutnya, sama seperti saat user menggulung dengan mouse.
+  // Ctrl+Home — bangun ulang window dari halaman 1.
+  const handleGoToFirstPage = useCallback(() => {
+    jumpToFirstRef.current = true;
+    setRows([]);
+    setCurrentPage(1);
+    resetBufferingCache(1);
+  }, []);
+
+  // Ctrl+End — WINDOW_SIZE halaman terakhir. Tidak bisa lewat bulk-fetch
+  // biasa karena halaman terakhir jarang sejajar dengan batas blok bulk,
+  // jadi tiap halaman diambil sendiri lalu cache & window dirakit manual.
+  const handleGoToLastPage = useCallback(async () => {
+    if (totalPages < 1) return;
+
+    jumpToLastRef.current = true;
+    setRows([]);
+
+    if (totalPages <= WINDOW_SIZE) {
+      resetBufferingCache(1);
+      return;
+    }
+
+    setIsFetching(true);
+    setShouldBulkFetch(false);
+    setBulkStartPage(1);
+    setPageDataCache(new Map());
+    streamBufferRef.current = new Map();
+    prefetchingPagesRef.current = new Set();
+
+    const startPage = totalPages - WINDOW_SIZE + 1;
+    const pagesToFetch = Array.from(
+      { length: WINDOW_SIZE },
+      (_, i) => startPage + i
+    );
+
+    try {
+      const results = await Promise.all(
+        pagesToFetch.map((p) =>
+          getAllShippingInstructionHeaderFn({
+            ...filters,
+            page: p,
+            limit: filters.limit
+          })
+        )
+      );
+
+      const newCache = new Map<number, any[]>();
+      results.forEach((res: any, i: number) => {
+        if (res?.data && res.data.length > 0) {
+          newCache.set(pagesToFetch[i], res.data);
+        }
+      });
+
+      setPageDataCache(newCache);
+      setVisiblePages(pagesToFetch);
+      setCurrentPage(totalPages);
+    } catch (err) {
+      console.error('Failed to load last pages:', err);
+    } finally {
+      setIsFetching(false);
+    }
+  }, [totalPages, filters]);
+
+  const { handleKeyDownCapture } = useGridRowNavigation({
+    rowCount: rows.length,
+    gridRef,
+    selectedRowRef,
+    setSelectedRow,
+    searchInputRef: inputRef,
+    onGoToFirstPage: handleGoToFirstPage,
+    onGoToLastPage: handleGoToLastPage
+  });
 
   const columns = useMemo((): Column<ShippingInstruction>[] => {
     return [
@@ -2077,6 +2158,7 @@ const GridShippingInstruction = () => {
     }
 
     const pageSize = filters.limit;
+    const wasJumpingToLast = jumpToLastRef.current;
     const newCache = new Map<number, ShippingInstruction[]>();
     const logicalStartPage = (bulkStartPage - 1) * WINDOW_SIZE + 1;
 
@@ -2111,6 +2193,10 @@ const GridShippingInstruction = () => {
 
     if (initialPrefetch.length > 0) {
       prefetchPages(initialPrefetch, newCache, totalPgs);
+    }
+
+    if (wasJumpingToLast) {
+      setCurrentPage(lastLogicalPage);
     }
   }, [
     allShippingInstructionHeader,
@@ -2208,6 +2294,31 @@ const GridShippingInstruction = () => {
     if (combinedRows.length === 0) return;
 
     setRows(combinedRows);
+
+    if (jumpToFirstRef.current) {
+      // Ctrl+Home — selalu baris pertama window baru.
+      jumpToFirstRef.current = false;
+      selectedRowRef.current = 0;
+      setSelectedRow(0);
+      setTimeout(() => {
+        gridRef.current?.scrollToCell?.({ rowIdx: 0, idx: 1 });
+        gridRef.current?.selectCell?.({ rowIdx: 0, idx: 1 });
+      }, 50);
+      return;
+    }
+
+    if (jumpToLastRef.current) {
+      // Ctrl+End — baris terakhir window baru.
+      jumpToLastRef.current = false;
+      const lastIdx = combinedRows.length - 1;
+      selectedRowRef.current = lastIdx;
+      setSelectedRow(lastIdx);
+      setTimeout(() => {
+        gridRef.current?.scrollToCell?.({ rowIdx: lastIdx, idx: 1 });
+        gridRef.current?.selectCell?.({ rowIdx: lastIdx, idx: 1 });
+      }, 50);
+      return;
+    }
 
     if (isPageTransitionRef.current) {
       isPageTransitionRef.current = false;
@@ -2363,7 +2474,13 @@ const GridShippingInstruction = () => {
   }, [isSubmitSuccessful, setFocus]);
 
   return (
-    <div className={`flex h-[100%] w-full justify-center`}>
+    <div
+      // PageUp/PageDown ditangkap di pembungkus, bukan di <DataGrid>:
+      // react-data-grid tidak meneruskan prop DOM sembarangan, dan input
+      // filter/search menelan event keyboard-nya sendiri.
+      onKeyDownCapture={handleKeyDownCapture}
+      className={`flex h-[100%] w-full justify-center`}
+    >
       <div className="flex h-[100%]  w-full flex-col rounded-sm border border-border bg-background">
         <div className="flex h-[38px] w-full flex-row items-center justify-between rounded-t-sm border-b border-border bg-background-grid-header px-2">
           <div className="flex flex-row items-center">

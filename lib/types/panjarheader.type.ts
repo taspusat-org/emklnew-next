@@ -1,11 +1,5 @@
 import { IMeta } from './error.type';
 
-/**
- * Semua id/FK panjar sudah bertipe TEXT (uuid v7) di database — bukan integer
- * lagi. Menyimpannya sebagai `number` di sini membuat TS diam-diam mengizinkan
- * perbandingan/penulisan yang salah (mis. id lookup di-uppercase atau dikirim
- * sebagai angka), jadi tipenya dikunci ke string.
- */
 export interface PanjarHeader {
   id: string;
   nobukti: string;
@@ -34,13 +28,6 @@ export interface PanjarMuatanDetail {
   [key: string]: string | number | boolean | null | undefined;
 }
 
-/**
- * Dipertahankan untuk GridPanjaranBongkaranDetail yang belum dibuang. CATATAN:
- * database hanya punya satu tabel detail (`panjarmuatandetail`) dan
- * PanjarheaderService menulis SEMUA jenis orderan ke sana, jadi tidak ada
- * endpoint `/panjarbongkarandetail`. page.tsx sudah tidak lagi merender grid
- * itu — lihat catatan di sana.
- */
 export interface PanjarBongkaranDetail {
   id: string;
   nobukti: string;
@@ -62,12 +49,6 @@ export interface IAllPanjarMuatanDetail {
   pagination: IMeta;
 }
 
-/**
- * Default filter grid header. tglDari/tglSampai/jenisOrderan BUKAN kolom grid —
- * ketiganya dipakai backend untuk mempersempit view lewat session context
- * (lihat create-vpanjar-pg.sql), jadi tetap ikut dikirim tapi tidak pernah jadi
- * filter kolom.
- */
 export const filterPanjarHeader = {
   nobukti: '',
   tglbukti: '',

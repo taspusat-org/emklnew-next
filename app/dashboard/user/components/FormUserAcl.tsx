@@ -38,6 +38,7 @@ import { FaSort, FaSortDown, FaSortUp, FaTimes } from 'react-icons/fa';
 import FormFooterButtons from '@/components/custom-ui/FormFooterButtons';
 import { IoMdClose } from 'react-icons/io';
 import { useTheme } from 'next-themes';
+import { useShiftHorizontalScroll } from '@/hooks/use-shift-horizontal-scroll';
 
 interface Row {
   id: string;
@@ -70,6 +71,10 @@ const FormUserAcl = ({
   const gridRef = useRef<DataGridHandle>(null);
   const { theme, resolvedTheme } = useTheme();
   const isDark = theme === 'dark' || resolvedTheme === 'dark';
+  // Shift + scroll = geser horizontal. Grid ini lebih lebar dari modal dan
+  // react-remove-scroll bawaan Radix Dialog membatalkan wheel-nya.
+  useShiftHorizontalScroll();
+
   const [rows, setRows] = useState<Row[]>([]);
   const [selectedRow, setSelectedRow] = useState<number>(0);
   const [isFirstLoad, setIsFirstLoad] = useState(true);

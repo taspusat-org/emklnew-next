@@ -96,11 +96,6 @@ interface LookUpProps {
   onSelectRow?: (selectedRowValue?: any | undefined) => void;
   onClear?: () => void;
   autoSearch?: boolean;
-  /**
-   * Menampilkan saran inline (ghost text abu-abu) berdasarkan hasil match
-   * teratas saat mengetik. Tekan Tab atau panah kanan (kursor di akhir)
-   * untuk menerima saran. Default: true.
-   */
   autoComplete?: boolean;
   isExactMatch?: boolean;
   showClearButton?: boolean;

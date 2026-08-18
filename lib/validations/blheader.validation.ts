@@ -1,25 +1,43 @@
 import { nullable, z } from 'zod';
 import { dynamicRequiredMessage } from '../utils';
 
+const optionalId = z.union([z.string(), z.number()]).nullable().optional();
+
+const requiredId = (label: string) =>
+  z
+    .union([z.string(), z.number()], {
+      required_error: dynamicRequiredMessage(label),
+      invalid_type_error: dynamicRequiredMessage(label)
+    })
+    .refine(
+      (value) =>
+        typeof value === 'number'
+          ? Number.isFinite(value) && value > 0
+          : String(value).trim() !== '',
+      { message: dynamicRequiredMessage(label) }
+    );
+
 export const blRincianBiayaSchema = z.object({
+  // Semua id BERTIPE TEKS sejak migrasi UUID; baris baru dari tombol PROSES
+  // dikirim '0' (string), bukan angka 0. Selaras dengan DTO backend
+  // create-bl-header.dto.ts yang juga z.string().
   id: z.string().optional(),
   nobukti: z.string().nullable().optional(),
-  bldetail_id: z.number().nullable().optional(),
+  bldetail_id: optionalId,
   bldetail_nobukti: z.string().nullable().optional(),
 
   orderanmuatan_nobukti: z
     .string({ message: dynamicRequiredMessage('JOB') })
     .nonempty({ message: dynamicRequiredMessage('JOB') }),
 
-  nominal: z
-    .string({ message: dynamicRequiredMessage('NOMINAL') })
-    .nonempty({ message: dynamicRequiredMessage('NOMINAL') }),
+  // NOMINAL tidak lagi wajib: kolomnya read-only dan nilainya diturunkan
+  // backend (hitungNominalRincianBiaya). Kalau tetap diwajibkan, user kena
+  // tembok yang TIDAK BISA ia lewati sendiri — tidak ada input untuk mengisinya.
+  // Sama seperti baris biaya yang dibuat otomatis di estimasi-biaya-header dan
+  // biaya-header, yang juga memakai nullable().optional().
+  nominal: z.string().nullable().optional(),
 
-  biayaemkl_id: z
-    .number({
-      required_error: dynamicRequiredMessage('BIAYA EMKL')
-    })
-    .min(1, { message: dynamicRequiredMessage('BIAYA EMKL') }),
+  biayaemkl_id: requiredId('BIAYA EMKL'),
   biayaemkl_nama: z.string().optional()
 });
 export type blRincianBiayaInput = z.infer<typeof blRincianBiayaSchema>;
@@ -28,7 +46,7 @@ export const blDetailRincianSchema = z.object({
   id: z.string().optional(),
 
   nobukti: z.string().nullable().optional(),
-  bldetail_id: z.number().nullable().optional(),
+  bldetail_id: optionalId,
   bldetail_nobukti: z.string().nullable().optional(),
 
   orderanmuatan_nobukti: z
@@ -45,7 +63,7 @@ export const blDetailSchema = z.object({
   id: z.string().optional(),
   nobukti: z.string().nullable().optional(),
 
-  bl_id: z.number().nullable().optional(),
+  bl_id: optionalId,
 
   bl_nobukti: z
     .string({ message: dynamicRequiredMessage('NO BL CONECTING') })
@@ -87,32 +105,20 @@ export const blHeaderSchema = z.object({
     .string({ message: dynamicRequiredMessage('TGL BUKTI') })
     .nonempty({ message: dynamicRequiredMessage('TGL BUKTI') }),
 
-  schedule_id: z
-    .number({
-      required_error: dynamicRequiredMessage('SCHEDULE')
-    })
-    .min(1, { message: dynamicRequiredMessage('SCHEDULE') }),
+  schedule_id: requiredId('SCHEDULE'),
 
   voyberangkat: z
     .string({ message: dynamicRequiredMessage('VOY BERANGKAT') })
     .nonempty({ message: dynamicRequiredMessage('VOY BERANGKAT') }),
 
-  kapal_id: z
-    .number({
-      required_error: dynamicRequiredMessage('KAPAL')
-    })
-    .min(1, { message: dynamicRequiredMessage('KAPAL') }),
+  kapal_id: requiredId('KAPAL'),
   kapal_nama: z.string().nullable().optional(),
 
   tglberangkat: z
     .string({ message: dynamicRequiredMessage('TGL BERANGKAT') })
     .nonempty({ message: dynamicRequiredMessage('TGL BERANGKAT') }),
 
-  tujuankapal_id: z
-    .number({
-      required_error: dynamicRequiredMessage('TUJUAN')
-    })
-    .min(1, { message: dynamicRequiredMessage('TUJUAN') }),
+  tujuankapal_id: requiredId('TUJUAN'),
   tujuankapal_nama: z.string().nullable().optional(),
 
   details: z.array(blDetailSchema).min(1)

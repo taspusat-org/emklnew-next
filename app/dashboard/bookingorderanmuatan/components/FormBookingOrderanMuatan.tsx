@@ -1284,7 +1284,10 @@ const FormBookingMuatan = ({
                       control={forms.control}
                       render={({ field }) => (
                         <FormItem className="w-full lg:flex-row lg:items-center">
-                          <FormLabel className="font-semibold lg:w-[15%]">
+                          <FormLabel
+                            required={true}
+                            className="font-semibold lg:w-[15%]"
+                          >
                             asal muatan
                           </FormLabel>
                           <div className="mt-2 flex flex-col lg:w-[90%]">

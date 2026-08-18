@@ -1,26 +1,8 @@
 import { z } from 'zod';
 import { dynamicRequiredMessage } from '../utils';
 
-/**
- * Semua id panjar (header, detail, dan FK-nya) sudah bertipe TEXT (uuid v7) di
- * database. Dua jebakan yang bikin simpan gagal dengan 400 tanpa pesan jelas di
- * UI:
- *
- *  1. Baris detail BARU dikirim dengan `id: 0` (angka) oleh grid form, jadi
- *     `z.string()` polos menolaknya — "Expected string, received number".
- *  2. Baris hasil migrasi punya id numerik-sebagai-string ('7', '8', ...),
- *     bukan uuid, jadi tidak boleh divalidasi dengan `z.string().uuid()`.
- *
- * `idBaris` menerima keduanya. Skema ini dijaga sinkron dengan
- * CreatePanjarHeaderSchema di backend (create-panjarheader.dto.ts).
- */
 const idBaris = z.union([z.string(), z.number()]).nullable().optional();
 
-/**
- * estimasi & nominal datang dari InputCurrency sebagai string ter-format
- * ("100,000.00"), tapi bisa juga number saat payload dirakit ulang dari data
- * yang sudah tersimpan. Keduanya diterima; kosong / 0 tetap ditolak.
- */
 const nominalWajib = (label: string) =>
   z
     .union([z.string(), z.number()])

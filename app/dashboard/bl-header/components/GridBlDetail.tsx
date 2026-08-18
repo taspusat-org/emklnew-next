@@ -17,7 +17,14 @@ import FilterOptions from '@/components/custom-ui/FilterOptions';
 import { setDetailData } from '@/lib/store/headerSlice/headerSlice';
 import { BLDetail, filterBlDetail } from '@/lib/types/blheader.type';
 import { FaSort, FaSortDown, FaSortUp, FaTimes } from 'react-icons/fa';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState
+} from 'react';
 import {
   cancelPreviousRequest,
   handleContextMenu,
@@ -33,6 +40,61 @@ import DataGrid, {
 import DraggableColumn from '@/components/custom-ui/DraggableColumns';
 import { highlightText } from '@/components/custom-ui/HighlightText';
 import { useTheme } from 'next-themes';
+import { FaChevronDown, FaChevronRight } from 'react-icons/fa';
+import {
+  getBlDetailFn,
+  getBlDetailRincianFn,
+  getBlRincianBiayaFn
+} from '@/lib/apis/blheader.api';
+
+const JUMLAH_KOLOM_TREE = 13;
+const JUMLAH_KOLOM_TREE_RINCIAN = 5;
+
+const WINDOW_SIZE = 5;
+const STREAM_BUFFER_SIZE = 5;
+
+const TINGGI_BARIS_DETAIL = 30;
+// Boilerplate (GridShippingInstruction) memicu load berikutnya saat jarak ke
+// ujung tinggal 50 baris — bukan saat mentok di dasar grid. Di sini tinggi
+// baris tidak seragam (baris tree bisa mengembang), jadi ambangnya dihitung
+// dalam piksel senilai 50 baris detail.
+const THRESHOLD_ROWS = 50;
+const THRESHOLD_PX = THRESHOLD_ROWS * TINGGI_BARIS_DETAIL;
+const TINGGI_TAB_RINCIAN = 30;
+const TINGGI_HEADER_RINCIAN = 26;
+const TINGGI_BARIS_RINCIAN = 30;
+const TINGGI_BORDER_GRID_RINCIAN = 2;
+const TINGGI_PEMBUNGKUS_RINCIAN = 12;
+
+const TINGGI_TAB_BIAYA = 26;
+const TINGGI_HEADER_BIAYA = 24;
+const TINGGI_BARIS_BIAYA = 28;
+const TINGGI_PEMBUNGKUS_BIAYA = 10;
+
+const tinggiBlokBiaya = (jumlahBaris: number) =>
+  TINGGI_TAB_BIAYA +
+  TINGGI_HEADER_BIAYA +
+  Math.max(1, jumlahBaris) * TINGGI_BARIS_BIAYA +
+  TINGGI_BORDER_GRID_RINCIAN +
+  TINGGI_PEMBUNGKUS_BIAYA;
+
+const MemuatRowsRenderer = ({ label }: { label: string }) => (
+  <div
+    className="flex h-fit w-full items-center justify-center border border-l-0 border-t-0 border-border py-1"
+    style={{ textAlign: 'center', gridColumn: '1/-1' }}
+  >
+    <p className="text-xs italic text-gray-400">{label}</p>
+  </div>
+);
+
+const headerCellTree = (label: string) => (
+  <div
+    className="flex h-full flex-col items-center justify-center gap-1"
+    title={label.toUpperCase()}
+  >
+    <p className="text-xs">{label}</p>
+  </div>
+);
 
 interface Filter {
   page: number;
@@ -72,23 +134,210 @@ const GridBlDetail = () => {
     y: number;
   } | null>(null);
 
+  const [rincianById, setRincianById] = useState<Record<string, any[]>>({});
+  const [biayaByKey, setBiayaByKey] = useState<Record<string, any[]>>({});
+  const [expandedDetailId, setExpandedDetailId] = useState<Set<string>>(
+    new Set()
+  );
+  const [expandedRincianKey, setExpandedRincianKey] = useState<Set<string>>(
+    new Set()
+  );
+  const [memuatDetailId, setMemuatDetailId] = useState<Set<string>>(new Set());
+  const [memuatRincianKey, setMemuatRincianKey] = useState<Set<string>>(
+    new Set()
+  );
+
+  const biayaKey = (detailId: string, rincianIdx: number) =>
+    `${detailId}-${rincianIdx}`;
+
+  const resetTreeState = useCallback(() => {
+    setRincianById({});
+    setBiayaByKey({});
+    setExpandedDetailId(new Set());
+    setExpandedRincianKey(new Set());
+    setMemuatDetailId(new Set());
+    setMemuatRincianKey(new Set());
+  }, []);
+
   const [filters, setFilters] = useState<Filter>({
     page: 1,
-    limit: 30,
+    limit: 50,
     search: '',
     filters: filterBlDetail,
     sortBy: 'bl_nobukti',
     sortDirection: 'asc'
   });
 
+  const [shouldBulkFetch, setShouldBulkFetch] = useState(true);
+  const [totalPages, setTotalPages] = useState(1);
+  const [visiblePages, setVisiblePages] = useState<number[]>([1, 2, 3, 4, 5]);
+  const [pageDataCache, setPageDataCache] = useState<Map<number, BLDetail[]>>(
+    new Map()
+  );
+  const [isFetching, setIsFetching] = useState(false);
+  const [isTransitioning, setIsTransitioning] = useState(false);
+
+  const streamBufferRef = useRef<Map<number, BLDetail[]>>(new Map());
+  const prefetchingPagesRef = useRef<Set<number>>(new Set());
+  const isScrollingRef = useRef(false);
+  const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const lastScrollTopRef = useRef<number>(0);
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const scrollPositionRef = useRef<number>(0);
+  const pendingScrollAdjustment = useRef<number>(0);
+  const hasAdjustedScrollRef = useRef<boolean>(false);
+  const isPageTransitionRef = useRef(false);
+  const pendingSelectIdxRef = useRef<number>(1);
+  const selectedRowRef = useRef<number>(0);
+  const lastDispatchedId = useRef<string | number | null>(null);
+  const pendingInitialFocusRef = useRef(true);
+  // Jangkar pilihan user (lihat GridBlHeader): rincian yang tampil mengikuti
+  // baris yang benar-benar dipilih, bukan rows[selectedRow] yang index-nya
+  // ikut bergeser tiap window pindah saat scroll.
+  const selectedRowIdRef = useRef<string | null>(null);
+  const selectedRowDataRef = useRef<BLDetail | null>(null);
+  const detailClearedRef = useRef(false);
+
+  const anchorSelection = (row?: BLDetail | null) => {
+    if (!row) return;
+    selectedRowIdRef.current = String(row.id);
+    selectedRowDataRef.current = row;
+  };
+
+  const clearSelectionAnchor = () => {
+    selectedRowIdRef.current = null;
+    selectedRowDataRef.current = null;
+  };
+
+  useEffect(() => {
+    selectedRowRef.current = selectedRow;
+  }, [selectedRow]);
+
+  // Saat window pagination bergeser, index tiap baris di `rows` ikut bergeser
+  // sebanyak jumlah baris halaman yang keluar/masuk. Geser juga selectedRowRef
+  // supaya baris DATA yang sama tetap ter-highlight; commit ke state ditunda ke
+  // Row Combiner agar selectedRow & rows berubah di render yang sama.
+  const shiftSelectionForWindow = (deltaRows: number) => {
+    selectedRowRef.current = Math.max(0, selectedRowRef.current + deltaRows);
+  };
+
+  const minVisiblePage = useMemo(
+    () => (visiblePages.length > 0 ? Math.min(...visiblePages) : 1),
+    [visiblePages]
+  );
+  const startRow = (minVisiblePage - 1) * filters.limit + 1;
+
+  const resetBufferingCache = useCallback(() => {
+    setShouldBulkFetch(true);
+    setCurrentPage(1);
+    setPageDataCache(new Map());
+    setVisiblePages([1, 2, 3, 4, 5]);
+    setIsFetching(false);
+    setIsTransitioning(false);
+    streamBufferRef.current = new Map();
+    prefetchingPagesRef.current = new Set();
+    // Window dibangun ulang dari awal: fokus balik ke baris pertama SEKALI,
+    // bukan tiap kali `rows` berubah (itu yang bikin scroll meloncat ke atas).
+    isPageTransitionRef.current = false;
+    pendingInitialFocusRef.current = true;
+    pendingScrollAdjustment.current = 0;
+    selectedRowRef.current = 0;
+    lastScrollTopRef.current = 0;
+    clearSelectionAnchor();
+  }, []);
+
+  const effectiveLimit = shouldBulkFetch
+    ? filters.limit * WINDOW_SIZE
+    : filters.limit;
+
+  const queryParams = useMemo(
+    () => ({
+      ...filters,
+      page: shouldBulkFetch ? 1 : currentPage,
+      limit: effectiveLimit
+    }),
+    [filters, shouldBulkFetch, currentPage, effectiveLimit]
+  );
+
   const {
     data: allDataDetail,
     isLoading,
     refetch
-  } = useGetBlDetail(headerData?.id ?? 0, {
-    ...filters,
-    page: 1
-  });
+  } = useGetBlDetail(headerData?.id ?? 0, queryParams);
+
+  const toggleDetailRow = useCallback(
+    async (detailId: string) => {
+      const sedangTerbuka = expandedDetailId.has(detailId);
+
+      setExpandedDetailId((prev) => {
+        const next = new Set(prev);
+        if (sedangTerbuka) next.delete(detailId);
+        else next.add(detailId);
+        return next;
+      });
+
+      if (sedangTerbuka || rincianById[detailId] || !detailId) return;
+
+      setMemuatDetailId((prev) => new Set(prev).add(detailId));
+      try {
+        const res = await getBlDetailRincianFn(String(detailId), {
+          search: ''
+        });
+        setRincianById((prev) => ({
+          ...prev,
+          [detailId]: res?.data ?? []
+        }));
+      } catch (err) {
+        console.error('Gagal ambil rincian BL detail', detailId, err);
+        setRincianById((prev) => ({ ...prev, [detailId]: [] }));
+      } finally {
+        setMemuatDetailId((prev) => {
+          const next = new Set(prev);
+          next.delete(detailId);
+          return next;
+        });
+      }
+    },
+    [expandedDetailId, rincianById]
+  );
+
+  const toggleRincianRow = useCallback(
+    async (
+      rincianIdx: number,
+      detailId: string,
+      orderanmuatanNobukti: string
+    ) => {
+      const key = biayaKey(detailId, rincianIdx);
+      const sedangTerbuka = expandedRincianKey.has(key);
+
+      setExpandedRincianKey((prev) => {
+        const next = new Set(prev);
+        if (sedangTerbuka) next.delete(key);
+        else next.add(key);
+        return next;
+      });
+
+      if (sedangTerbuka || biayaByKey[key] || !detailId) return;
+
+      setMemuatRincianKey((prev) => new Set(prev).add(key));
+      try {
+        const res = await getBlRincianBiayaFn(String(detailId), {
+          filters: { orderanmuatan_nobukti: orderanmuatanNobukti }
+        });
+        setBiayaByKey((prev) => ({ ...prev, [key]: res?.data ?? [] }));
+      } catch (err) {
+        console.error('Gagal ambil rincian biaya BL', detailId, err);
+        setBiayaByKey((prev) => ({ ...prev, [key]: [] }));
+      } finally {
+        setMemuatRincianKey((prev) => {
+          const next = new Set(prev);
+          next.delete(key);
+          return next;
+        });
+      }
+    },
+    [expandedRincianKey, biayaByKey]
+  );
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     cancelPreviousRequest(abortControllerRef);
@@ -199,7 +448,362 @@ const GridBlDetail = () => {
     setRows([]);
   };
 
+  const treeRows = useMemo(() => {
+    const flattened: any[] = [];
+
+    rows.forEach((row: any, idx: number) => {
+      const detailId = String(row.id ?? '');
+
+      flattened.push({
+        ...row,
+        isTreeType: 'detail',
+        detailId,
+        nomor: startRow + idx
+      });
+
+      if (!expandedDetailId.has(detailId)) return;
+
+      const rincianFlat: any[] = [];
+      (rincianById[detailId] ?? []).forEach((r: any, rincianIdx: number) => {
+        rincianFlat.push({
+          ...r,
+          isTreeType: 'rincian',
+          detailId,
+          rincianIdx,
+          nomor: rincianIdx + 1
+        });
+
+        const key = biayaKey(detailId, rincianIdx);
+        if (!expandedRincianKey.has(key)) return;
+
+        rincianFlat.push({
+          isTreeType: 'biayaBlock',
+          detailId,
+          rincianIdx,
+          memuat: memuatRincianKey.has(key),
+          biayaRows: (biayaByKey[key] ?? []).map(
+            (b: any, biayaIdx: number) => ({
+              ...b,
+              detailId,
+              rincianIdx,
+              biayaIdx,
+              nomor: biayaIdx + 1
+            })
+          )
+        });
+      });
+
+      flattened.push({
+        isTreeType: 'rincianBlock',
+        detailId,
+        memuat: memuatDetailId.has(detailId),
+        rincianRows: rincianFlat
+      });
+    });
+
+    return flattened;
+  }, [
+    rows,
+    startRow,
+    rincianById,
+    biayaByKey,
+    expandedDetailId,
+    expandedRincianKey,
+    memuatDetailId,
+    memuatRincianKey
+  ]);
+
+  const tinggiBarisRincian = (row: any) =>
+    row.isTreeType === 'biayaBlock'
+      ? tinggiBlokBiaya((row.biayaRows ?? []).length)
+      : TINGGI_BARIS_RINCIAN;
+
+  const tinggiBlokRincian = (row: any) => {
+    const rincianRows: any[] = row.rincianRows ?? [];
+    const tinggiIsi = rincianRows.length
+      ? rincianRows.reduce(
+          (total: number, r: any) => total + tinggiBarisRincian(r),
+          0
+        )
+      : TINGGI_BARIS_RINCIAN;
+
+    return (
+      TINGGI_TAB_RINCIAN +
+      TINGGI_HEADER_RINCIAN +
+      tinggiIsi +
+      TINGGI_BORDER_GRID_RINCIAN +
+      TINGGI_PEMBUNGKUS_RINCIAN
+    );
+  };
+
+  const biayaColumns = useMemo((): Column<any>[] => {
+    const teks = (value: any) => (
+      <div className="flex h-full w-full items-center px-1 text-xs">
+        <p className="truncate" title={String(value ?? '')}>
+          {String(value ?? '')}
+        </p>
+      </div>
+    );
+
+    return [
+      {
+        key: 'nomor',
+        name: 'NO',
+        width: 45,
+        headerCellClass: 'column-headers',
+        renderHeaderCell: () => headerCellTree('No.'),
+        renderCell: (props: any) => (
+          <div className="flex h-full w-full items-center justify-center text-xs">
+            {props.row.nomor}
+          </div>
+        )
+      },
+      {
+        key: 'biayaemkl_nama',
+        name: 'biaya emkl',
+        headerCellClass: 'column-headers',
+        resizable: true,
+        width: '1fr',
+        minWidth: 200,
+        renderHeaderCell: () => headerCellTree('biaya emkl'),
+        renderCell: (props: any) => teks(props.row.biayaemkl_nama)
+      },
+      {
+        key: 'nominal',
+        name: 'nominal',
+        headerCellClass: 'column-headers',
+        resizable: true,
+        width: '1fr',
+        minWidth: 150,
+        renderHeaderCell: () => headerCellTree('nominal'),
+        renderCell: (props: any) => (
+          <div className="flex h-full w-full items-center justify-end px-1 text-xs">
+            {props.row.nominal ?? ''}
+          </div>
+        )
+      },
+      {
+        key: 'keterangan',
+        name: 'keterangan',
+        headerCellClass: 'column-headers',
+        resizable: true,
+        width: '1fr',
+        minWidth: 200,
+        renderHeaderCell: () => headerCellTree('keterangan'),
+        renderCell: (props: any) => teks(props.row.keterangan)
+      }
+    ];
+  }, []);
+
+  const rincianColumns = useMemo((): Column<any>[] => {
+    const teks = (value: any) => (
+      <div className="flex h-full w-full items-center px-1 text-xs">
+        <p className="truncate" title={String(value ?? '')}>
+          {String(value ?? '')}
+        </p>
+      </div>
+    );
+
+    const biayaBlock = (row: any) => {
+      const biayaRows: any[] = row.biayaRows ?? [];
+      const jumlahBaris = Math.max(1, biayaRows.length);
+
+      return (
+        <div className="w-full bg-background py-1 pl-8 pr-2 text-foreground">
+          <div className="overflow-hidden rounded-sm border border-border">
+            <div className="flex w-full flex-row justify-start border-b border-border bg-background-grid-header px-1 pt-1">
+              <div className="rounded-t-sm border border-b-0 border-border bg-background px-3 py-[1px] text-[10px] font-bold uppercase text-primary">
+                Rincian Biaya
+              </div>
+            </div>
+
+            <div
+              className="overflow-hidden bg-background text-foreground"
+              style={{
+                height: TINGGI_HEADER_BIAYA + jumlahBaris * TINGGI_BARIS_BIAYA
+              }}
+              onClick={(e) => e.stopPropagation()}
+              onKeyDown={(e) => e.stopPropagation()}
+            >
+              <DataGrid
+                columns={biayaColumns as any[]}
+                defaultColumnOptions={{ sortable: false, resizable: true }}
+                rows={biayaRows}
+                rowKeyGetter={(b: any) =>
+                  `${b.detailId}-${b.rincianIdx}-${b.biayaIdx}`
+                }
+                rowHeight={TINGGI_BARIS_BIAYA}
+                headerRowHeight={TINGGI_HEADER_BIAYA}
+                renderers={{
+                  noRowsFallback: row.memuat ? (
+                    <MemuatRowsRenderer label="Memuat rincian biaya…" />
+                  ) : (
+                    <EmptyRowsRenderer />
+                  )
+                }}
+                className={`${
+                  isDark ? 'rdg-dark' : 'rdg-light'
+                } fill-grid text-xs`}
+                enableVirtualization={false}
+              />
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    return [
+      {
+        key: 'nomor',
+        name: 'NO',
+        width: 45,
+        cellClass: (row: any) =>
+          row?.isTreeType === 'biayaBlock' ? 'rincian-block-cell' : undefined,
+        colSpan: (args: any) =>
+          args.type === 'ROW' && args.row?.isTreeType === 'biayaBlock'
+            ? JUMLAH_KOLOM_TREE_RINCIAN
+            : undefined,
+        headerCellClass: 'column-headers',
+        renderHeaderCell: () => headerCellTree('No.'),
+        renderCell: (props: any) => {
+          if (props.row.isTreeType === 'biayaBlock')
+            return biayaBlock(props.row);
+          return (
+            <div className="flex h-full w-full items-center justify-center text-xs">
+              {props.row.nomor}
+            </div>
+          );
+        }
+      },
+      {
+        key: 'orderanmuatan_nobukti',
+        name: 'job',
+        headerCellClass: 'column-headers',
+        resizable: true,
+        width: '1fr',
+        minWidth: 200,
+        renderHeaderCell: () => headerCellTree('job'),
+        renderCell: (props: any) => {
+          const key = biayaKey(props.row.detailId, props.row.rincianIdx);
+          const isExpanded = expandedRincianKey.has(key);
+          const value = String(props.row.orderanmuatan_nobukti ?? '');
+
+          return (
+            <div className="flex h-full w-full items-center gap-2">
+              <button
+                type="button"
+                aria-label={
+                  isExpanded ? 'Tutup rincian biaya' : 'Buka rincian biaya'
+                }
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toggleRincianRow(
+                    props.row.rincianIdx,
+                    props.row.detailId,
+                    value
+                  );
+                }}
+                className="flex h-[16px] w-[16px] shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-700 transition-colors hover:bg-blue-200"
+              >
+                {isExpanded ? (
+                  <FaChevronDown size={8} />
+                ) : (
+                  <FaChevronRight size={8} />
+                )}
+              </button>
+              <p className="truncate text-xs" title={value}>
+                {value}
+              </p>
+            </div>
+          );
+        }
+      },
+      {
+        key: 'nocontainer',
+        name: 'no container',
+        headerCellClass: 'column-headers',
+        resizable: true,
+        width: '1fr',
+        minWidth: 180,
+        renderHeaderCell: () => headerCellTree('no container'),
+        renderCell: (props: any) => teks(props.row.nocontainer)
+      },
+      {
+        key: 'noseal',
+        name: 'no seal',
+        headerCellClass: 'column-headers',
+        resizable: true,
+        width: '1fr',
+        minWidth: 160,
+        renderHeaderCell: () => headerCellTree('no seal'),
+        renderCell: (props: any) => teks(props.row.noseal)
+      },
+      {
+        key: 'keterangan',
+        name: 'keterangan',
+        headerCellClass: 'column-headers',
+        resizable: true,
+        width: '1fr',
+        minWidth: 200,
+        renderHeaderCell: () => headerCellTree('keterangan'),
+        renderCell: (props: any) => teks(props.row.keterangan)
+      }
+    ];
+  }, [biayaColumns, expandedRincianKey, toggleRincianRow, isDark]);
   const columns = useMemo((): Column<BLDetail>[] => {
+    const rincianBlock = (row: any) => {
+      const rincianRows: any[] = row.rincianRows ?? [];
+      const tinggiIsi = rincianRows.length
+        ? rincianRows.reduce(
+            (total: number, r: any) => total + tinggiBarisRincian(r),
+            0
+          )
+        : TINGGI_BARIS_RINCIAN;
+
+      return (
+        <div className="w-full bg-background py-1 pl-8 pr-2 text-foreground">
+          <div className="overflow-hidden rounded-sm border border-border">
+            <div className="flex w-full flex-row justify-start border-b border-border bg-background-grid-header px-1 pt-1">
+              <div className="rounded-t-sm border border-b-0 border-border bg-background px-3 py-[1px] text-[10px] font-bold uppercase text-primary">
+                Rincian
+              </div>
+            </div>
+
+            <div
+              className="overflow-hidden bg-background text-foreground"
+              style={{ height: TINGGI_HEADER_RINCIAN + tinggiIsi }}
+              onClick={(e) => e.stopPropagation()}
+              onKeyDown={(e) => e.stopPropagation()}
+            >
+              <DataGrid
+                columns={rincianColumns as any[]}
+                defaultColumnOptions={{ sortable: false, resizable: true }}
+                rows={rincianRows}
+                rowKeyGetter={(r: any) =>
+                  r.isTreeType === 'biayaBlock'
+                    ? `BB-${r.detailId}-${r.rincianIdx}`
+                    : `R-${r.detailId}-${r.rincianIdx}`
+                }
+                rowHeight={tinggiBarisRincian}
+                headerRowHeight={TINGGI_HEADER_RINCIAN}
+                renderers={{
+                  noRowsFallback: row.memuat ? (
+                    <MemuatRowsRenderer label="Memuat rincian…" />
+                  ) : (
+                    <EmptyRowsRenderer />
+                  )
+                }}
+                className={`${
+                  isDark ? 'rdg-dark' : 'rdg-light'
+                } fill-grid text-xs`}
+                enableVirtualization={false}
+              />
+            </div>
+          </div>
+        </div>
+      );
+    };
+
     return [
       {
         key: 'nomor',
@@ -230,11 +834,19 @@ const GridBlDetail = () => {
             </div>
           </div>
         ),
+        cellClass: (row: any) =>
+          row?.isTreeType === 'rincianBlock' ? 'rincian-block-cell' : undefined,
+        colSpan: (args: any) =>
+          args.type === 'ROW' && args.row?.isTreeType === 'rincianBlock'
+            ? JUMLAH_KOLOM_TREE
+            : undefined,
         renderCell: (props: any) => {
-          const rowIndex = rows.findIndex((row) => row.id === props.row.id);
+          if (props.row.isTreeType === 'rincianBlock') {
+            return rincianBlock(props.row);
+          }
           return (
             <div className="flex h-full w-full cursor-pointer items-center justify-center text-sm">
-              {rowIndex + 1}
+              {props.row.nomor}
             </div>
           );
         }
@@ -361,11 +973,28 @@ const GridBlDetail = () => {
         renderCell: (props: any) => {
           const columnFilter = filters.filters.bl_nobukti || '';
           const cellValue = props.row.bl_nobukti || '';
+          const isExpanded = expandedDetailId.has(props.row.detailId);
+
           return (
             <div
               title={cellValue}
-              className="m-0 flex h-full cursor-pointer items-center p-0 text-sm"
+              className="m-0 flex h-full cursor-pointer items-center gap-2 p-0 text-sm"
             >
+              <button
+                type="button"
+                aria-label={isExpanded ? 'Tutup rincian' : 'Buka rincian'}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toggleDetailRow(props.row.detailId);
+                }}
+                className="flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-700 transition-colors hover:bg-blue-200"
+              >
+                {isExpanded ? (
+                  <FaChevronDown size={9} />
+                ) : (
+                  <FaChevronRight size={9} />
+                )}
+              </button>
               {highlightText(cellValue, filters.search, columnFilter)}
             </div>
           );
@@ -1067,7 +1696,15 @@ const GridBlDetail = () => {
         }
       }
     ];
-  }, [rows, rows, filters.filters]);
+  }, [
+    rows,
+    filters.filters,
+    filters.search,
+    rincianColumns,
+    expandedDetailId,
+    toggleDetailRow,
+    isDark
+  ]);
 
   const orderedColumns = useMemo(() => {
     if (Array.isArray(columnsOrder) && columnsOrder.length > 0) {
@@ -1133,11 +1770,15 @@ const GridBlDetail = () => {
 
   function handleCellClick(args: { row: BLDetail }) {
     const clickedRow = args.row;
+    // args.row bisa undefined saat grid re-render di tengah pergeseran window.
+    if (!clickedRow) return;
     const rowIndex = rows.findIndex((r) => r.id === clickedRow.id);
     const foundRow = rows.find((r) => r.id === clickedRow?.id);
     if (rowIndex !== -1 && foundRow) {
       setSelectedRow(rowIndex);
+      anchorSelection(foundRow);
       dispatch(setDetailData(foundRow));
+      lastDispatchedId.current = foundRow.id;
     }
   }
 
@@ -1176,10 +1817,36 @@ const GridBlDetail = () => {
     };
   }, []);
 
-  useEffect(() => {
-    if (allDataDetail) {
-      const formattedRows = allDataDetail?.data?.map((item: any) => ({
-        id: Number(item?.id),
+  const tinggiHalaman = useCallback(
+    (pageRows: BLDetail[] | undefined) =>
+      (pageRows ?? []).reduce((total: number, row: any) => {
+        const detailId = String(row?.id ?? '');
+        if (!expandedDetailId.has(detailId)) return total + TINGGI_BARIS_DETAIL;
+
+        const rincianFlat: any[] = [];
+        (rincianById[detailId] ?? []).forEach((r: any, rincianIdx: number) => {
+          rincianFlat.push({ isTreeType: 'rincian' });
+          const key = biayaKey(detailId, rincianIdx);
+          if (!expandedRincianKey.has(key)) return;
+          rincianFlat.push({
+            isTreeType: 'biayaBlock',
+            biayaRows: biayaByKey[key] ?? []
+          });
+        });
+
+        return (
+          total +
+          TINGGI_BARIS_DETAIL +
+          tinggiBlokRincian({ rincianRows: rincianFlat })
+        );
+      }, 0),
+    [expandedDetailId, expandedRincianKey, rincianById, biayaByKey]
+  );
+
+  const mapDetailRows = useCallback(
+    (data: any[]): BLDetail[] =>
+      (data ?? []).map((item: any) => ({
+        id: item?.id,
         nobukti: item?.nobukti,
         bl_id: item?.bl_id,
         bl_nobukti: item?.bl_nobukti,
@@ -1196,31 +1863,413 @@ const GridBlDetail = () => {
         pelayaran_nama: item?.pelayaran_nama,
         statuspisahbl_nama: item?.statuspisahbl_nama,
         statuspisahbl_memo: item?.statuspisahbl_memo
-      }));
+      })) as BLDetail[],
+    []
+  );
 
-      setRows(formattedRows);
-    } else if (!headerData?.id) {
-      setRows([]);
-    }
-  }, [allDataDetail, headerData?.id]);
+  const prefetchPages = useCallback(
+    async (
+      pagesToFetch: number[],
+      existingCache?: Map<number, BLDetail[]>,
+      knownTotalPages?: number
+    ) => {
+      if (!headerData?.id) return;
+
+      const cacheToCheck = existingCache ?? pageDataCache;
+      const effectiveTotalPages = knownTotalPages ?? totalPages;
+
+      const validPages = pagesToFetch.filter(
+        (p) =>
+          p >= 1 &&
+          p <= effectiveTotalPages &&
+          !streamBufferRef.current.has(p) &&
+          !cacheToCheck.has(p) &&
+          !prefetchingPagesRef.current.has(p)
+      );
+
+      if (validPages.length === 0) return;
+
+      validPages.forEach((p) => prefetchingPagesRef.current.add(p));
+
+      await Promise.allSettled(
+        validPages.map(async (pageNum) => {
+          try {
+            const data = await getBlDetailFn(String(headerData.id), {
+              ...queryParams,
+              page: pageNum,
+              limit: filters.limit
+            });
+
+            if (data?.data && data.data.length > 0) {
+              streamBufferRef.current = new Map(streamBufferRef.current);
+              streamBufferRef.current.set(
+                pageNum,
+                mapDetailRows(data.data).slice(0, filters.limit)
+              );
+            }
+          } catch (err) {
+            console.warn(
+              `[StreamBuffer] Prefetch detail ${pageNum} gagal:`,
+              err
+            );
+          } finally {
+            prefetchingPagesRef.current.delete(pageNum);
+          }
+        })
+      );
+    },
+    [
+      headerData?.id,
+      queryParams,
+      filters.limit,
+      totalPages,
+      pageDataCache,
+      mapDetailRows
+    ]
+  );
 
   useEffect(() => {
-    if (gridRef.current && rows.length > 0) {
-      setSelectedRow(0);
+    if (!shouldBulkFetch || !allDataDetail) return;
 
-      gridRef.current.selectCell({ rowIdx: 0, idx: 1 });
-      dispatch(setDetailData(rows[0]));
+    const bulkData = mapDetailRows(allDataDetail.data);
+
+    const newCache = new Map<number, BLDetail[]>();
+    for (let i = 0; i < WINDOW_SIZE; i++) {
+      const pageData = bulkData.slice(
+        i * filters.limit,
+        i * filters.limit + filters.limit
+      );
+      if (pageData.length > 0) newCache.set(i + 1, pageData);
+    }
+
+    setPageDataCache(newCache);
+    setVisiblePages(Array.from({ length: WINDOW_SIZE }, (_, i) => i + 1));
+
+    const totalItems = allDataDetail.pagination?.totalItems ?? bulkData.length;
+    const totalPgs = Math.max(1, Math.ceil(totalItems / filters.limit));
+
+    setTotalPages(totalPgs);
+    setShouldBulkFetch(false);
+    setIsFetching(false);
+
+    if (bulkData.length === 0) {
+      setRows([]);
+      return;
+    }
+
+    const initialPrefetch = Array.from(
+      { length: STREAM_BUFFER_SIZE },
+      (_, i) => WINDOW_SIZE + 1 + i
+    ).filter((p) => p <= totalPgs);
+
+    if (initialPrefetch.length > 0) {
+      prefetchPages(initialPrefetch, newCache, totalPgs);
+    }
+  }, [allDataDetail, shouldBulkFetch, filters.limit]);
+
+  useEffect(() => {
+    if (shouldBulkFetch || !allDataDetail) return;
+    if (currentPage < 1) return;
+
+    const newRows = mapDetailRows(allDataDetail.data).slice(0, filters.limit);
+
+    setPageDataCache((prevCache) => {
+      const newCache = new Map(prevCache);
+      newCache.set(currentPage, newRows);
+      return newCache;
+    });
+
+    const maxVisible = Math.max(...visiblePages);
+    const minVisible = Math.min(...visiblePages);
+
+    if (currentPage > maxVisible && currentPage <= maxVisible + 1) {
+      const removedPage = visiblePages[0];
+      const removedRows = pageDataCache.get(removedPage);
+      isPageTransitionRef.current = true;
+      pendingScrollAdjustment.current = -tinggiHalaman(removedRows);
+      shiftSelectionForWindow(-(removedRows?.length ?? 0));
+
+      setPageDataCache((prev) => {
+        const updated = new Map(prev);
+        updated.delete(removedPage);
+        return updated;
+      });
+      setVisiblePages((prevVisible) => [...prevVisible.slice(1), currentPage]);
+    } else if (currentPage < minVisible && currentPage >= minVisible - 1) {
+      const removedPage = visiblePages[visiblePages.length - 1];
+      isPageTransitionRef.current = true;
+      pendingScrollAdjustment.current = tinggiHalaman(newRows);
+      shiftSelectionForWindow(newRows.length);
+
+      setPageDataCache((prev) => {
+        const updated = new Map(prev);
+        updated.delete(removedPage);
+        return updated;
+      });
+      setVisiblePages((prevVisible) => [
+        currentPage,
+        ...prevVisible.slice(0, WINDOW_SIZE - 1)
+      ]);
+    }
+
+    if (allDataDetail.pagination?.totalPages) {
+      setTotalPages(allDataDetail.pagination.totalPages);
+    }
+
+    setTimeout(() => {
+      setIsTransitioning(false);
+      setIsFetching(false);
+
+      const isScrollDown = currentPage >= Math.max(...visiblePages);
+      const pagesToPrefetch = isScrollDown
+        ? Array.from(
+            { length: STREAM_BUFFER_SIZE },
+            (_, i) => currentPage + 1 + i
+          ).filter((p) => p <= totalPages)
+        : Array.from(
+            { length: STREAM_BUFFER_SIZE },
+            (_, i) => currentPage - 1 - i
+          ).filter((p) => p >= 1);
+
+      if (pagesToPrefetch.length > 0) {
+        setTimeout(() => prefetchPages(pagesToPrefetch), 200);
+      }
+    }, 100);
+  }, [allDataDetail, currentPage, shouldBulkFetch]);
+
+  // Row Combiner — gabungkan halaman yang sedang terlihat jadi `rows`.
+  useEffect(() => {
+    const combinedRows: BLDetail[] = [];
+    visiblePages?.forEach((page) => {
+      const pageData = pageDataCache.get(page);
+      if (pageData) combinedRows.push(...pageData);
+    });
+
+    if (combinedRows.length === 0) return;
+    setRows(combinedRows);
+
+    if (isPageTransitionRef.current) {
+      // Window bergeser: JANGAN sentuh scroll (selectCell akan menyeret grid
+      // ke baris 0). Cukup kunci ulang index ke baris jangkar (kalau masih di
+      // window) dan commit bersamaan dengan setRows supaya highlight tidak
+      // berkedip. Kalau jangkar sudah di luar window, rincian tetap ikut
+      // jangkar — tidak ikut berubah karena scroll.
+      isPageTransitionRef.current = false;
+      const anchoredIdx =
+        selectedRowIdRef.current != null
+          ? combinedRows.findIndex(
+              (r) => String(r.id) === selectedRowIdRef.current
+            )
+          : -1;
+
+      const targetRow =
+        anchoredIdx >= 0
+          ? anchoredIdx
+          : Math.min(
+              Math.max(selectedRowRef.current, 0),
+              combinedRows.length - 1
+            );
+
+      selectedRowRef.current = targetRow;
+      setSelectedRow(targetRow);
+
+      if (selectedRowIdRef.current == null) {
+        anchorSelection(combinedRows[targetRow]);
+      }
+    } else if (pendingInitialFocusRef.current) {
+      pendingInitialFocusRef.current = false;
+      selectedRowRef.current = 0;
+      setSelectedRow(0);
+      anchorSelection(combinedRows[0]);
+      setTimeout(() => {
+        gridRef.current?.scrollToCell?.({
+          rowIdx: 0,
+          idx: pendingSelectIdxRef.current
+        });
+        gridRef.current?.selectCell?.({
+          rowIdx: 0,
+          idx: pendingSelectIdxRef.current
+        });
+      }, 50);
+    }
+  }, [visiblePages, pageDataCache]);
+
+  // Kompensasi scrollTop setelah window bergeser, supaya baris yang sedang
+  // dilihat user tetap di posisi visual yang sama (tidak meloncat).
+  useLayoutEffect(() => {
+    if (pendingScrollAdjustment.current !== 0 && scrollContainerRef.current) {
+      const container = scrollContainerRef.current;
+      container.scrollTop += pendingScrollAdjustment.current;
+      scrollPositionRef.current = container.scrollTop;
+      lastScrollTopRef.current = container.scrollTop;
+      hasAdjustedScrollRef.current = true;
+      pendingScrollAdjustment.current = 0;
     }
   }, [rows]);
 
+  const handleGridScroll = (event: React.UIEvent<HTMLDivElement>) => {
+    if (isLoading || rows.length === 0 || isTransitioning || isFetching) return;
+
+    const { currentTarget } = event;
+    const scrollTop = currentTarget.scrollTop;
+    const clientHeight = currentTarget.clientHeight;
+
+    const hasScrolled = Math.abs(scrollTop - lastScrollTopRef.current) > 5;
+    if (!hasScrolled) return;
+
+    lastScrollTopRef.current = scrollTop;
+    isScrollingRef.current = true;
+
+    if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
+    scrollTimeoutRef.current = setTimeout(() => {
+      isScrollingRef.current = false;
+    }, 150);
+
+    scrollPositionRef.current = scrollTop;
+    scrollContainerRef.current = currentTarget;
+
+    const scrollHeight = currentTarget.scrollHeight;
+    const sisaKeBawah = scrollHeight - (scrollTop + clientHeight);
+
+    if (sisaKeBawah <= THRESHOLD_PX) {
+      const nextPage = Math.max(...visiblePages) + 1;
+
+      if (nextPage <= totalPages && !isFetching && isScrollingRef.current) {
+        if (streamBufferRef.current.has(nextPage)) {
+          setIsFetching(true);
+          setIsTransitioning(true);
+          hasAdjustedScrollRef.current = false;
+
+          const bufferedData = streamBufferRef.current.get(nextPage)!;
+          setPageDataCache((prev) => new Map(prev).set(nextPage, bufferedData));
+
+          streamBufferRef.current = new Map(streamBufferRef.current);
+          streamBufferRef.current.delete(nextPage);
+
+          const removedRows = pageDataCache.get(visiblePages[0]);
+          isPageTransitionRef.current = true;
+          pendingScrollAdjustment.current = -tinggiHalaman(removedRows);
+          shiftSelectionForWindow(-(removedRows?.length ?? 0));
+
+          setVisiblePages((prevVisible) => {
+            const removedPage = prevVisible[0];
+            setPageDataCache((prev) => {
+              const updated = new Map(prev);
+              updated.delete(removedPage);
+              return updated;
+            });
+            return [...prevVisible.slice(1), nextPage];
+          });
+
+          setTimeout(() => {
+            setIsTransitioning(false);
+            setIsFetching(false);
+          }, 50);
+
+          prefetchPages(
+            Array.from(
+              { length: STREAM_BUFFER_SIZE },
+              (_, i) => nextPage + 1 + i
+            )
+          );
+        } else if (!pageDataCache.has(nextPage)) {
+          setIsFetching(true);
+          setIsTransitioning(true);
+          hasAdjustedScrollRef.current = false;
+          setCurrentPage(nextPage);
+        }
+      }
+    }
+
+    if (scrollTop <= THRESHOLD_PX) {
+      const prevPage = Math.min(...visiblePages) - 1;
+
+      if (prevPage >= 1 && !isFetching && isScrollingRef.current) {
+        if (streamBufferRef.current.has(prevPage)) {
+          setIsFetching(true);
+          setIsTransitioning(true);
+          hasAdjustedScrollRef.current = false;
+
+          const bufferedData = streamBufferRef.current.get(prevPage)!;
+          setPageDataCache((prev) => new Map(prev).set(prevPage, bufferedData));
+
+          streamBufferRef.current = new Map(streamBufferRef.current);
+          streamBufferRef.current.delete(prevPage);
+
+          isPageTransitionRef.current = true;
+          pendingScrollAdjustment.current = tinggiHalaman(bufferedData);
+          shiftSelectionForWindow(bufferedData.length);
+
+          setVisiblePages((prevVisible) => {
+            const removedPage = prevVisible[prevVisible.length - 1];
+            setPageDataCache((prev) => {
+              const updated = new Map(prev);
+              updated.delete(removedPage);
+              return updated;
+            });
+            return [prevPage, ...prevVisible.slice(0, WINDOW_SIZE - 1)];
+          });
+
+          setTimeout(() => {
+            setIsTransitioning(false);
+            setIsFetching(false);
+          }, 50);
+
+          prefetchPages(
+            Array.from(
+              { length: STREAM_BUFFER_SIZE },
+              (_, i) => prevPage - 1 - i
+            ).filter((p) => p >= 1)
+          );
+        } else if (!pageDataCache.has(prevPage)) {
+          setIsFetching(true);
+          setIsTransitioning(true);
+          hasAdjustedScrollRef.current = false;
+          // Reset dulu supaya setCurrentPage(prevPage) pasti memicu refetch
+          // walau nilainya sama dengan currentPage saat ini.
+          setCurrentPage(0);
+          setTimeout(() => setCurrentPage(prevPage), 0);
+        }
+      }
+    }
+  };
+
+  useEffect(() => {
+    resetTreeState();
+    resetBufferingCache();
+    setRows([]);
+  }, [headerData?.id, filters, resetTreeState, resetBufferingCache]);
+
+  // Fokus awal (baris 0) ditangani Row Combiner lewat pendingInitialFocusRef.
+  // Dulu di sini ada effect [rows] yang selalu memanggil selectCell(rowIdx: 0):
+  // tiap window bergeser, grid ikut ter-scroll balik ke atas.
   useEffect(() => {
     if (rows.length > 0 && selectedRow !== null) {
-      const selectedRowData = rows[selectedRow];
-      dispatch(setDetailData(selectedRowData)); // Pastikan data sudah benar
-    } else {
+      detailClearedRef.current = false;
+      let selectedRowData = selectedRowDataRef.current;
+      if (!selectedRowData) {
+        selectedRowData = rows[selectedRow] ?? null;
+        anchorSelection(selectedRowData);
+      }
+      if (!selectedRowData) return;
+
+      if (selectedRowData.id !== lastDispatchedId.current) {
+        dispatch(setDetailData(selectedRowData)); // Pastikan data sudah benar
+        lastDispatchedId.current = selectedRowData.id;
+      }
+      return;
+    }
+
+    // Rincian hanya dikosongkan kalau detail memang kosong, bukan saat window
+    // sedang dimuat ulang.
+    const sedangMuat = isLoading || isFetching || isTransitioning;
+    if (rows.length === 0 && !sedangMuat && !detailClearedRef.current) {
+      detailClearedRef.current = true;
+      lastDispatchedId.current = null;
+      clearSelectionAnchor();
       dispatch(setDetailData({}));
     }
-  }, [rows, selectedRow, dispatch]);
+  }, [rows, selectedRow, dispatch, isLoading, isFetching, isTransitioning]);
 
   useEffect(() => {
     const headerCells = document.querySelectorAll('.rdg-header-row .rdg-cell');
@@ -1286,21 +2335,37 @@ const GridBlDetail = () => {
           columns={finalColumns}
           onColumnResize={onColumnResize}
           onColumnsReorder={onColumnsReorder}
-          rows={rows}
+          rows={treeRows}
           headerRowHeight={70}
+          onScroll={handleGridScroll}
           onCellKeyDown={handleKeyDown}
-          rowHeight={30}
+          rowHeight={(row: any) =>
+            row.isTreeType === 'rincianBlock'
+              ? tinggiBlokRincian(row)
+              : TINGGI_BARIS_DETAIL
+          }
           renderers={{ noRowsFallback: <EmptyRowsRenderer /> }}
           className={`${isDark ? 'rdg-dark' : 'rdg-light'} fill-grid`}
           enableVirtualization={false}
-          rowKeyGetter={rowKeyGetter}
+          rowKeyGetter={(row: any) =>
+            row.isTreeType === 'rincianBlock'
+              ? `RB-${row.detailId}`
+              : `D-${row.detailId}`
+          }
           rowClass={getRowClass}
           onCellClick={handleCellClick}
           onSelectedCellChange={(args) => {
             handleCellClick({ row: args.row });
           }}
         />
-        <div className="flex flex-row justify-between border border-x-0 border-b-0 border-border bg-background-grid-header p-2">
+        <div className="flex flex-row items-center justify-between border border-x-0 border-b-0 border-border bg-background-grid-header p-2">
+          <span className="text-xs">
+            {rows.length > 0
+              ? `Menampilkan ${startRow} - ${startRow + rows.length - 1} dari ${
+                  allDataDetail?.pagination?.totalItems ?? rows.length
+                } data`
+              : ''}
+          </span>
           {isLoading ? <LoadRowsRenderer /> : null}
 
           {contextMenu && (

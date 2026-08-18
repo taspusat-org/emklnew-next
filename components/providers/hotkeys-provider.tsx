@@ -17,9 +17,6 @@ type HotkeyBinding =
   | HotkeyHandler
   | {
       handler: HotkeyHandler;
-      /**
-       * Default false: do not trigger while typing in input/textarea/select/contentEditable.
-       */
       allowInInput?: boolean;
     };
 
