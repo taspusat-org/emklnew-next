@@ -9,6 +9,7 @@ import { makeTestStore } from '@/lib/test-utils/formHarness';
 jest.mock('@/hooks/ReportPdfProvider', () => ({
   useReportPdfContext: () => ({
     generateReport: jest.fn(),
+    generateExport: jest.fn(),
     dismissToast: jest.fn(),
     openViewer: jest.fn(),
     closeViewer: jest.fn()

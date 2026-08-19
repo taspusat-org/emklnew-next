@@ -79,6 +79,7 @@ export const useCreateHargatrucking = () => {
 export const useDeleteHargatrucking = () => {
   const { setError } = useFormError();
   const queryClient = useQueryClient();
+  const { alert } = useAlert();
 
   return useMutation(deleteHargatruckingFn, {
     onSuccess: () => {
@@ -101,12 +102,12 @@ export const useDeleteHargatrucking = () => {
             setError(path, err.message);
           });
         } else {
-          alert(errorResponse.message ?? 'Gagal');
-          // alert({
-          //   title: errorResponse.message ?? 'Gagal',
-          //   variant: 'danger',
-          //   submitText: 'OK'
-          // });
+          console.log('PESAN ERROR', errorResponse);
+          alert({
+            title: errorResponse.message ?? 'Gagal',
+            variant: 'danger',
+            submitText: 'OK'
+          });
         }
       }
     }
@@ -115,6 +116,7 @@ export const useDeleteHargatrucking = () => {
 export const useUpdateHargatrucking = () => {
   const { setError } = useFormError();
   const queryClient = useQueryClient();
+  const { alert } = useAlert();
 
   return useMutation(updateHargatruckingFn, {
     onSuccess: () => {

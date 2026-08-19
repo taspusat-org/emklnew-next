@@ -23,8 +23,8 @@ export interface IHargatrucking {
   nominal: string;
 
   statusaktif: string;
-  statusaktif_text: string;
-  statusaktif_memo: string;
+  text: string;
+  memo: string;
 
   info?: string;
   created_at: string;

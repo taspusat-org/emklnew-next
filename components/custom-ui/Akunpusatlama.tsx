@@ -31,7 +31,7 @@ import {
 import {
   TypeakuntansiInput,
   typeakuntansiSchema
-} from '@/lib/validations/typeakuntansi';
+} from '@/lib/validations/typeakuntansi.validation';
 import DataGrid, {
   CellClickArgs,
   CellKeyDownArgs,

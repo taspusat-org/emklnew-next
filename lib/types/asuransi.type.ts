@@ -33,8 +33,8 @@ export interface IAsuransi {
 
   // Dynamic Parameter & Relations
   statusaktif?: string; // ID Status Aktif Parameter (bigint / varchar)
-  statusaktif_text?: string; // Label Text Status Aktif (Display Only)
-  statusaktif_memo?: string; // Label Text Status Aktif (Display Only)
+  text?: string; // Label Text Status Aktif (Display Only)
+  memo?: string; // Label Text Status Aktif (Display Only)
 
   // Audit Trails & Locks
   info?: string; // Additional Info (nvarchar(max))

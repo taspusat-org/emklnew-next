@@ -4,7 +4,6 @@ import { IoMdRefresh } from 'react-icons/io';
 import { Button } from '@/components/ui/button';
 import React, { useEffect, useRef, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import InputDatePicker from '@/components/custom-ui/InputDatePicker';
 import {
   commitFilter,
   setOnReload,
@@ -12,18 +11,6 @@ import {
   setSelectedDate,
   setSelectedDate2
 } from '@/lib/store/filterSlice/filterSlice';
-import dayjs from 'dayjs';
-import customParseFormat from 'dayjs/plugin/customParseFormat';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage
-} from '@/components/ui/form';
 import PeriodeValidation from '@/components/custom-ui/PeriodeValidate';
 import { RootState } from '@/lib/store/store';
 

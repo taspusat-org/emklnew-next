@@ -26,6 +26,31 @@ import InputDateTimePicker from '@/components/custom-ui/InputDateTimePicker';
 import { EmptyRowsRenderer } from '@/components/EmptyRows';
 import { useShiftHorizontalScroll } from '@/hooks/use-shift-horizontal-scroll';
 
+// id 0 = penanda baris baru untuk backend. FK-nya sengaja string kosong, bukan
+// 0: kolomnya varchar UUID, dan '' yang membuat validasi "WAJIB DIISI" berbunyi.
+const emptyDetailRow = (): Partial<ScheduleDetail> & { isNew: boolean } => ({
+  id: 0,
+  nobukti: '',
+  pelayaran_id: '',
+  pelayaran_nama: '',
+  kapal_id: '',
+  kapal_nama: '',
+  tujuankapal_id: '',
+  tujuankapal_nama: '',
+  tglberangkat: '',
+  tgltiba: '',
+  etb: '',
+  eta: '',
+  etd: '',
+  voyberangkat: '',
+  voytiba: '',
+  closing: '',
+  etatujuan: '',
+  etdtujuan: '',
+  keterangan: '',
+  isNew: true
+});
+
 const FormSchedule = ({
   popOver,
   setPopOver,
@@ -53,6 +78,8 @@ const FormSchedule = ({
   const [rows, setRows] = useState<
     (ScheduleDetail | (Partial<ScheduleDetail> & { isNew: boolean }))[]
   >([]);
+
+  const isReadOnly = mode === 'view' || mode === 'delete';
 
   const dispatch = useDispatch();
   const gridRef = useRef<DataGridHandle>(null);
@@ -113,28 +140,7 @@ const FormSchedule = ({
   ];
 
   const addRow = () => {
-    const newRow: Partial<ScheduleDetail> & { isNew: boolean } = {
-      id: 0, // Placeholder ID
-      nobukti: '',
-      pelayaran_id: 0,
-      pelayaran_nama: '',
-      kapal_id: 0,
-      kapal_nama: '',
-      tujuankapal_id: 0,
-      tujuankapal_nama: '',
-      tglberangkat: '',
-      tgltiba: '',
-      etb: '',
-      eta: '',
-      etd: '',
-      voyberangkat: '',
-      voytiba: '',
-      closing: '',
-      etatujuan: '',
-      etdtujuan: '',
-      keterangan: '',
-      isNew: true
-    };
+    const newRow = emptyDetailRow();
 
     setRows((prevRows) => [
       ...prevRows.slice(0, prevRows.length - 1),
@@ -275,14 +281,19 @@ const FormSchedule = ({
                     key={index}
                     {...pelayaranLookupProps}
                     label={`PELAYARAN ${props.rowIdx}`} // Ensure you use row.id or rowIdx for unique labeling
-                    lookupValue={(id) => {
-                      handleInputChange(props.rowIdx, 'pelayaran_id', id); // Use props.rowIdx to get the correct index
-                    }}
+                    disabled={isReadOnly}
+                    lookupValue={(id) =>
+                      handleInputChange(
+                        props.rowIdx,
+                        'pelayaran_id',
+                        id == null ? '' : String(id)
+                      )
+                    }
                     onSelectRow={(val) =>
                       handleInputChange(
                         props.rowIdx,
                         'pelayaran_nama',
-                        val?.nama
+                        val?.nama ?? ''
                       )
                     }
                     lookupNama={
@@ -290,7 +301,7 @@ const FormSchedule = ({
                         ? String(props.row.pelayaran_nama)
                         : undefined
                     }
-                    inputLookupValue={Number(props.row.pelayaran_id)}
+                    inputLookupValue={String(props.row.pelayaran_id ?? '')}
                   />
                 ))}
           </div>
@@ -321,18 +332,27 @@ const FormSchedule = ({
                     key={index}
                     {...kapalLookupProps}
                     label={`KAPAL ${props.rowIdx}`} // Ensure you use row.id or rowIdx for unique labeling
-                    lookupValue={
-                      (id) => handleInputChange(props.rowIdx, 'kapal_id', id) // Use props.rowIdx to get the correct index
+                    disabled={isReadOnly}
+                    lookupValue={(id) =>
+                      handleInputChange(
+                        props.rowIdx,
+                        'kapal_id',
+                        id == null ? '' : String(id)
+                      )
                     }
                     onSelectRow={(val) =>
-                      handleInputChange(props.rowIdx, 'kapal_nama', val?.nama)
+                      handleInputChange(
+                        props.rowIdx,
+                        'kapal_nama',
+                        val?.nama ?? ''
+                      )
                     }
                     lookupNama={
                       props.row.kapal_nama
                         ? String(props.row.kapal_nama)
                         : undefined
                     }
-                    inputLookupValue={Number(props.row.kapal_id)}
+                    inputLookupValue={String(props.row.kapal_id ?? '')}
                   />
                 ))}
           </div>
@@ -370,15 +390,19 @@ const FormSchedule = ({
                     key={index}
                     {...tujuanKapalLookupProps}
                     label={`TUJUAN KAPAL ${props.rowIdx}`} // Ensure you use row.id or rowIdx for unique labeling
-                    lookupValue={
-                      (id) =>
-                        handleInputChange(props.rowIdx, 'tujuankapal_id', id) // Use props.rowIdx to get the correct index
+                    disabled={isReadOnly}
+                    lookupValue={(id) =>
+                      handleInputChange(
+                        props.rowIdx,
+                        'tujuankapal_id',
+                        id == null ? '' : String(id)
+                      )
                     }
                     onSelectRow={(val) =>
                       handleInputChange(
                         props.rowIdx,
                         'tujuankapal_nama',
-                        val?.nama
+                        val?.nama ?? ''
                       )
                     }
                     lookupNama={
@@ -386,7 +410,7 @@ const FormSchedule = ({
                         ? String(props.row.tujuankapal_nama)
                         : undefined
                     }
-                    inputLookupValue={Number(props.row.tujuankapal_id)}
+                    inputLookupValue={String(props.row.tujuankapal_id ?? '')}
                   />
                 ))}
           </div>
@@ -425,7 +449,8 @@ const FormSchedule = ({
                         e.target.value
                       )
                     }
-                    showCalendar
+                    showCalendar={!isReadOnly}
+                    disabled={isReadOnly}
                   />
                 </FormControl>
                 <FormMessage />
@@ -467,10 +492,8 @@ const FormSchedule = ({
                           e.target.value
                         )
                       }
-                      showCalendar
-                      // onSelect={(date) =>
-                      //   forms.setValue('tgltiba', date)
-                      // }
+                      showCalendar={!isReadOnly}
+                      disabled={isReadOnly}
                     />
                   </FormControl>
                   <FormMessage />
@@ -509,10 +532,8 @@ const FormSchedule = ({
                       onChange={(e) =>
                         handleInputChange(props.rowIdx, 'etb', e.target.value)
                       }
-                      showCalendar
-                      // onSelect={(date) =>
-                      //   forms.setValue('etb', date)
-                      // }
+                      showCalendar={!isReadOnly}
+                      disabled={isReadOnly}
                     />
                   </FormControl>
                   <FormMessage />
@@ -551,10 +572,8 @@ const FormSchedule = ({
                       onChange={(e) =>
                         handleInputChange(props.rowIdx, 'eta', e.target.value)
                       }
-                      showCalendar
-                      // onSelect={(date) =>
-                      //   forms.setValue('eta', date)
-                      // }
+                      showCalendar={!isReadOnly}
+                      disabled={isReadOnly}
                     />
                   </FormControl>
                   <FormMessage />
@@ -593,10 +612,8 @@ const FormSchedule = ({
                       onChange={(e) =>
                         handleInputChange(props.rowIdx, 'etd', e.target.value)
                       }
-                      showCalendar
-                      // onSelect={(date) =>
-                      //   forms.setValue('etd', date)
-                      // }
+                      showCalendar={!isReadOnly}
+                      disabled={isReadOnly}
                     />
                   </FormControl>
                   <FormMessage />
@@ -633,6 +650,7 @@ const FormSchedule = ({
                   value={props.row.voyberangkat}
                   onKeyDown={inputStopPropagation}
                   onClick={(e) => e.stopPropagation()}
+                  readOnly={isReadOnly}
                   onChange={(e) =>
                     handleInputChange(
                       props.rowIdx,
@@ -674,6 +692,7 @@ const FormSchedule = ({
                   value={props.row.voytiba}
                   onKeyDown={inputStopPropagation}
                   onClick={(e) => e.stopPropagation()}
+                  readOnly={isReadOnly}
                   onChange={(e) =>
                     handleInputChange(props.rowIdx, 'voytiba', e.target.value)
                   }
@@ -708,28 +727,14 @@ const FormSchedule = ({
               ) : (
                 <div className="flex flex-col lg:w-full">
                   <FormControl>
-                    {/* <InputDatePicker
-                      value={props.row.closing}
-                      onChange={(e) =>
-                        handleInputChange(
-                          props.rowIdx,
-                          'closing',
-                          e.target.value
-                        )
-                      }
-                      showCalendar
-                      // onSelect={(date) =>
-                      //   forms.setValue('closing', date)
-                      // }
-                    /> */}
-
                     <InputDateTimePicker
                       value={props.row.closing} // '' saat kosong
                       // onChange={field.onChange} // string keluar (mis. "16-08-2025 09:25 AM")
                       onChange={(value: any) => {
                         handleInputChange(props.rowIdx, 'closing', value);
                       }}
-                      showCalendar
+                      showCalendar={!isReadOnly}
+                      disabled={isReadOnly}
                       showTime // aktifkan 12h + AM/PM
                       minuteStep={1}
                       fromYear={1960}
@@ -777,10 +782,8 @@ const FormSchedule = ({
                           e.target.value
                         )
                       }
-                      showCalendar
-                      // onSelect={(date) =>
-                      //   forms.setValue('etatujuan', date)
-                      // }
+                      showCalendar={!isReadOnly}
+                      disabled={isReadOnly}
                     />
                   </FormControl>
                   <FormMessage />
@@ -823,10 +826,8 @@ const FormSchedule = ({
                           e.target.value
                         )
                       }
-                      showCalendar
-                      // onSelect={(date) =>
-                      //   forms.setValue('etdtujuan', date)
-                      // }
+                      showCalendar={!isReadOnly}
+                      disabled={isReadOnly}
                     />
                   </FormControl>
                   <FormMessage />
@@ -863,6 +864,7 @@ const FormSchedule = ({
                   value={props.row.keterangan}
                   onKeyDown={inputStopPropagation}
                   onClick={(e) => e.stopPropagation()}
+                  readOnly={isReadOnly}
                   onChange={(e) =>
                     handleInputChange(
                       props.rowIdx,
@@ -874,40 +876,6 @@ const FormSchedule = ({
                 />
               )}
             </div>
-            // <div>
-            //   {props.row.isAddRow ? (
-            //     ''
-            //   ) : (
-            //     <FormField
-            //       name="keterangan"
-            //       control={forms.control}
-            //       render={({ field }) => (
-            //         <FormItem className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
-            //           <div className="flex flex-col lg:w-full">
-            //             <FormControl>
-
-            //                 <Input
-            //                   type="text"
-            //                   value={props.row.keterangan}
-            //                   onKeyDown={inputStopPropagation}
-            //                   onClick={(e) => e.stopPropagation()}
-            //                   onChange={(e) =>
-            //                     handleInputChange(
-            //                       props.rowIdx,
-            //                       'keterangan',
-            //                       e.target.value
-            //                     )
-            //                   }
-            //                   className="h-2 min-h-9 w-full rounded border border-gray-300"
-            //                 />
-            //             </FormControl>
-            //             <FormMessage />
-            //           </div>
-            //         </FormItem>
-            //       )}
-            //     />
-            //   )}
-            // </div>
           );
         }
       }
@@ -989,65 +957,49 @@ const FormSchedule = ({
   }, [openName]); // Tambahkan popOverDate sebagai dependen
 
   useEffect(() => {
-    if (allDataDetail && popOver) {
-      if (allDataDetail?.data?.length > 0 && mode !== 'add') {
-        // If there is data, add the data rows and the "Add Row" button row at the end
-        const formattedRows = allDataDetail.data.map((item: any) => ({
-          id: Number(item.id),
-          nobukti: item.nobukti ?? '',
-          pelayaran_id: Number(item.pelayaran_id) ?? '',
-          pelayaran_nama: item.pelayaran_nama ?? '',
-          kapal_id: Number(item.kapal_id) ?? '',
-          kapal_nama: item.kapal_nama ?? '',
-          tujuankapal_id: Number(item.tujuankapal_id) ?? '',
-          tujuankapal_nama: item.tujuankapal_nama ?? '',
-          tglberangkat: item.tglberangkat ?? '',
-          tgltiba: item.tgltiba ?? '',
-          etb: item.etb ?? '',
-          eta: item.eta ?? '',
-          etd: item.etd ?? '',
-          voyberangkat: item.voyberangkat ?? '',
-          voytiba: item.voytiba ?? '',
-          closing: item.closingForDateTime ?? '',
-          etatujuan: item.etatujuan ?? '',
-          etdtujuan: item.etdtujuan ?? '',
-          keterangan: item.keterangan ?? '',
-          isNew: false
-        }));
+    if (!allDataDetail && !popOver) return;
 
-        setRows([
-          // Always add the "Add Row" button row at the end
-          ...formattedRows,
-          { isAddRow: true, id: 'add_row', isNew: false }
-        ]);
-      } else {
-        setRows([
-          // If no data, add one editable row and the "Add Row" button row at the end
-          {
-            id: 0,
-            nobukti: '',
-            pelayaran_id: 0,
-            pelayaran_nama: '',
-            kapal_id: 0,
-            kapal_nama: '',
-            tujuankapal_id: 0,
-            tujuankapal_nama: '',
-            tglberangkat: '',
-            tgltiba: '',
-            etb: '',
-            eta: '',
-            etd: '',
-            voyberangkat: '',
-            voytiba: '',
-            closing: '',
-            etatujuan: '',
-            etdtujuan: '',
-            keterangan: '',
-            isNew: true
-          },
-          { isAddRow: true, id: 'add_row', isNew: false } // Row for the "Add Row" button
-        ]);
-      }
+    if (
+      allDataDetail &&
+      (allDataDetail.data?.length ?? 0) > 0 &&
+      mode !== 'add'
+    ) {
+      // id detail dan FK-nya varchar UUID — jangan di-Number()-kan, hasilnya NaN
+      // dan baris lama akan terkirim balik sebagai baris baru.
+      const formattedRows = allDataDetail.data.map((item: any) => ({
+        id: item.id,
+        nobukti: item.nobukti ?? '',
+        pelayaran_id: item.pelayaran_id ?? '',
+        pelayaran_nama: item.pelayaran_nama ?? '',
+        kapal_id: item.kapal_id ?? '',
+        kapal_nama: item.kapal_nama ?? '',
+        tujuankapal_id: item.tujuankapal_id ?? '',
+        tujuankapal_nama: item.tujuankapal_nama ?? '',
+        tglberangkat: item.tglberangkat ?? '',
+        tgltiba: item.tgltiba ?? '',
+        etb: item.etb ?? '',
+        eta: item.eta ?? '',
+        etd: item.etd ?? '',
+        voyberangkat: item.voyberangkat ?? '',
+        voytiba: item.voytiba ?? '',
+        closing: item.closingForDateTime ?? '',
+        etatujuan: item.etatujuan ?? '',
+        etdtujuan: item.etdtujuan ?? '',
+        keterangan: item.keterangan ?? '',
+        isNew: false
+      }));
+
+      // Always add the "Add Row" button row at the end
+      setRows([
+        ...formattedRows,
+        { isAddRow: true, id: 'add_row', isNew: false }
+      ]);
+    } else {
+      // If no data, add one editable row and the "Add Row" button row at the end
+      setRows([
+        emptyDetailRow(),
+        { isAddRow: true, id: 'add_row', isNew: false }
+      ]);
     }
   }, [allDataDetail, headerData?.id, popOver, mode]);
 
@@ -1063,36 +1015,6 @@ const FormSchedule = ({
       forms.setValue('details', filteredRows);
     }
   }, [rows]);
-
-  useEffect(() => {
-    if (forms.getValues()?.details?.length === 0) {
-      setRows([
-        {
-          id: 0,
-          nobukti: '',
-          pelayaran_id: 0,
-          pelayaran_nama: '',
-          kapal_id: 0,
-          kapal_nama: '',
-          tujuankapal_id: 0,
-          tujuankapal_nama: '',
-          tglberangkat: '',
-          tgltiba: '',
-          etb: '',
-          eta: '',
-          etd: '',
-          voyberangkat: '',
-          voytiba: '',
-          closing: '',
-          etatujuan: '',
-          etdtujuan: '',
-          keterangan: '',
-          isNew: true
-        },
-        { isAddRow: true, id: 'add_row', isNew: false } // Row for the "Add Row" button
-      ]);
-    }
-  }, [forms, forms.getValues().details]);
 
   useEffect(() => {
     if (mode === 'add') {
@@ -1129,7 +1051,13 @@ const FormSchedule = ({
             <Form {...forms}>
               <form
                 ref={formRef}
-                onSubmit={onSubmit}
+                // `onSubmit` adalah handler MENTAH dari grid, jadi pembungkusan
+                // handleSubmit dilakukan di sini. Submit native (mis. ENTER di
+                // sebuah field) diperlakukan sama dengan tombol SAVE:
+                // keepOpenModal = false, dialog menutup.
+                onSubmit={forms.handleSubmit((values: any) =>
+                  onSubmit(values, false)
+                )}
                 className="flex h-full flex-col gap-6"
               >
                 <div className="flex h-[100%] flex-col gap-2 lg:gap-3">
@@ -1140,15 +1068,9 @@ const FormSchedule = ({
                       render={({ field }) => (
                         <FormItem className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
                           <FormLabel className="font-semibold lg:w-[30%]">
-                            {/* <FormItem className="flex w-full flex-col justify-between lg:flex-row lg:items-center"> */}
-                            {/* <FormLabel
-                            required={true}
-                            className="font-semibold lg:w-[15%]"
-                          > */}
                             NO BUKTI
                           </FormLabel>
                           <div className="flex flex-col lg:w-[70%]">
-                            {/* <div className="flex flex-col lg:w-[85%]"> */}
                             <FormControl>
                               <Input
                                 {...field}
@@ -1172,15 +1094,9 @@ const FormSchedule = ({
                             required={true}
                             className="font-semibold lg:w-[30%]"
                           >
-                            {/* <FormItem className="flex w-full flex-col justify-between lg:flex-row lg:items-center"> */}
-                            {/* <FormLabel
-                            required={true}
-                            className="font-semibold lg:w-[15%]"
-                          > */}
                             TGL BUKTI
                           </FormLabel>
                           <div className="flex flex-col lg:w-[70%]">
-                            {/* <div className="flex flex-col lg:w-[85%]"> */}
                             <FormControl>
                               <InputDatePicker
                                 value={field.value}
@@ -1223,7 +1139,7 @@ const FormSchedule = ({
                       </FormItem>
                     )}
                   />
-                  <div className="h-[400px] min-h-[400px]">
+                  <div className="h-[500px] min-h-[500px]">
                     <div className="flex h-[100%] w-full flex-col rounded-sm border border-border bg-background">
                       <div className="flex h-[38px] w-full flex-row items-center rounded-t-sm border-b border-border bg-background-grid-header px-2"></div>
 
@@ -1255,12 +1171,12 @@ const FormSchedule = ({
         <FormFooterButtons
           mode={mode}
           onSave={() => {
-            onSubmit(false);
             dispatch(setSubmitClicked(true));
+            forms.handleSubmit((values: any) => onSubmit(values, false))();
           }}
           onSaveAndAdd={() => {
-            onSubmit(true);
             dispatch(setSubmitClicked(true));
+            forms.handleSubmit((values: any) => onSubmit(values, true))();
           }}
           onCancel={handleClose}
           isLoadingCreate={isLoadingCreate}
