@@ -8,7 +8,7 @@ import { api2 } from '../utils/AxiosInstance';
 import { JurnalUmumHeaderInput } from '../validations/jurnalumum.validation';
 import {
   BuktiJobPayload,
-  ExportJobPayload,
+  ExportBuktiJobPayload,
   ReportJobResponse
 } from './report.api';
 interface UpdateParams {
@@ -113,8 +113,9 @@ export const generateJurnalUmumHeaderReportFn = async (
   const response = await api2.post('/jurnalumumheader/report', payload);
   return response.data;
 };
+/** Export Excel satu bukti jurnal umum + rinciannya (background job). */
 export const generateJurnalUmumHeaderExportFn = async (
-  payload: ExportJobPayload
+  payload: ExportBuktiJobPayload
 ): Promise<ReportJobResponse> => {
   const response = await api2.post('/jurnalumumheader/export', payload);
   return response.data;
