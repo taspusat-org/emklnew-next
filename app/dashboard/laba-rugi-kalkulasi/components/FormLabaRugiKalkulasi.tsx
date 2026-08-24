@@ -46,6 +46,7 @@ const FormLabaRugiKalkulasi = ({
       singleColumn: true,
       pageSize: 20,
       disabled: mode === 'view' || mode === 'delete' ? true : false,
+      showOnButton: true,
       postData: 'text',
       dataToPost: 'id'
     }
@@ -62,6 +63,7 @@ const FormLabaRugiKalkulasi = ({
       singleColumn: true,
       pageSize: 20,
       disabled: mode === 'view' || mode === 'delete' ? true : false,
+      showOnButton: true,
       postData: 'text',
       dataToPost: 'id'
     }
@@ -142,7 +144,6 @@ const FormLabaRugiKalkulasi = ({
       document.removeEventListener('keydown', handleKeyDown);
     };
   }, [openName]); // Tambahkan popOverDate sebagai dependensi
-
   return (
     <Dialog open={popOver} onOpenChange={setPopOver}>
       <DialogTitle hidden={true}>Title</DialogTitle>
@@ -181,7 +182,10 @@ const FormLabaRugiKalkulasi = ({
                     control={forms.control}
                     render={({ field }) => (
                       <FormItem className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
-                        <FormLabel className="font-semibold lg:w-[15%]">
+                        <FormLabel
+                          required={true}
+                          className="font-semibold lg:w-[15%]"
+                        >
                           PERIODE
                         </FormLabel>
                         <div className="flex flex-col lg:w-[85%]">
@@ -209,6 +213,30 @@ const FormLabaRugiKalkulasi = ({
                       <FormItem className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
                         <FormLabel className="font-semibold lg:w-[15%]">
                           EST KOMISI MARKETING
+                        </FormLabel>
+                        <div className="flex flex-col lg:w-[85%]">
+                          <FormControl>
+                            <InputCurrency
+                              value={field.value}
+                              onValueChange={(val) => {
+                                field.onChange(val);
+                              }}
+                              readOnly={mode === 'view' || mode === 'delete'}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </div>
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    name="estkomisimarketing2"
+                    control={forms.control}
+                    render={({ field }) => (
+                      <FormItem className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
+                        <FormLabel className="font-semibold  lg:w-[15%]">
+                          EST KOMISI MARKETING 2
                         </FormLabel>
                         <div className="flex flex-col lg:w-[85%]">
                           <FormControl>
@@ -371,30 +399,6 @@ const FormLabaRugiKalkulasi = ({
                   />
 
                   <FormField
-                    name="estkomisimarketing2"
-                    control={forms.control}
-                    render={({ field }) => (
-                      <FormItem className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
-                        <FormLabel className="font-semibold  lg:w-[15%]">
-                          EST KOMISI MARKETING 2
-                        </FormLabel>
-                        <div className="flex flex-col lg:w-[85%]">
-                          <FormControl>
-                            <InputCurrency
-                              value={field.value}
-                              onValueChange={(val) => {
-                                field.onChange(val);
-                              }}
-                              readOnly={mode === 'view' || mode === 'delete'}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </div>
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
                     name="estkomisikacabcabang1"
                     control={forms.control}
                     render={({ field }) => (
@@ -457,15 +461,23 @@ const FormLabaRugiKalkulasi = ({
                           key={index}
                           {...props}
                           lookupValue={(id) =>
-                            forms.setValue('statusfinalkomisimarketing', id)
+                            forms.setValue(
+                              'statusfinalkomisimarketing',
+                              String(id ?? '')
+                            )
                           }
                           onSelectRow={(val) =>
-                            forms.setValue('statusfinalkomisi_nama', val?.text)
+                            forms.setValue(
+                              'statusfinalkomisimarketing_uuid',
+                              val?.uuid
+                            )
                           }
-                          inputLookupValue={forms.getValues(
-                            'statusfinalkomisimarketing'
+                          // inputLookupValue={forms.getValues(
+                          //   'statusfinalkomisimarketing'
+                          // )}
+                          lookupNama={forms.getValues(
+                            'statusfinalkomisimarketing_text'
                           )}
-                          lookupNama={forms.getValues('statusfinalkomisi_nama')}
                         />
                       ))}
                     </div>
@@ -486,15 +498,23 @@ const FormLabaRugiKalkulasi = ({
                           key={index}
                           {...props}
                           lookupValue={(id) =>
-                            forms.setValue('statusfinalbonustriwulan', id)
+                            forms.setValue(
+                              'statusfinalbonustriwulan',
+                              String(id ?? '')
+                            )
                           }
                           onSelectRow={(val) =>
-                            forms.setValue('statusfinalbonus_nama', val?.text)
+                            forms.setValue(
+                              'statusfinalbonustriwulan_text',
+                              val?.text
+                            )
                           }
-                          inputLookupValue={forms.getValues(
-                            'statusfinalbonustriwulan'
+                          // inputLookupValue={forms.getValues(
+                          //   'statusfinalbonustriwulan'
+                          // )}
+                          lookupNama={forms.getValues(
+                            'statusfinalbonustriwulan_text'
                           )}
-                          lookupNama={forms.getValues('statusfinalbonus_nama')}
                         />
                       ))}
                     </div>

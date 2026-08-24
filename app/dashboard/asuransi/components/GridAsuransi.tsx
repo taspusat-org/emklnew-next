@@ -105,7 +105,12 @@ import {
   generateAsuransiReportFn
 } from '@/lib/apis/report.api';
 import { useReportPdfContext } from '@/hooks/ReportPdfProvider';
-import { HEADER_ROW_HEIGHT, LIMIT, ROW_HEIGHT } from '@/constants/constant';
+import {
+  HEADER_ROW_HEIGHT,
+  LIMIT,
+  ROW_HEIGHT,
+  NOMOR_CELL_BOX
+} from '@/constants/constant';
 
 interface Filter {
   page: number;
@@ -264,35 +269,7 @@ const GridAsuransi = () => {
     page: 1,
     limit: LIMIT,
     search: '',
-    filters: {
-      nama: '',
-      keterangan: '',
-      contactperson: '',
-      alamat: '',
-      kota: '',
-      kodepos: '',
-      telp: '',
-      email: '',
-      fax: '',
-      web: '',
-      ratemodal: '',
-      ratejual: '',
-      npwp: '',
-      nominalasuransi: '',
-      rateopendoor: '',
-      adminbiaya: '',
-      admintagih: '',
-      batas1: '',
-      batas2: '',
-      batas3: '',
-      materai1: '',
-      materai2: '',
-      materai3: '',
-      statusaktif: '',
-      modifiedby: '',
-      created_at: '',
-      updated_at: ''
-    },
+    filters: filterAsuransi,
     sortBy: 'nama',
     sortDirection: 'asc'
   });
@@ -329,100 +306,98 @@ const GridAsuransi = () => {
       {
         key: 'nomor',
         name: 'NO',
-        width: 50,
+        width: 40,
         headerCellClass: 'column-headers',
-        renderHeaderCell: (column: any) => (
-          <div className="flex h-full flex-col items-center gap-1">
-            <div className="headers-cell h-[50%] items-center justify-center text-center">
-              <p className="text-sm font-normal">No.</p>
+        renderHeaderCell: () => (
+          <div className="flex h-full w-full flex-col gap-1">
+            <div
+              className="headers-cell h-[50%] w-full"
+              onContextMenu={(event) =>
+                setContextMenu(handleContextMenu(event))
+              }
+            >
+              <p className="w-full text-center text-sm font-normal">No.</p>
             </div>
 
-            <div
-              className="flex h-[50%] w-full cursor-pointer items-center justify-center"
-              onClick={() => {
-                setFilters({
-                  ...filters,
-                  search: '',
-                  filters: {
-                    nama: '',
-                    keterangan: '',
-                    contactperson: '',
-                    alamat: '',
-                    kota: '',
-                    kodepos: '',
-                    telp: '',
-                    email: '',
-                    fax: '',
-                    web: '',
-                    ratemodal: '',
-                    ratejual: '',
-                    npwp: '',
-                    nominalasuransi: '',
-                    rateopendoor: '',
-                    adminbiaya: '',
-                    admintagih: '',
-                    batas1: '',
-                    batas2: '',
-                    batas3: '',
-                    materai1: '',
-                    materai2: '',
-                    materai3: '',
-                    statusaktif: '',
-                    modifiedby: '',
-                    created_at: '',
-                    updated_at: ''
-                  }
-                }),
-                  setInputValue('');
-                setTimeout(() => {
-                  gridRef?.current?.selectCell({ rowIdx: 0, idx: 1 });
-                }, 0);
-              }}
-            >
-              <FaTimes className="bg-red-500 text-white" />
+            <div className={`h-[50%] w-[calc(100%+2px)] ${NOMOR_CELL_BOX}`}>
+              <div className="flex justify-center">
+                <Checkbox
+                  checked={isAllSelected}
+                  onCheckedChange={() => handleSelectAll()}
+                  id="header-checkbox"
+                />
+              </div>
+              <div
+                className="flex cursor-pointer items-center justify-center"
+                onClick={() => {
+                  setFilters({
+                    ...filters,
+                    search: '',
+                    filters: {
+                      nama: '',
+                      keterangan: '',
+                      contactperson: '',
+                      alamat: '',
+                      kota: '',
+                      kodepos: '',
+                      telp: '',
+                      email: '',
+                      fax: '',
+                      web: '',
+                      ratemodal: '',
+                      ratejual: '',
+                      npwp: '',
+                      nominalasuransi: '',
+                      rateopendoor: '',
+                      adminbiaya: '',
+                      admintagih: '',
+                      batas1: '',
+                      batas2: '',
+                      batas3: '',
+                      materai1: '',
+                      materai2: '',
+                      materai3: '',
+                      statusaktif: '',
+                      modifiedby: '',
+                      created_at: '',
+                      updated_at: ''
+                    }
+                  }),
+                    setInputValue('');
+                  setTimeout(() => {
+                    gridRef?.current?.selectCell({ rowIdx: 0, idx: 1 });
+                  }, 0);
+                }}
+              >
+                <FaTimes className="bg-red-500 text-white" />
+              </div>
             </div>
           </div>
         ),
         renderCell: (props: any) => {
-          const localIndex = rows.findIndex((row) => row.id === props.row.id);
+          const rowId = props.row.id;
+          const localIndex = rows.findIndex((row) => row.id === rowId);
           const absoluteNumber =
             localIndex === -1
               ? '—'
               : (minVisiblePage - 1) * filters.limit + localIndex + 1;
           return (
-            <div className="flex h-full w-full cursor-pointer items-center justify-center text-sm">
-              {absoluteNumber}
+            <div
+              className={`-ml-[5px] h-full w-[calc(100%+9px)] cursor-pointer ${NOMOR_CELL_BOX}`}
+            >
+              <div className="flex justify-center">
+                <Checkbox
+                  checked={checkedRows.has(rowId)}
+                  onCheckedChange={() => handleRowSelect(rowId)}
+                  id={`row-checkbox-${rowId}`}
+                />
+              </div>
+              <div className="flex justify-center text-sm">
+                {absoluteNumber}
+              </div>
             </div>
           );
         }
-      },
-      {
-        key: 'select',
-        name: '',
-        width: 50,
-        headerCellClass: 'column-headers',
-        renderHeaderCell: (column: any) => (
-          <div className="flex h-full cursor-pointer flex-col items-center gap-1">
-            <div className="headers-cell h-[50%]"></div>
-            <div className="flex h-[50%] w-full items-center justify-center">
-              <Checkbox
-                checked={isAllSelected}
-                onCheckedChange={() => handleSelectAll()}
-                id="header-checkbox"
-                className="mb-2"
-              />
-            </div>
-          </div>
-        ),
-        renderCell: ({ row }: { row: IAsuransi }) => (
-          <div className="flex h-full items-center justify-center">
-            <Checkbox
-              checked={checkedRows.has(row.id)}
-              onCheckedChange={() => handleRowSelect(row.id)}
-              id={`row-checkbox-${row.id}`}
-            />
-          </div>
-        )
       },
 
       {
