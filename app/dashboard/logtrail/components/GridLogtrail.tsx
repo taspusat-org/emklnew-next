@@ -216,36 +216,30 @@ const GridLogtrail = () => {
       {
         key: 'nomor',
         name: 'NO',
-        width: 40,
+        width: 50,
         headerCellClass: 'column-headers',
-        renderHeaderCell: () => (
-          <div className="flex h-full w-full flex-col gap-1">
-            <div
-              className="headers-cell h-[50%] w-full"
-              onContextMenu={(event) =>
-                setContextMenu(handleContextMenu(event))
-              }
-            >
-              <p className="w-full text-center text-sm font-normal">No.</p>
+        resizable: true,
+        renderHeaderCell: (column: any) => (
+          <div className="flex h-full flex-col items-center gap-1">
+            <div className="headers-cell flex h-[50%] items-center justify-center text-center">
+              <p className="text-sm font-normal">No.</p>
             </div>
 
-            <div className={`h-[50%] w-[calc(100%+2px)] ${NOMOR_CELL_BOX}`}>
-              <div
-                className="flex cursor-pointer items-center justify-center"
-                onClick={() => {
-                  setFilters({
-                    ...filters,
-                    search: '',
-                    filters: filterLogtrail
-                  }),
-                    setInputValue('');
-                  setTimeout(() => {
-                    gridRef?.current?.selectCell({ rowIdx: 0, idx: 1 });
-                  }, 0);
-                }}
-              >
-                <FaTimes className="bg-red-500 text-white" />
-              </div>
+            <div
+              className="flex h-[50%] w-full cursor-pointer items-center justify-center"
+              onClick={() => {
+                setFilters({
+                  ...filters,
+                  search: '',
+                  filters: filterLogtrail
+                });
+                setInputValue('');
+                setTimeout(() => {
+                  gridRef?.current?.selectCell({ rowIdx: 0, idx: 1 });
+                }, 0);
+              }}
+            >
+              <FaTimes className="bg-red-500 text-white" />
             </div>
           </div>
         ),
@@ -256,13 +250,10 @@ const GridLogtrail = () => {
             localIndex === -1
               ? '—'
               : (minVisiblePage - 1) * filters.limit + localIndex + 1;
+
           return (
-            <div
-              className={`-ml-[5px] h-full w-[calc(100%+9px)] cursor-pointer ${NOMOR_CELL_BOX}`}
-            >
-              <div className="flex items-center justify-center text-sm">
-                {absoluteNumber}
-              </div>
+            <div className="flex h-full w-full cursor-pointer items-center justify-center text-center text-sm">
+              {absoluteNumber}
             </div>
           );
         }
