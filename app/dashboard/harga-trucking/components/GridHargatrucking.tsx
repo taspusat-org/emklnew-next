@@ -106,7 +106,12 @@ import {
   generateHargatruckingExportFn,
   generateHargatruckingReportFn
 } from '@/lib/apis/report.api';
-import { LIMIT, ROW_HEIGHT, HEADER_ROW_HEIGHT } from '@/constants/constant';
+import {
+  LIMIT,
+  ROW_HEIGHT,
+  HEADER_ROW_HEIGHT,
+  NOMOR_CELL_BOX
+} from '@/constants/constant';
 
 interface Filter {
   page: number;
@@ -288,13 +293,15 @@ const GridHargatrucking = () => {
   });
   const gridRef = useRef<DataGridHandle>(null);
   const [prevFilters, setPrevFilters] = useState<Filter>(filters);
+  const effectiveLimit = shouldBulkFetch ? filters.limit * 5 : filters.limit;
   const inputColRefs = useRef<{ [key: string]: HTMLInputElement | null }>({});
   const abortControllerRef = useRef<AbortController | null>(null);
   const { data: allHargatrucking, isLoading: isLoadingHargatrucking } =
     useGetHargatrucking(
       {
         ...filters,
-        page: currentPage
+        page: shouldBulkFetch ? bulkStartPage : currentPage,
+        limit: effectiveLimit
       },
       abortControllerRef.current?.signal
     );
@@ -318,85 +325,84 @@ const GridHargatrucking = () => {
       {
         key: 'nomor',
         name: 'NO',
-        width: 50,
+        width: 40,
         headerCellClass: 'column-headers',
-        renderHeaderCell: (column: any) => (
-          <div className="flex h-full flex-col items-center gap-1">
-            <div className="headers-cell h-[50%] items-center justify-center text-center">
-              <p className="text-sm font-normal">No.</p>
+        renderHeaderCell: () => (
+          <div className="flex h-full w-full flex-col gap-1">
+            <div
+              className="headers-cell h-[50%] w-full"
+              onContextMenu={(event) =>
+                setContextMenu(handleContextMenu(event))
+              }
+            >
+              <p className="w-full text-center text-sm font-normal">No.</p>
             </div>
 
-            <div
-              className="flex h-[50%] w-full cursor-pointer items-center justify-center"
-              onClick={() => {
-                setFilters({
-                  ...filters,
-                  search: '',
-                  filters: {
-                    tarifdetail_id: '',
-                    tujuankapal_text: '',
-                    emkl_text: '',
-                    container_text: '',
-                    jenisorder_text: '',
-                    keterangan: '',
-                    nominal: '',
-                    statusaktif: '',
-                    modifiedby: '',
-                    created_at: '',
-                    updated_at: ''
-                  }
-                }),
-                  setInputValue('');
-                setTimeout(() => {
-                  gridRef?.current?.selectCell({ rowIdx: 0, idx: 1 });
-                }, 0);
-              }}
-            >
-              <FaTimes className="bg-red-500 text-white" />
+            <div className={`h-[50%] w-[calc(100%+2px)] ${NOMOR_CELL_BOX}`}>
+              <div className="flex justify-center">
+                <Checkbox
+                  checked={isAllSelected}
+                  onCheckedChange={() => handleSelectAll()}
+                  id="header-checkbox"
+                />
+              </div>
+              <div
+                className="flex cursor-pointer items-center justify-center"
+                onClick={() => {
+                  setFilters({
+                    ...filters,
+                    search: '',
+                    filters: {
+                      tarifdetail_id: '',
+                      tujuankapal_text: '',
+                      emkl_text: '',
+                      container_text: '',
+                      jenisorder_text: '',
+                      keterangan: '',
+                      nominal: '',
+                      statusaktif: '',
+                      modifiedby: '',
+                      created_at: '',
+                      updated_at: ''
+                    }
+                  }),
+                    setInputValue('');
+                  setTimeout(() => {
+                    gridRef?.current?.selectCell({ rowIdx: 0, idx: 1 });
+                  }, 0);
+                }}
+              >
+                <FaTimes className="bg-red-500 text-white" />
+              </div>
             </div>
           </div>
         ),
         renderCell: (props: any) => {
-          const rowIndex = rows.findIndex((row) => row.id === props.row.id);
+          const rowId = props.row.id;
+          const localIndex = rows.findIndex((row) => row.id === rowId);
+          // console.log('rowId',rowId)
+          // console.log('minVisiblePage',minVisiblePage)
+          const absoluteNumber =
+            localIndex === -1
+              ? '—'
+              : (minVisiblePage - 1) * filters.limit + localIndex + 1;
           return (
-            <div className="flex h-full w-full cursor-pointer items-center justify-center text-sm">
-              {rowIndex + 1}
+            <div
+              className={`-ml-[5px] h-full w-[calc(100%+9px)] cursor-pointer ${NOMOR_CELL_BOX}`}
+            >
+              <div className="flex justify-center">
+                <Checkbox
+                  checked={checkedRows.has(rowId)}
+                  onCheckedChange={() => handleRowSelect(rowId)}
+                  id={`row-checkbox-${rowId}`}
+                />
+              </div>
+              <div className="flex justify-center text-sm">
+                {absoluteNumber}
+              </div>
             </div>
           );
         }
-      },
-      {
-        key: 'select',
-        name: '',
-        width: 50,
-        headerCellClass: 'column-headers',
-        renderHeaderCell: (column: any) => (
-          <div className="flex h-full cursor-pointer flex-col items-center gap-1">
-            <div
-              className="headers-cell h-[50%]"
-              onContextMenu={(event) =>
-                setContextMenu(handleContextMenu(event))
-              }
-            ></div>
-            <div className="flex h-[50%] w-full items-center justify-center">
-              <Checkbox
-                checked={isAllSelected}
-                onCheckedChange={() => handleSelectAll()}
-                id="header-checkbox"
-                className="mb-2"
-              />
-            </div>
-          </div>
-        ),
-        renderCell: ({ row }: { row: IHargatrucking }) => (
-          <div className="flex h-full items-center justify-center">
-            <Checkbox
-              checked={checkedRows.has(row.id)}
-              onCheckedChange={() => handleRowSelect(row.id)}
-              id={`row-checkbox-${row.id}`}
-            />
-          </div>
-        )
       },
 
       {
@@ -2111,7 +2117,7 @@ const GridHargatrucking = () => {
   //     alert({
   //       title: 'Terjadi kesalahan saat memuat data!',
   //       variant: 'danger',
-  //       submitText: 'OK'
+  //       submitTepage
   //     });
   //   } finally {
   //     dispatch(setProcessed()); // Hide loading overlay when the request is finished
@@ -2665,6 +2671,7 @@ const GridHargatrucking = () => {
       forms.setValue('text', rowData?.text ?? '');
     }
   }, [forms, selectedRow, rows, mode]);
+
   useEffect(() => {
     columns.forEach((col) => {
       if (!inputColRefs.current[col.key]) {

@@ -10,7 +10,7 @@ import {
   PURGE,
   REGISTER
 } from 'redux-persist';
-import storage from 'redux-persist/lib/storage';
+import createWebStorage from 'redux-persist/lib/storage/createWebStorage';
 import { combineReducers } from 'redux';
 
 import idReducer from './idSlice/idSlice';
@@ -31,6 +31,27 @@ import tabReducer from './tabSlice/tabSlice';
 import selectLookupReducer from './selectLookupSlice/selectLookupSlice';
 import forceEditReducer from './forceEditSlice/forceEditSlice';
 
+// 1. Buat Storage Safe untuk SSR (Server-Side Rendering)
+const createNoopStorage = () => {
+  return {
+    getItem(_key: string) {
+      return Promise.resolve(null);
+    },
+    setItem(_key: string, value: any) {
+      return Promise.resolve(value);
+    },
+    removeItem(_key: string) {
+      return Promise.resolve();
+    }
+  };
+};
+
+const storage =
+  typeof window !== 'undefined'
+    ? createWebStorage('local')
+    : createNoopStorage();
+
+// 2. Persist Config
 const persistConfig = {
   key: 'root',
   storage,

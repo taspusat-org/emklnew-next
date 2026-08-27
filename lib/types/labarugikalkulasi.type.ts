@@ -1,6 +1,6 @@
 import { IMeta } from './error.type';
 
-export interface LabaRugiKalkulasi {
+export interface ILabaRugiKalkulasi {
   id: string;
   periode: string;
   estkomisimarketing: string;
@@ -14,16 +14,16 @@ export interface LabaRugiKalkulasi {
   estkomisikacabcabang1: string;
   estkomisikacabcabang2: string;
   statusfinalkomisimarketing: string;
-  statusfinalkomisi_nama: string;
+  statusfinalkomisimarketing_text: string;
   statusfinalbonustriwulan: string;
-  statusfinalbonus_nama: string;
+  statusfinalbonustriwulan_text: string;
   modifiedby: string | null;
   created_at: string | null;
   updated_at: string | null;
 }
 
 export interface IAllLabaRugiKalkulasi {
-  data: LabaRugiKalkulasi[];
+  data: ILabaRugiKalkulasi[];
   type: string;
   pagination: IMeta;
 }
@@ -46,10 +46,8 @@ export const filterLabaRugiKalkulasi = {
   estkomisimarketing2: '',
   estkomisikacabcabang1: '',
   estkomisikacabcabang2: '',
-  statusfinalkomisimarketing: '',
-  statusfinalkomisi_text: '',
-  statusfinalbonustriwulan: '',
-  statusfinalbonus_text: '',
+  statusfinalkomisimarketing_text: '',
+  statusfinalbonustriwulan_text: '',
   modifiedby: '',
   created_at: '',
   updated_at: ''

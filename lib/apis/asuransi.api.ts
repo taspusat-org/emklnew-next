@@ -15,7 +15,6 @@ export const getAsuransiFn = async (
 ): Promise<IAllAsuransi> => {
   try {
     const queryParams = buildQueryParams(filters);
-
     const response = await api2.get('/asuransi', {
       params: queryParams,
       signal

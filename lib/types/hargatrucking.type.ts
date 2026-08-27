@@ -35,3 +35,16 @@ export interface IAllHargatrucking {
   type: string;
   pagination: IMeta;
 }
+
+export const filterHargatrucking = {
+  tujuankapal_text: '',
+  emkl_text: '',
+  keterangan: '',
+  container_text: '',
+  jenisorderan_text: '',
+  nominal: '',
+  text: '',
+  created_at: '',
+  updated_at: '',
+  modifiedby: ''
+};
