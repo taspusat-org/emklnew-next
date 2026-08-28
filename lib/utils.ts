@@ -237,19 +237,45 @@ export const loadGridConfig = async (
     const response = await fetch(
       `/api/loadgrid?userId=${userId}&gridName=${gridName}`
     );
-    console.log('responseresponse', response);
 
     const { columnsOrder, columnsWidth }: GridConfig = await response.json();
 
-    // columnsOrder berisi INDEX kolom, jadi hanya valid selama jumlah kolomnya
-    // masih sama. Kalau grid menambah/menghapus kolom, index lama menunjuk ke
-    // kolom lain (urutan teracak) dan index terakhir jadi undefined lalu kolom
-    // itu hilang dari grid — jatuhkan ke urutan default.
-    const isOrderStillValid =
-      Array.isArray(columnsOrder) &&
-      columnsOrder.length === defaultOrder.length;
+    const savedKeys = new Set(Object.keys(columnsWidth ?? {}));
 
-    setColumnsOrder(isOrderStillValid ? columnsOrder : defaultOrder);
+    // columnsOrder berisi INDEX kolom dan boleh lebih pendek dari defaultOrder:
+    // kolom yang di-uncheck di DraggableColumn memang tidak ikut disimpan.
+    const isOrderShapeValid =
+      Array.isArray(columnsOrder) &&
+      columnsOrder.length > 0 &&
+      columnsOrder.length <= defaultOrder.length &&
+      new Set(columnsOrder).size === columnsOrder.length &&
+      columnsOrder.every(
+        (index) =>
+          Number.isInteger(index) && index >= 0 && index < columns.length
+      );
+
+    // Index lama hanya valid selama susunan kolom di kode tidak berubah, jadi
+    // tiap index dicocokkan ke key yang ikut tersimpan di columnsWidth. Kalau
+    // ada kolom yang disisipkan/dihapus, index lama menunjuk kolom lain
+    // (urutan teracak) — jatuhkan ke urutan default.
+    const isOrderStillValid =
+      isOrderShapeValid &&
+      (savedKeys.size === 0
+        ? // config lama tanpa columnsWidth cuma bisa dicek lewat panjangnya
+          columnsOrder.length === defaultOrder.length
+        : columnsOrder.every((index) => savedKeys.has(columns[index]?.key)));
+
+    // Kolom yang belum dikenal config (baru ditambahkan di kode) tetap tampil
+    const newColumns = isOrderStillValid
+      ? defaultOrder.filter(
+          (index) =>
+            !savedKeys.has(columns[index]?.key) && !columnsOrder.includes(index)
+        )
+      : [];
+
+    setColumnsOrder(
+      isOrderStillValid ? [...columnsOrder, ...newColumns] : defaultOrder
+    );
 
     const hasServerWidths =
       columnsWidth != null && Object.keys(columnsWidth).length > 0;

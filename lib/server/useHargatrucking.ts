@@ -45,7 +45,7 @@ export const useCreateHargatrucking = () => {
       if (errorResponse !== undefined) {
         const errorFields = errorResponse.message || [];
 
-        if (errorResponse.statusCode === 400) {
+        if (errorResponse.statusCode === 400 && Array.isArray(errorFields)) {
           errorFields?.forEach((err: { path: string[]; message: string }) => {
             const path = err.path[0];
             setError(path, err.message);
@@ -73,7 +73,7 @@ export const useUpdateHargatrucking = () => {
       if (errorResponse !== undefined) {
         const errorFields = errorResponse.message || [];
 
-        if (errorResponse.statusCode === 400) {
+        if (errorResponse.statusCode === 400 && Array.isArray(errorFields)) {
           errorFields?.forEach((err: { path: string[]; message: string }) => {
             const path = err.path[0];
             setError(path, err.message);
@@ -105,7 +105,7 @@ export const useDeleteHargatrucking = () => {
       if (errorResponse !== undefined) {
         const errorFields = errorResponse.message || [];
 
-        if (errorResponse.statusCode === 400) {
+        if (errorResponse.statusCode === 400 && Array.isArray(errorFields)) {
           errorFields?.forEach((err: { path: string[]; message: string }) => {
             const path = err.path[0];
             setError(path, err.message);

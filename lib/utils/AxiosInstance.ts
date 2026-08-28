@@ -14,14 +14,29 @@ import { alertStore } from '../store/client/useAlert';
 import { offlineOverlayStore } from '../store/client/useOfflineOverlay';
 import { setProcessed } from '../store/loadingSlice/loadingSlice';
 import { sanitizeAxiosError } from './errorMessage';
+import { queryClient } from './queryClient';
 
 // ─── HTTP method classification ───────────────────────────────────────────────
-// Only mutation methods get the aggressive 10s timeout + abort-on-offline
+// Only mutation methods get the shorter timeout + abort-on-offline
 // behavior.  Read methods (get/head/options) use a long timeout so they are
 // never cut short by the mutation timeout logic.
 const MUTATION_METHODS = new Set(['post', 'put', 'patch', 'delete']);
-const MUTATION_TIMEOUT_MS = 30_000; // 10s for CUD requests
-const READ_TIMEOUT_MS = 60_000; // 2min for GET/HEAD/OPTIONS — effectively "long"
+// Harus LEBIH LAMA dari REQUEST_TIMEOUT_MS backend (default 30s). Kalau browser
+// yang menyerah duluan, ia tidak pernah tahu apakah datanya sempat di-commit;
+// kalau server yang menyerah, jawabannya pasti: 408 = transaksi sudah rollback.
+const MUTATION_TIMEOUT_MS = 35_000; // CUD requests
+const READ_TIMEOUT_MS = 60_000; // GET/HEAD/OPTIONS
+
+// Browser yang menyerah tidak tahu nasib datanya, jadi jangan bilang "gagal".
+// Dipakai juga untuk 504: gateway di depan aplikasi yang menyerah sama tidak
+// tahunya dengan browser — ia tidak tahu apa pun soal transaksi backend.
+const TIMEOUT_MESSAGE_CLIENT =
+  'PERMINTAAN MELEBIHI BATAS WAKTU. DATA MUNGKIN SUDAH TERSIMPAN — PERIKSA DAFTARNYA DULU SEBELUM MENYIMPAN ULANG.';
+// HANYA untuk 408 dari TimeoutInterceptor backend, yang tidak pernah dikirim
+// untuk request yang sudah masuk tahap commit — jadi "tidak tersimpan" di sini
+// memang kepastian, bukan tebakan.
+const TIMEOUT_MESSAGE_SERVER =
+  'PERMINTAAN MELEBIHI BATAS WAKTU DAN DIBATALKAN SERVER. DATA TIDAK TERSIMPAN, SILAKAN COBA LAGI.';
 
 const isMutationMethod = (method?: string): boolean =>
   MUTATION_METHODS.has((method ?? '').toLowerCase());
@@ -439,12 +454,26 @@ const configureAxios = (baseURL: string): AxiosInstance => {
         }
       }
 
-      // ─── Timeout (ECONNABORTED = Axios built-in timeout fired) ────────────
+      // ─── Timeout (browser gave up, or 408/504 from the server) ────────────
+      // ECONNABORTED means the browser gave up first. A backend (or proxy)
+      // timeout arrives as a real response instead — 408 from the Nest timeout
+      // interceptor — and used to slip past this block, so the mutation failed
+      // without any message at all.
       // The timeout alert + processed reset is ONLY for mutation requests.
       // GET/HEAD/OPTIONS timeouts propagate silently so callers can decide how
       // to handle them (retry, fallback to cache, etc.) without us hijacking
       // the UI with a modal alert.
-      if (error.code === 'ECONNABORTED') {
+      //
+      // 408 dan 504 sengaja DIPISAH. 408 datang dari TimeoutInterceptor backend
+      // yang tahu persis nasib transaksinya dan tidak pernah mengirim 408 untuk
+      // request yang sudah masuk tahap commit. 504 datang dari nginx/proxy di
+      // depan aplikasi, yang tidak tahu apa-apa soal transaksi — memperlakukannya
+      // sebagai "pasti tidak tersimpan" adalah tebakan yang dinyatakan sebagai
+      // kepastian, dan itulah yang memancing user menyimpan ulang jadi dobel.
+      const backendTimedOut = error.response?.status === 408;
+      const gatewayTimedOut = error.response?.status === 504;
+
+      if (error.code === 'ECONNABORTED' || backendTimedOut || gatewayTimedOut) {
         const isMutation =
           (
             originalRequest as
@@ -459,11 +488,20 @@ const configureAxios = (baseURL: string): AxiosInstance => {
 
         if (typeof window !== 'undefined') {
           void alertStore.getState().alert({
-            title: 'Koneksi Timeout',
+            title: backendTimedOut
+              ? TIMEOUT_MESSAGE_SERVER
+              : TIMEOUT_MESSAGE_CLIENT,
             variant: 'danger',
             submitText: 'OK'
           });
         }
+
+        // Selalu tarik ulang daftarnya, apa pun jenis timeout-nya. Dulu 408
+        // dilewati dengan alasan "pasti rollback, tidak ada yang berubah" —
+        // tapi justru pada kasus di mana pesannya meleset, itu menghilangkan
+        // satu-satunya cara user melihat kondisi sebenarnya. Biayanya satu GET.
+        void queryClient.invalidateQueries();
+
         store.dispatch(setProcessed());
 
         return Promise.reject(error);

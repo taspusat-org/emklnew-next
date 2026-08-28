@@ -66,11 +66,16 @@ const FormBiayaExtraHeader = ({
     (state: RootState) => state.filter
   );
 
+  // Mode add tidak boleh ikut menarik detail milik header yang kebetulan masih
+  // terpilih di grid: datanya tidak dipakai dan kalau responsnya datang
+  // belakangan, baris yang sudah diisi user ikut ter-reset.
   const {
     data: allDataDetail,
     isLoading: isLoadingData,
     refetch
-  } = useGetBiayaExtraMuatanDetail(headerData?.id ?? 0);
+  } = useGetBiayaExtraMuatanDetail(
+    mode === 'add' ? undefined : headerData?.id ?? undefined
+  );
 
   const fmt = (date: Date) =>
     `${String(date.getDate()).padStart(2, '0')}-${String(
@@ -157,29 +162,41 @@ const FormBiayaExtraHeader = ({
     }
   ];
 
-  const addRow = () => {
-    const newRow: Partial<BiayaExtraMuatanDetail> & { isNew: boolean } = {
-      id: '',
-      nobukti: '',
-      biayaextra_id: '',
-      orderanmuatan_id: '',
-      orderanmuatan_nobukti: '',
-      estimasi: '',
-      // nominal: '',
-      statustagih: '',
-      statustagih_nama: '',
-      nominaltagih: '',
-      keterangan: '',
-      groupbiayaextra_id: '',
-      groupbiayaextra_nama: '',
-      isNew: true
-    };
+  const emptyDetailRow = (): Partial<BiayaExtraMuatanDetail> & {
+    isNew: boolean;
+  } => ({
+    id: '',
+    nobukti: '',
+    biayaextra_id: '',
+    orderanmuatan_id: '',
+    orderanmuatan_nobukti: '',
+    estimasi: '',
+    statustagih: '',
+    statustagih_nama: '',
+    nominaltagih: '',
+    keterangan: '',
+    groupbiayaextra_id: '',
+    groupbiayaextra_nama: '',
+    isNew: true
+  });
 
-    setRows((prevRows) => [
-      ...prevRows.slice(0, prevRows.length - 1),
-      newRow,
-      prevRows[prevRows.length - 1]
-    ]);
+  const addRow = () => {
+    setRows((prevRows) => {
+      // prevRows kosong berarti baris "add_row" belum ada; sisipkan langsung
+      // supaya tidak menghasilkan elemen undefined di akhir array.
+      if (prevRows.length === 0) {
+        return [
+          emptyDetailRow(),
+          { isAddRow: true, id: 'add_row', isNew: false } as any
+        ];
+      }
+
+      return [
+        ...prevRows.slice(0, prevRows.length - 1),
+        emptyDetailRow(),
+        prevRows[prevRows.length - 1]
+      ];
+    });
   };
 
   const deleteRow = (index: number) => {
@@ -657,9 +674,22 @@ const FormBiayaExtraHeader = ({
     };
   }, [openName]); // Tambahkan popOverDate sebagai dependen
 
+  // Add: grid detail tidak menunggu response apa pun, jadi baris kosong +
+  // tombol "tambah baris" harus disiapkan begitu modal dibuka. Sebelumnya
+  // inisialisasi ini ikut menunggu `allDataDetail`, padahal di mode add
+  // query-nya mati (enabled: !!id) sehingga rows tetap [] dan grid tampak kosong.
   useEffect(() => {
-    if (allDataDetail && popOver) {
-      if (allDataDetail?.data?.length > 0 && mode !== 'add') {
+    if (!popOver || mode !== 'add') return;
+
+    setRows([
+      emptyDetailRow(),
+      { isAddRow: true, id: 'add_row', isNew: false }
+    ]);
+  }, [popOver, mode]);
+
+  useEffect(() => {
+    if (allDataDetail && popOver && mode !== 'add') {
+      if (allDataDetail?.data?.length > 0) {
         // Format data detail utama (tanpa rincian)
         const formattedRows = allDataDetail.data.map((item: any) => ({
           id: item.id,
@@ -684,23 +714,7 @@ const FormBiayaExtraHeader = ({
         ]);
       } else {
         setRows([
-          // If no data, add one editable row and the "Add Row" button row at the end
-          {
-            id: '',
-            nobukti: '',
-            biayaextra_id: '',
-            orderanmuatan_id: '',
-            orderanmuatan_nobukti: '',
-            estimasi: '',
-            // nominal: '',
-            statustagih: '',
-            statustagih_nama: '',
-            nominaltagih: '',
-            keterangan: '',
-            groupbiayaextra_id: '',
-            groupbiayaextra_nama: '',
-            isNew: true
-          },
+          emptyDetailRow(),
           { isAddRow: true, id: 'add_row', isNew: false } // Row for the "Add Row" button
         ]);
       }
