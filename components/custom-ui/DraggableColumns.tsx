@@ -46,6 +46,11 @@ const cssCenter: React.CSSProperties = {
   justifyContent: 'center'
 };
 
+// Kolom yang boleh di-checklist di popup. Kolom 'select' masih dipasang tanpa
+// properti draggable di sebagian grid, jadi ikut dianggap toggleable.
+const isToggleable = (col: any) =>
+  !!col && (col.draggable !== undefined || col.key === 'select');
+
 export default function DraggableColumn({
   defaultColumns,
   saveColumns,
@@ -75,43 +80,35 @@ export default function DraggableColumn({
   };
 
   const handleSave = () => {
-    const columnForNumber = {
-      key: 'nomor',
-      name: 'NO',
-      width: 50,
-      headerCellClass: 'column-headers'
-    };
-
-    const selectedDefault = [
-      ...defaultColumns.filter((item: any) => checkedRows.has(item.key))
-    ];
-
-    const selectedDraggable = [
-      ...itemDraggable.filter((item: any) => checkedRows.has(item.key))
-    ];
-
-    const selectedNotDraggable = [
-      ...itemNotDraggable.filter((item: any) => checkedRows.has(item.key))
-    ];
-
-    const mergedItems = [columnForNumber, ...selectedDraggable];
-
-    if (selectedNotDraggable.length > 0) {
-      selectedNotDraggable.forEach((item) => {
-        if (item.order >= mergedItems.length) {
-          mergedItems.push(item);
-        } else {
-          mergedItems.splice(item.order, 0, item);
-        }
-      });
-    }
-
-    const orderedItems = mergedItems.map((item) =>
-      selectedDefault.findIndex((def) => def.key === item.key)
+    // Kolom yang tidak muncul di daftar (mis. 'nomor') tidak bisa di-uncheck,
+    // jadi selalu ikut tersimpan.
+    const alwaysVisible = defaultColumns.filter(
+      (col: any) => !isToggleable(col)
     );
 
-    const columnsWidth = mergedItems.reduce((acc: any, item: any) => {
-      acc[item.key] = item.width;
+    // itemDraggable dan itemNotDraggable memakai satu ruang order yang sama,
+    // jadi urutan finalnya cukup diambil dari order tersebut.
+    const selectedItems = [...itemDraggable, ...itemNotDraggable]
+      .filter((item) => checkedRows.has(item.key))
+      .sort((a, b) => a.order - b.order);
+
+    // columnsOrder dibaca grid sebagai columns[index], jadi index-nya harus
+    // dihitung terhadap defaultColumns yang utuh — bukan terhadap hasil filter.
+    const orderedItems = [...alwaysVisible, ...selectedItems]
+      .map((item: any) =>
+        defaultColumns.findIndex((col: any) => col.key === item.key)
+      )
+      .filter((index: number) => index >= 0);
+
+    // Width disimpan untuk semua kolom, bukan cuma yang tampil: loadGridConfig
+    // memakai key-nya untuk membedakan kolom yang sengaja disembunyikan dari
+    // kolom baru yang ditambahkan di kode.
+    const visibleWidth = new Map<string, any>(
+      saveColumns.map((col: any) => [col.key, col.width])
+    );
+
+    const columnsWidth = defaultColumns.reduce((acc: any, col: any) => {
+      acc[col.key] = visibleWidth.get(col.key) ?? col.width;
       return acc;
     }, {});
 
@@ -157,7 +154,10 @@ export default function DraggableColumn({
     return (
       <>
         {itemNotDraggable.map((item) => (
-          <div className="relative flex w-full cursor-not-allowed items-center rounded-sm bg-background font-bold">
+          <div
+            key={item.id}
+            className="relative flex w-full cursor-not-allowed items-center rounded-sm bg-background font-bold"
+          >
             <div
               className="ml-8 w-8 gap-2"
               style={{ ...cssCenter, width: '3rem' }}
@@ -186,14 +186,15 @@ export default function DraggableColumn({
     const usedKeys = new Set(savedColumns.map((col) => col.key));
     setCheckedRows(usedKeys);
 
-    // Keluarkan dari default kolom yg key nya tidak ada di savedColumn
+    // Keluarkan dari default kolom yg key nya tidak ada di savedColumn.
+    // Predikatnya harus sama dengan filter di bawah, kalau tidak kolom yang
+    // disembunyikan tidak pernah muncul lagi di daftar dan tidak bisa dicentang.
     const columnsNotSaved = defaultColumns.filter(
-      (col) => !usedKeys.has(col.key) && col.draggable !== undefined
+      (col) => !usedKeys.has(col.key) && isToggleable(col)
     );
 
     const fixItems = [...savedColumns, ...columnsNotSaved]
-      // DARI .filter((i) => i && i.draggable !== undefined UBAH JADI .filter((i) => (i && i.draggable !== undefined) || i.key == 'select') untuk sementara supaya dinamis karna kolom select masi ada yg dipasang draggable dan tidak ada draggable
-      .filter((i) => (i && i.draggable !== undefined) || i.key == 'select')
+      .filter(isToggleable)
       .map((col: any, idx: number) => ({
         ...col,
         id: col.key,
@@ -216,7 +217,6 @@ export default function DraggableColumn({
     });
 
     const notDraggable = finalColumns.filter((item: any) => {
-      // UBAH DARI JADI return item.draggable === false || (!item.draggable && item.key == 'select'); untuk sementara supaya dinamis karna kolom select masi ada yg dipasang draggable dan tidak ada draggable
       return (
         item.draggable === false || (!item.draggable && item.key == 'select')
       );

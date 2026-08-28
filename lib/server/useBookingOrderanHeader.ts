@@ -88,7 +88,7 @@ export const useCreateBookingOrderanHeader = () => {
         const errorFields = Array.isArray(errorResponse.message)
           ? errorResponse.message
           : [];
-        if (errorResponse.statusCode === 400) {
+        if (errorResponse.statusCode === 400 && Array.isArray(errorFields)) {
           // Iterasi error message dan set error di form
           errorFields?.forEach((err: { path: string[]; message: string }) => {
             const path = err.path[0];
@@ -125,7 +125,7 @@ export const useCreateBookingMuatanParty = () => {
         const errorFields = Array.isArray(errorResponse.message)
           ? errorResponse.message
           : [];
-        if (errorResponse.statusCode === 400) {
+        if (errorResponse.statusCode === 400 && Array.isArray(errorFields)) {
           // Iterasi error message dan set error di form
           errorFields?.forEach((err: { path: string[]; message: string }) => {
             const path = err.path[0];
@@ -160,7 +160,7 @@ export const useUpdateBookingOrderanHeader = () => {
           ? errorResponse.message
           : [];
 
-        if (errorResponse.statusCode === 400) {
+        if (errorResponse.statusCode === 400 && Array.isArray(errorFields)) {
           errorFields?.forEach((err: { path: string[]; message: string }) => {
             const path = err.path[0];
             setError(path, err.message);

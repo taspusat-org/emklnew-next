@@ -64,6 +64,7 @@ import {
   setProcessing
 } from '@/lib/store/loadingSlice/loadingSlice';
 import { useFormError } from '@/lib/hooks/formErrorContext';
+import { useIdempotencyKey } from '@/lib/hooks/useIdempotencyKey';
 import FilterOptions from '@/components/custom-ui/FilterOptions';
 import { debounce } from 'lodash';
 import FilterInput from '@/components/custom-ui/FilterInput';
@@ -171,6 +172,11 @@ const GridUser = () => {
     useCreateUser();
   const { mutateAsync: updateUser, isLoading: isLoadingUpdate } =
     useUpdateUser();
+  const {
+    start: startIdempotencyKey,
+    keyFor: idempotencyKeyFor,
+    reset: resetIdempotencyKey
+  } = useIdempotencyKey();
   const [currentPage, setCurrentPage] = useState(1);
   const [inputValue, setInputValue] = useState<string>('');
   const [hasMore, setHasMore] = useState(true);
@@ -185,6 +191,13 @@ const GridUser = () => {
   const [mode, setMode] = useState<string>('');
   const [isFilteringRows, setIsFilteringRows] = useState(false);
   const [dataGridKey, setDataGridKey] = useState(0);
+
+  // Satu form terbuka = satu kunci idempotency. Modal tetap terbuka saat request
+  // timeout, jadi SIMPAN berikutnya membawa kunci yang sama dan backend
+  // membalasnya dengan hasil kiriman pertama, bukan membuat data kedua.
+  useEffect(() => {
+    if (popOver) startIdempotencyKey(`user-${mode || 'form'}`);
+  }, [popOver, mode, startIdempotencyKey]);
 
   const contextMenuRef = useRef<HTMLDivElement | null>(null);
   const [contextMenu, setContextMenu] = useState<{
@@ -1461,72 +1474,85 @@ const GridUser = () => {
       dispatch(setProcessing());
       if (mode === 'delete') {
         if (selectedRowId) {
-          await deleteUser(selectedRowId as unknown as string, {
-            onSuccess: () => {
-              setPopOver(false);
+          await deleteUser(
+            {
+              id: selectedRowId as unknown as string,
+              idempotencyKey: idempotencyKeyFor({
+                aksi: 'delete',
+                id: selectedRowId
+              })
+            },
+            {
+              onSuccess: () => {
+                resetIdempotencyKey();
+                setPopOver(false);
 
-              // 1. Remove from visible rows
-              setRows((prevRows) =>
-                prevRows.filter((row) => row.id !== selectedRowId)
-              );
+                // 1. Remove from visible rows
+                setRows((prevRows) =>
+                  prevRows.filter((row) => row.id !== selectedRowId)
+                );
 
-              // 2. Remove from pageDataCache (all pages)
-              setPageDataCache((prevCache) => {
-                const updated = new Map(prevCache);
-                updated.forEach((pageRows, pageNum) => {
+                // 2. Remove from pageDataCache (all pages)
+                setPageDataCache((prevCache) => {
+                  const updated = new Map(prevCache);
+                  updated.forEach((pageRows, pageNum) => {
+                    const filtered = pageRows.filter(
+                      (row) => row.id !== selectedRowId
+                    );
+                    if (filtered.length !== pageRows.length) {
+                      updated.set(pageNum, filtered);
+                    }
+                  });
+                  return updated;
+                });
+
+                // 3. Remove from streamBuffer
+                const newBuffer = new Map(streamBufferRef.current);
+                newBuffer.forEach((pageRows, pageNum) => {
                   const filtered = pageRows.filter(
                     (row) => row.id !== selectedRowId
                   );
                   if (filtered.length !== pageRows.length) {
-                    updated.set(pageNum, filtered);
+                    newBuffer.set(pageNum, filtered);
                   }
                 });
-                return updated;
-              });
+                streamBufferRef.current = newBuffer;
 
-              // 3. Remove from streamBuffer
-              const newBuffer = new Map(streamBufferRef.current);
-              newBuffer.forEach((pageRows, pageNum) => {
-                const filtered = pageRows.filter(
-                  (row) => row.id !== selectedRowId
-                );
-                if (filtered.length !== pageRows.length) {
-                  newBuffer.set(pageNum, filtered);
+                // 4. Fokus baris BERIKUTNYA (by-id). Setelah baris dihapus,
+                // baris tepat di bawahnya naik mengisi slot yang sama -> itulah
+                // yang difokuskan. Jika yang dihapus baris paling bawah window,
+                // jatuh ke baris di atasnya. Pemfokusan dilakukan via
+                // pendingFocusIdRef (BY-ID), bukan selectCell by-index: Row
+                // Combiner jalan ulang setelah cache di-update, dan tanpa
+                // pendingFocusIdRef cabang else-nya men-scroll & men-select balik
+                // ke row 0.
+                const nextFocusRow =
+                  rows[selectedRow + 1] ?? rows[selectedRow - 1];
+                if (nextFocusRow) {
+                  pendingFocusIdRef.current = String(nextFocusRow.id);
+                } else {
+                  // Tidak ada baris tersisa pada window ini.
+                  setSelectedRow(0);
+                  selectedRowRef.current = 0;
                 }
-              });
-              streamBufferRef.current = newBuffer;
-
-              // 4. Fokus baris BERIKUTNYA (by-id). Setelah baris dihapus,
-              // baris tepat di bawahnya naik mengisi slot yang sama -> itulah
-              // yang difokuskan. Jika yang dihapus baris paling bawah window,
-              // jatuh ke baris di atasnya. Pemfokusan dilakukan via
-              // pendingFocusIdRef (BY-ID), bukan selectCell by-index: Row
-              // Combiner jalan ulang setelah cache di-update, dan tanpa
-              // pendingFocusIdRef cabang else-nya men-scroll & men-select balik
-              // ke row 0.
-              const nextFocusRow =
-                rows[selectedRow + 1] ?? rows[selectedRow - 1];
-              if (nextFocusRow) {
-                pendingFocusIdRef.current = String(nextFocusRow.id);
-              } else {
-                // Tidak ada baris tersisa pada window ini.
-                setSelectedRow(0);
-                selectedRowRef.current = 0;
               }
             }
-          });
+          );
         }
         return;
       }
 
       if (mode === 'add') {
+        // Kirim filter ke body/payload
+        const payload = { ...values, ...filters };
         const newOrder = await createUser(
           {
-            ...values,
-            ...filters // Kirim filter ke body/payload
+            fields: payload as UserInput,
+            idempotencyKey: idempotencyKeyFor(payload)
           },
           {
-            onSuccess: (data: any) =>
+            onSuccess: (data: any) => {
+              resetIdempotencyKey();
               onSuccess(
                 data.itemIndex,
                 data.fetchedPages,
@@ -1534,7 +1560,8 @@ const GridUser = () => {
                 data.pageNumber,
                 keepOpenModal,
                 data.newItem?.id ?? null
-              )
+              );
+            }
           }
         );
 
@@ -1544,13 +1571,16 @@ const GridUser = () => {
       }
 
       if (selectedRowId && mode === 'edit') {
+        const payload = { ...values, ...filters };
         await updateUser(
           {
             id: selectedRowId as unknown as string,
-            fields: { ...values, ...filters }
+            fields: payload as UserInput,
+            idempotencyKey: idempotencyKeyFor({ id: selectedRowId, ...payload })
           },
           {
-            onSuccess: (data: any) =>
+            onSuccess: (data: any) => {
+              resetIdempotencyKey();
               onSuccess(
                 data.itemIndex,
                 data.fetchedPages,
@@ -1558,7 +1588,8 @@ const GridUser = () => {
                 data.pageNumber,
                 false,
                 data.updatedItem?.id ?? selectedRowId ?? null
-              )
+              );
+            }
           }
         );
       }

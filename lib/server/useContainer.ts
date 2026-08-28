@@ -58,7 +58,7 @@ export const useCreateContainer = () => {
         // Menangani error berdasarkan path
         const errorFields = errorResponse.message || [];
 
-        if (errorResponse.statusCode === 400) {
+        if (errorResponse.statusCode === 400 && Array.isArray(errorFields)) {
           // Iterasi error message dan set error di form
           errorFields?.forEach((err: { path: string[]; message: string }) => {
             const path = err.path[0]; // Ambil path error pertama (misalnya 'nama', 'akuntansi_id')
@@ -93,7 +93,7 @@ export const useDeleteContainer = () => {
         // Menangani error berdasarkan path
         const errorFields = errorResponse.message || [];
 
-        if (errorResponse.statusCode === 400) {
+        if (errorResponse.statusCode === 400 && Array.isArray(errorFields)) {
           // Iterasi error message dan set error di form
           errorFields?.forEach((err: { path: string[]; message: string }) => {
             const path = err.path[0]; // Ambil path error pertama (misalnya 'nama', 'akuntansi_id')
@@ -127,7 +127,7 @@ export const useUpdateContainer = () => {
         // Menangani error berdasarkan path
         const errorFields = errorResponse.message || [];
 
-        if (errorResponse.statusCode === 400) {
+        if (errorResponse.statusCode === 400 && Array.isArray(errorFields)) {
           // Iterasi error message dan set error di form
           errorFields?.forEach((err: { path: string[]; message: string }) => {
             const path = err.path[0]; // Ambil path error pertama (misalnya 'nama', 'akuntansi_id')

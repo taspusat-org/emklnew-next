@@ -205,7 +205,7 @@ export const useUpdateEstimasiBiayaHeader = () => {
           ? errorResponse.message
           : [];
 
-        if (errorResponse.statusCode === 400) {
+        if (errorResponse.statusCode === 400 && Array.isArray(errorFields)) {
           errorFields?.forEach((err: { path: string[]; message: string }) => {
             const path = err.path[0];
             setError(path, err.message);

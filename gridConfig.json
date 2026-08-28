@@ -16,19 +16,16 @@
     }
   },
   "GridAlatbayar-02-E0CF9E01-0ED9-2C70-8463-360B144DB2A7": {
-    "columnsOrder": [0, 1, 2, 4, 3, 5, 6, 7, 8, 9, 10],
+    "columnsOrder": [0, 1, 2, 3, 4, 5, 6, 7],
     "columnsWidth": {
       "nomor": 50,
       "select": 50,
-      "statusaktif": 70,
-      "nama": 200,
       "keterangan": 300,
       "statuslangsungcair": 70,
       "statusdefault": 70,
       "statusbank": 80,
       "modifiedby": 100,
-      "created_at": 170,
-      "updated_at": 170
+      "created_at": 170
     }
   },
   "GridHutangHeader-02-E0CF9E01-0ED9-2C70-8463-360B144DB2A7": {
@@ -74,8 +71,8 @@
   },
   "GridAsuransi-02-E0CF9E01-0ED9-2C70-8463-360B144DB2A7": {
     "columnsOrder": [
-      0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
-      21, 22, 23, 24, 25, 26, 27
+      0, 6, 7, 5, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23,
+      24, 25, 26, 27
     ],
     "columnsWidth": {
       "nomor": 40,
@@ -131,13 +128,13 @@
     }
   },
   "GridHargatrucking-02-E0CF9E01-0ED9-2C70-8463-360B144DB2A7": {
-    "columnsOrder": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+    "columnsOrder": [0, 2, 4, 3, 6, 7, 8, 9, 10, 1, 5],
     "columnsWidth": {
-      "nomor": 40,
+      "nomor": 50,
       "statusaktif": 70,
       "tujuankapal_text": 150,
       "emkl_text": 70,
-      "keterangan": 318.5,
+      "keterangan": 200,
       "container_text": 80,
       "jenisorder_text": 80,
       "nominal": 150,

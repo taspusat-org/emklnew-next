@@ -1,9 +1,10 @@
 'use client';
 
 import { Provider } from 'react-redux';
-import { QueryClient, QueryClientProvider, setLogger } from 'react-query';
+import { QueryClientProvider, setLogger } from 'react-query';
 import { PersistGate } from 'redux-persist/integration/react';
 import { persistor, store } from '@/lib/store/store';
+import { queryClient } from '@/lib/utils/queryClient';
 import Alert, { AlertOptions } from '@/components/custom-ui/AlertCustom';
 import { useAlert } from '@/lib/store/client/useAlert';
 import { SidebarProvider } from '@/components/ui/sidebar';
@@ -39,27 +40,6 @@ setLogger({
       return;
     }
     console.error(...args);
-  }
-});
-
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      refetchOnWindowFocus: false,
-      retry: 1,
-      staleTime: 0
-    },
-    mutations: {
-      // Never retry a mutation that was intentionally cancelled (e.g. offline abort).
-      // Retrying ERR_CANCELED would re-send the request in the background while the
-      // offline overlay is showing, leaving isLoading=true when the user returns.
-      retry: (failureCount: number, error: unknown) => {
-        const err = error as { code?: string; name?: string } | null;
-        if (err?.code === 'ERR_CANCELED' || err?.name === 'CanceledError')
-          return false;
-        return failureCount < 1;
-      }
-    }
   }
 });
 
