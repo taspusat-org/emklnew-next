@@ -180,8 +180,8 @@ const GridLogtrail = () => {
     limit: LIMIT,
     search: '',
     filters: filterLogtrail,
-    sortBy: 'id',
-    sortDirection: 'asc'
+    sortBy: 'created_at',
+    sortDirection: 'desc'
   });
   const gridRef = useRef<DataGridHandle>(null);
   const [prevFilters, setPrevFilters] = useState<Filter>(filters);
@@ -1624,6 +1624,7 @@ const GridLogtrail = () => {
       setSelectedRow(0);
       gridRef.current.selectCell({ rowIdx: 0, idx: 1 });
       setIsFirstLoad(false);
+      console.log('PERBARUI ID HEADER LOG TRAIL 1');
       dispatch(setIdHeaderLogtrail(rows[0].id as unknown as number));
       dispatch(setIdDetailLogtrail(rows[0].idtrans as unknown as number));
     }
@@ -1942,10 +1943,14 @@ const GridLogtrail = () => {
   useEffect(() => {
     if (rows.length > 0 && selectedRow !== null) {
       const selectedRowData = rows[selectedRow];
+      console.log('PERBARUI ID HEADER LOG TRAIL 2');
       dispatch(setIdHeaderLogtrail(selectedRowData.id as unknown as number)); // Pastikan data sudah benar
       dispatch(
         setIdDetailLogtrail(selectedRowData.idtrans as unknown as number)
       ); // Pastikan data sudah benar
+    } else {
+      dispatch(setIdHeaderLogtrail(-1)); // Pastikan data sudah benar
+      dispatch(setIdDetailLogtrail(-1)); // Pastikan data sudah benar
     }
   }, [rows, selectedRow, dispatch]);
   useEffect(() => {

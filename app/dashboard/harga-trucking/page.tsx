@@ -20,6 +20,7 @@ import { getEmklFn } from '@/lib/apis/emkl.api';
 import { getContainerFn } from '@/lib/apis/container.api';
 import { getJenisOrderanFn } from '@/lib/apis/jenisorderan.api';
 import { getHargatruckingFn } from '@/lib/apis/hargatrucking.api';
+import { IParameter } from '@/lib/types/parameter.type';
 
 interface ApiResponse {
   type: string;
@@ -113,20 +114,25 @@ const Page = () => {
           setType({ key: 'JENIS ORDERAN', type: getJenisOrderanLookup.type })
         );
 
-        if (getStatusAktifLookup.type === 'local') {
+        if (
+          getStatusAktifLookup.type === 'local' &&
+          getStatusAktifLookup.data
+        ) {
           const grpsToFilter = ['STATUS AKTIF'];
 
           grpsToFilter.forEach((grp) => {
             const filteredData = getStatusAktifLookup.data.filter(
-              (item: any) => item.grp === grp
+              (item: IParameter) => item.grp === grp
             );
 
             dispatch(setData({ key: grp, data: filteredData }));
             dispatch(setType({ key: grp, type: getStatusAktifLookup.type }));
 
-            const defaultValue = filteredData
-              .map((item: any) => item.default)
-              .find((val: any) => val !== null || '');
+            const defaultItem = filteredData.find(
+              (item: IParameter) => item.default === 'YA'
+            );
+
+            const defaultValue = defaultItem ? String(defaultItem.default) : '';
 
             dispatch(setDefault({ key: grp, isdefault: String(defaultValue) }));
           });
