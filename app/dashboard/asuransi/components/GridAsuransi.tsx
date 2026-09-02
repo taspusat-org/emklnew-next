@@ -869,7 +869,7 @@ const GridAsuransi = () => {
           return (
             <div
               title={cellValue}
-              className="m-0 flex h-full cursor-pointer items-center p-0 text-sm"
+              className="m-0 flex h-full cursor-pointer items-center justify-end p-0 text-sm"
             >
               {highlightText(cellValue, filters.search, columnFilter)}
             </div>
