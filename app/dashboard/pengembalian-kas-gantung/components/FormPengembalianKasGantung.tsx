@@ -26,20 +26,10 @@ import DataGrid, {
 } from 'react-data-grid';
 import {
   formatCurrency,
-  formatDateCalendar,
   formatDateToDDMMYYYY,
   isLeapYear,
-  parseCurrency,
-  parseDateFromDDMMYYYY
+  parseCurrency
 } from '@/lib/utils';
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger
-} from '@/components/ui/popover';
-import { Calendar } from '@/components/ui/calendar';
-import { CalendarIcon } from 'lucide-react';
-import { parse } from 'date-fns';
 import { KasGantungHeader } from '@/lib/types/kasgantungheader.type';
 import { Checkbox } from '@/components/ui/checkbox';
 import InputDatePicker from '@/components/custom-ui/InputDatePicker';
@@ -76,8 +66,6 @@ const FormPengembalianKasGantung = ({
   const isDark = theme === 'dark' || resolvedTheme === 'dark';
   const [selectedRow, setSelectedRow] = useState<number>(0);
   const [isReload, setIsReload] = useState<boolean>(false);
-  const [popOverTglDari, setPopOverTglDari] = useState<boolean>(false);
-  const [popOverTglSampai, setPopOverTglSampai] = useState<boolean>(false);
   const [editingRowId, setEditingRowId] = useState<number | null>(null); // Menyimpan ID baris yang sedang diedit
   const [tglDari, setTglDari] = useState<string>('');
   const [tglSampai, setTglSampai] = useState<string>('');
@@ -984,7 +972,12 @@ const FormPengembalianKasGantung = ({
             <Form {...forms}>
               <form
                 ref={formRef}
-                onSubmit={onSubmit}
+                // `onSubmit` adalah handler MENTAH dari grid, jadi pembungkusan
+                // handleSubmit dilakukan di sini. Submit native (mis. ENTER di
+                // sebuah field) diperlakukan sama dengan tombol SAVE.
+                onSubmit={forms.handleSubmit((values: any) =>
+                  onSubmit(values, false)
+                )}
                 className="flex h-full flex-col gap-6"
               >
                 <div className="flex h-[100%] flex-col gap-2 lg:gap-3">
@@ -1104,9 +1097,7 @@ const FormPengembalianKasGantung = ({
                         <LookUp
                           key={index}
                           {...props}
-                          lookupValue={(id) =>
-                            forms.setValue('relasi_id', id)
-                          }
+                          lookupValue={(id) => forms.setValue('relasi_id', id)}
                           inputLookupValue={forms.getValues('relasi_id')}
                           lookupNama={forms.getValues('relasi_nama')}
                         />
@@ -1122,67 +1113,11 @@ const FormPengembalianKasGantung = ({
                         TGL DARI
                       </FormLabel>
                       <div className="flex flex-col lg:w-[70%]">
-                        <div
-                          className={`relative flex flex-row rounded-sm border border-border focus:outline-none focus:ring-0 ${
-                            mode === 'delete'
-                              ? 'text-zinc-400'
-                              : 'text-zinc-600'
-                          } focus-within:border-blue-500`}
-                        >
-                          <InputMask
-                            mask="99-99-9999" // Set date mask (DD-MM-YYYY format)
-                            className="h-9 w-full rounded-sm px-3 py-2 text-sm text-zinc-900 focus:bg-[#ffffee] focus:outline-none focus:ring-0"
-                            value={tglDari} // Bind the value to tglDari
-                            alwaysShowMask={true}
-                            maskPlaceholder="DD-MM-YYYY"
-                            placeholder="DD-MM-YYYY"
-                            onChange={(e: any) => setTglDari(e.target.value)} // Update tglDari when the input changes
-                          />
-
-                          <Popover
-                            open={popOverTglDari}
-                            onOpenChange={setPopOverTglDari}
-                          >
-                            <PopoverTrigger asChild>
-                              <button
-                                type="button"
-                                className="flex w-9 cursor-pointer items-center justify-center border border-[#adcdff] bg-[#e0ecff] text-[#0e2d5f]"
-                              >
-                                <CalendarIcon className="h-4 w-4 text-gray-500" />
-                              </button>
-                            </PopoverTrigger>
-                            <PopoverContent
-                              className="right-4 w-fit max-w-xs border border-blue-500 bg-white"
-                              style={{ position: 'fixed' }}
-                              sideOffset={-1}
-                            >
-                              <Calendar
-                                mode="single"
-                                captionLayout="dropdown-buttons"
-                                fromYear={1960}
-                                toYear={2030}
-                                defaultMonth={
-                                  tglDari && tglDari !== 'DD-MM-YYYY'
-                                    ? parse(tglDari, 'dd-MM-yyyy', new Date())
-                                    : new Date()
-                                }
-                                selected={
-                                  tglDari
-                                    ? parseDateFromDDMMYYYY(tglDari)
-                                    : undefined
-                                }
-                                onSelect={(value: any) => {
-                                  if (value) {
-                                    const formattedDate =
-                                      formatDateCalendar(value); // Format the selected date to string
-                                    setTglDari(formattedDate); // Update the tglDari state with the formatted date
-                                    setPopOverTglDari(false); // Close the popover
-                                  }
-                                }}
-                              />
-                            </PopoverContent>
-                          </Popover>
-                        </div>
+                        <InputDatePicker
+                          value={tglDari}
+                          onChange={(e) => setTglDari(e.target.value)}
+                          showCalendar
+                        />
                       </div>
                     </div>
                     <div className="flex w-full flex-row items-center lg:ml-4">
@@ -1193,67 +1128,11 @@ const FormPengembalianKasGantung = ({
                         SAMPAI TGL
                       </FormLabel>
                       <div className="flex flex-col lg:w-[70%]">
-                        <div
-                          className={`relative flex flex-row rounded-sm border border-zinc-300 focus:outline-none focus:ring-0 ${
-                            mode === 'delete'
-                              ? 'text-zinc-400'
-                              : 'text-zinc-600'
-                          } focus-within:border-blue-500`}
-                        >
-                          <InputMask
-                            mask="99-99-9999" // Set date mask (DD-MM-YYYY format)
-                            className="h-9 w-full rounded-sm px-3 py-2 text-sm text-zinc-900 focus:bg-[#ffffee] focus:outline-none focus:ring-0"
-                            value={tglSampai} // Bind the value to tglSampai
-                            alwaysShowMask={true}
-                            maskPlaceholder="DD-MM-YYYY"
-                            placeholder="DD-MM-YYYY"
-                            onChange={(e: any) => setTglSampai(e.target.value)} // Update tglSampai when the input changes
-                          />
-
-                          <Popover
-                            open={popOverTglSampai}
-                            onOpenChange={setPopOverTglSampai}
-                          >
-                            <PopoverTrigger asChild>
-                              <button
-                                type="button"
-                                className="flex w-9 cursor-pointer items-center justify-center border border-[#adcdff] bg-[#e0ecff] text-[#0e2d5f]"
-                              >
-                                <CalendarIcon className="h-4 w-4 text-gray-500" />
-                              </button>
-                            </PopoverTrigger>
-                            <PopoverContent
-                              className="right-4 w-fit max-w-xs border border-blue-500 bg-white"
-                              style={{ position: 'fixed' }}
-                              sideOffset={-1}
-                            >
-                              <Calendar
-                                mode="single"
-                                captionLayout="dropdown-buttons"
-                                fromYear={1960}
-                                toYear={2030}
-                                defaultMonth={
-                                  tglSampai && tglSampai !== 'DD-MM-YYYY'
-                                    ? parse(tglSampai, 'dd-MM-yyyy', new Date())
-                                    : new Date()
-                                }
-                                selected={
-                                  tglSampai
-                                    ? parseDateFromDDMMYYYY(tglSampai)
-                                    : undefined
-                                }
-                                onSelect={(value: any) => {
-                                  if (value) {
-                                    const formattedDate =
-                                      formatDateCalendar(value); // Format the selected date to string
-                                    setTglSampai(formattedDate); // Update the tglDari state with the formatted date
-                                    setPopOverTglSampai(false); // Close the popover
-                                  }
-                                }}
-                              />
-                            </PopoverContent>
-                          </Popover>
-                        </div>
+                        <InputDatePicker
+                          value={tglSampai}
+                          onChange={(e) => setTglSampai(e.target.value)}
+                          showCalendar
+                        />
                       </div>
                     </div>
                   </div>
@@ -1400,7 +1279,7 @@ const FormPengembalianKasGantung = ({
         <FormFooterButtons
           mode={mode}
           onSave={() => {
-            onSubmit();
+            forms.handleSubmit((values: any) => onSubmit(values, false))();
             setEditingRowId(null);
           }}
           onCancel={handleClose}
