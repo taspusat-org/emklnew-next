@@ -21,7 +21,7 @@ import PageContainer from '@/components/layout/page-container';
 import { getJenisOrderanFn } from '@/lib/apis/jenisorderan.api';
 import { getHargatruckingFn } from '@/lib/apis/hargatrucking.api';
 import { getMarketingHeaderFn } from '@/lib/apis/marketingheader.api';
-import { getAllScheduleKapalFn } from '@/lib/apis/schedulekapal.api';
+import { getScheduleKapalFn } from '@/lib/apis/schedulekapal.api';
 import {
   setData,
   setDefault,
@@ -73,7 +73,7 @@ const Page = () => {
           getShipperFn({ isLookUp: 'true' }),
           getTujuankapalFn({ isLookUp: 'true' }),
           getMarketingHeaderFn({ isLookUp: 'true' }),
-          getAllScheduleKapalFn({ isLookUp: 'true' }),
+          getScheduleKapalFn({ isLookUp: 'true' }),
           getPelayaranFn({ isLookUp: 'true' }),
           getJenisMuatanFn({ isLookUp: 'true' }),
           getSandarKapalFn({ isLookUp: 'true' }),
