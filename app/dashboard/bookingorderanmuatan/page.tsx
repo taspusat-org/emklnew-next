@@ -29,7 +29,7 @@ import { getContainerFn } from '@/lib/apis/container.api';
 import { getShipperFn } from '@/lib/apis/shipper.api';
 import { getTujuankapalFn } from '@/lib/apis/tujuankapal.api';
 import { getMarketingHeaderFn } from '@/lib/apis/marketingheader.api';
-import { getAllScheduleKapalsiFn } from '@/lib/apis/schedulekapal.api';
+import { getAllScheduleKapalFn } from '@/lib/apis/schedulekapal.api';
 import { getPelayaranFn } from '@/lib/apis/pelayaran.api';
 import { getJenisMuatanFn } from '@/lib/apis/jenismuatan.api';
 import { getSandarKapalFn } from '@/lib/apis/sandarkapal.api';
@@ -82,7 +82,7 @@ const Page = () => {
           getShipperFn({ isLookUp: 'true' }),
           getTujuankapalFn({ isLookUp: 'true' }),
           getMarketingHeaderFn({ isLookUp: 'true' }),
-          getAllScheduleKapalsiFn({ isLookUp: 'true' }),
+          getAllScheduleKapalFn({ isLookUp: 'true' }),
           getPelayaranFn({ isLookUp: 'true' }),
           getJenisMuatanFn({ isLookUp: 'true' }),
           getSandarKapalFn({ isLookUp: 'true' }),

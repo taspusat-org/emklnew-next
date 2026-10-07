@@ -1113,6 +1113,7 @@ const GridAlatbayar = () => {
       setFilters((prev) => ({
         ...prev,
         filters: { ...prev.filters, ...updates },
+        search: '',
         page: 1
       }));
       setCheckedRows(new Set());
@@ -1129,6 +1130,7 @@ const GridAlatbayar = () => {
 
   const handleFilterInputChange = useCallback(
     (colKey: string, value: string) => {
+      setInputValue(''); // Reset global search input saat filter kolom diubah
       cancelPreviousRequest(abortControllerRef);
       pendingUpdates.current[colKey] = value;
 

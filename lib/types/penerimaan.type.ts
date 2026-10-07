@@ -1,19 +1,20 @@
 import { IMeta } from './error.type';
+
 export interface PenerimaanHeader {
   id: string;
   nobukti: string;
   tglbukti: string;
-  relasi_id: number | null;
-  relasi_nama: string | null;
+  relasi_id: string | null;
+  relasi_text: string | null;
   keterangan: string | null;
-  bank_id: number | null;
-  bank_nama: string | null;
+  bank_id: string | null;
+  bank_text: string | null;
   postingdari: string | null;
   coakasmasuk: string | null;
-  coakasmasuk_nama: string | null;
+  coakasmasuk_text: string | null;
   diterimadari: string | null;
   alatbayar_id: string | null;
-  alatbayar_nama: string | null;
+  alatbayar_text: string | null;
   nowarkat: string | null;
   tgllunas: string | null;
   noresi: string | null;
@@ -30,7 +31,7 @@ export interface PenerimaanDetail {
   penerimaan_id: string;
   nobukti: string;
   coa: string;
-  coa_nama: string | null;
+  coa_text: string | null;
   keterangan: string | null;
   nominal: string | null;
   transaksibiaya_nobukti: string | null;
@@ -42,53 +43,58 @@ export interface PenerimaanDetail {
   modifiedby: string | null;
   created_at: string;
   updated_at: string;
+  link: string | null;
   [key: string]: string | number | boolean | null | undefined;
 }
+
 export interface IAllPenerimaanHeader {
   data: PenerimaanHeader[];
+  type: string;
   pagination: IMeta;
 }
+
 export interface IAllPenerimaanDetail {
   data: PenerimaanDetail[];
+  type: string;
   pagination: IMeta;
 }
+
 export const filterPenerimaan = {
   nobukti: '',
   tglbukti: '',
-  relasi_id: null,
-  relasi_nama: '',
+  relasi_id: null as string | null,
+  relasi_text: '',
   keterangan: '',
-  bank_id: null,
-  bank_nama: '',
+  bank_id: null as number | string | null,
+  bank_text: '',
   postingdari: '',
   coakasmasuk: '',
-  coakasmasuk_nama: '',
+  coakasmasuk_text: '',
   diterimadari: '',
-  alatbayar_id: null,
-  alatbayar_nama: '',
+  alatbayar_id: null as string | null,
+  alatbayar_text: '',
   nowarkat: '',
   tgllunas: '',
   noresi: '',
-  statusformat: null,
-  info: '',
+  statusformat: '',
+  tglDari: '',
+  tglSampai: '',
   modifiedby: '',
   created_at: '',
-  updated_at: '',
-  tglDari: '',
-  tglSampai: ''
+  updated_at: ''
 };
+
 export const filterPenerimaanDetail = {
   nobukti: '',
-  keterangan: '',
   coa: '',
-  coa_nama: '',
+  coa_text: '',
+  keterangan: '',
   nominal: '',
   transaksibiaya_nobukti: '',
   transaksilain_nobukti: '',
   pengeluaranemklheader_nobukti: '',
   penerimaanemklheader_nobukti: '',
   pengembaliankasgantung_nobukti: '',
-  info: '',
   modifiedby: '',
   created_at: '',
   updated_at: ''

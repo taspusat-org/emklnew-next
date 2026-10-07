@@ -1045,7 +1045,8 @@ const GridTypeAkuntansi = () => {
       setFilters((prev) => ({
         ...prev,
         filters: { ...prev.filters, ...updates },
-        page: 1
+        page: 1,
+        search: ''
       }));
       setCheckedRows(new Set());
       setIsAllSelected(false);
@@ -1060,6 +1061,7 @@ const GridTypeAkuntansi = () => {
 
   const handleFilterInputChange = useCallback(
     (colKey: string, value: string) => {
+      setInputValue(''); // Reset global search input saat filter kolom diubah
       cancelPreviousRequest(abortControllerRef);
       pendingUpdates.current[colKey] = value;
 

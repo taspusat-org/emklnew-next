@@ -341,7 +341,8 @@ const GridHutangHeader = () => {
       setFilters((prev) => ({
         ...prev,
         filters: { ...prev.filters, ...updates },
-        page: 1
+        page: 1,
+        search: ''
       }));
       setCheckedRows(new Set());
       setIsAllSelected(false);
@@ -1069,6 +1070,7 @@ const GridHutangHeader = () => {
   const handleFilterInputChange = useCallback(
     (colKey: string, value: string) => {
       cancelPreviousRequest(abortControllerRef);
+      setInputValue(''); // Reset global search input saat filter kolom diubah
       pendingUpdates.current[colKey] = value;
 
       // Track input yang sedang fokus agar focus bisa di-restore setelah re-fetch

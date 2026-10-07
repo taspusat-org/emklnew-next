@@ -253,7 +253,8 @@ const GridHutangDetail = ({
       setFilters((prev) => ({
         ...prev,
         filters: { ...prev.filters, [colKey]: value },
-        page: 1
+        page: 1,
+        search: ''
       }));
       setRows([]);
       resetBufferingCache();
@@ -262,6 +263,7 @@ const GridHutangDetail = ({
 
   const handleFilterInputChange = useCallback(
     (colKey: string, value: string) => {
+      setInputValue(''); // Reset global search input saat filter kolom diubah
       debouncedFilterUpdate(colKey, value);
       setTimeout(() => {
         setSelectedRow(0);

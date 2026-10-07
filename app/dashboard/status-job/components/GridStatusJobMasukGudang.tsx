@@ -138,7 +138,8 @@ const GridStatusJobMasukGudang = () => {
       setFilters((prev) => ({
         ...prev,
         filters: { ...prev.filters, [colKey]: value },
-        page: 1
+        page: 1,
+        search: ''
       }));
       setRows([]);
       setCurrentPage(1);
@@ -149,6 +150,7 @@ const GridStatusJobMasukGudang = () => {
   const handleFilterInputChange = useCallback(
     (colKey: string, value: string) => {
       cancelPreviousRequest(abortControllerRef);
+      setInputValue(''); // Reset global search input saat filter kolom diubah
       debouncedFilterUpdate(colKey, value);
     },
     []
