@@ -100,6 +100,7 @@ export const generateBiayaExtraHeaderReportFn = async (
   const response = await api2.post('/biayaextraheader/report', payload);
   return response.data;
 };
+
 /**
  * Payload export Excel per transaksi — satu bukti beserta rinciannya, jadi
  * yang dikirim hanya id barisnya (sama seperti cetak bukti).
@@ -136,14 +137,6 @@ export const generateBankReportFn = async (
   payload: ReportJobPayload
 ): Promise<ReportJobResponse> => {
   const response = await api2.post('/bank/report', payload);
-  return response.data;
-};
-
-/** Export Excel Bank di background — lihat generateAlatbayarExportFn. */
-export const generateBankExportFn = async (
-  payload: ExportJobPayload
-): Promise<ReportJobResponse> => {
-  const response = await api2.post('/bank/export', payload);
   return response.data;
 };
 
@@ -229,6 +222,13 @@ export const generateLabaRugiKalkulasiExportFn = async (
   payload: ExportJobPayload
 ): Promise<ReportJobResponse> => {
   const response = await api2.post('/labarugikalkulasi/export', payload);
+  return response.data;
+};
+
+export const generateBankExportFn = async (
+  payload: ExportJobPayload
+): Promise<ReportJobResponse> => {
+  const response = await api2.post('/bank/export', payload);
   return response.data;
 };
 

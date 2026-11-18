@@ -71,8 +71,8 @@
   },
   "GridAsuransi-02-E0CF9E01-0ED9-2C70-8463-360B144DB2A7": {
     "columnsOrder": [
-      0, 6, 7, 5, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23,
-      24, 25, 26, 27
+      0, 1, 2, 4, 3, 6, 7, 5, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
+      21, 22, 23, 24, 25, 26, 27
     ],
     "columnsWidth": {
       "nomor": 40,
@@ -128,7 +128,7 @@
     }
   },
   "GridHargatrucking-02-E0CF9E01-0ED9-2C70-8463-360B144DB2A7": {
-    "columnsOrder": [0, 2, 4, 3, 6, 7, 8, 9, 10, 1, 5],
+    "columnsOrder": [0, 1, 5, 2, 4, 3, 6, 7, 8, 9, 10],
     "columnsWidth": {
       "nomor": 50,
       "statusaktif": 70,
@@ -158,6 +158,31 @@
       "modifiedby": 150,
       "created_at": 200,
       "updated_at": 200
+    }
+  },
+  "GridBank-02-E0CF9E01-0ED9-2C70-8463-360B144DB2A7": {
+    "columnsOrder": [
+      0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17
+    ],
+    "columnsWidth": {
+      "nomor": 40,
+      "statusaktif": 70,
+      "nama": 144,
+      "keterangan": 300,
+      "keterangancoa": 150,
+      "coagantung": 300,
+      "statusbank": 70,
+      "statusdefault": 70,
+      "formatpenerimaan": 150,
+      "formatpengeluaran": 150,
+      "formatpenerimaangantung": 150,
+      "formatpengeluarangantung": 150,
+      "formatpencairan": 150,
+      "formatrekappenerimaan": 150,
+      "formatrekappengeluaran": 150,
+      "modifiedby": 100,
+      "created_at": 170,
+      "updated_at": 170
     }
   }
 }

@@ -12,13 +12,13 @@ export interface IBank {
   keterangancoagantung: string | null;
 
   statusbank: string;
-  textbank: string;
+  statusbank_text: string;
 
   statusaktif: string;
   text: string;
 
   statusdefault: string;
-  textdefault: string;
+  statusdefault_text: string;
 
   formatpenerimaan: number;
   formatpenerimaantext: string;
@@ -52,3 +52,34 @@ export interface IAllBank {
   type: string;
   pagination: IMeta;
 }
+
+export const filterBank = {
+  nama: '',
+  keterangan: '',
+  coa: '',
+  keterangancoa: '',
+  coagantung: '',
+  keterangancoagantung: '',
+  statusbank: '',
+  statusbank_text: '',
+  statusaktif: '',
+  statusdefault: '',
+  statusdefault_text: '',
+  formatpenerimaan: '',
+  formatpenerimaantext: '',
+  formatpengeluaran: '',
+  formatpengeluarantext: '',
+  formatpenerimaangantung: '',
+  formatpenerimaangantungtext: '',
+  formatpengeluarangantung: '',
+  formatpengeluarangantungtext: '',
+  formatpencairan: '',
+  formatpencairantext: '',
+  formatrekappenerimaan: '',
+  formatrekappenerimaantext: '',
+  formatrekappengeluaran: '',
+  formatrekappengeluarantext: '',
+  modifiedby: '',
+  created_at: '',
+  updated_at: ''
+};
