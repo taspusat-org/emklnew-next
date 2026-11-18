@@ -123,6 +123,30 @@ export const generateAlatbayarExportFn = async (
   return response.data;
 };
 
+/** Cetak laporan Alat Bayar di background — lihat generateGroupbiayaextraReportFn. */
+export const generateAlatbayarReportFn = async (
+  payload: ReportJobPayload
+): Promise<ReportJobResponse> => {
+  const response = await api2.post('/alatbayar/report', payload);
+  return response.data;
+};
+
+/** Cetak laporan Bank di background — lihat generateGroupbiayaextraReportFn. */
+export const generateBankReportFn = async (
+  payload: ReportJobPayload
+): Promise<ReportJobResponse> => {
+  const response = await api2.post('/bank/report', payload);
+  return response.data;
+};
+
+/** Export Excel Bank di background — lihat generateAlatbayarExportFn. */
+export const generateBankExportFn = async (
+  payload: ExportJobPayload
+): Promise<ReportJobResponse> => {
+  const response = await api2.post('/bank/export', payload);
+  return response.data;
+};
+
 export const generateGroupbiayaextraExportFn = async (
   payload: ExportJobPayload
 ): Promise<ReportJobResponse> => {
@@ -240,4 +264,20 @@ export const downloadReportPdfFn = async (
 ): Promise<Blob> => {
   const { blob } = await downloadReportFileFn(downloadPath, PDF_MIME);
   return blob;
+};
+
+/** Cetak laporan Jabatan di background — lihat generateGroupbiayaextraReportFn. */
+export const generateJabatanReportFn = async (
+  payload: ReportJobPayload
+): Promise<ReportJobResponse> => {
+  const response = await api2.post('/jabatan/report', payload);
+  return response.data;
+};
+
+/** Export Excel Jabatan di background — lihat generateAlatbayarExportFn. */
+export const generateJabatanExportFn = async (
+  payload: ExportJobPayload
+): Promise<ReportJobResponse> => {
+  const response = await api2.post('/jabatan/export', payload);
+  return response.data;
 };

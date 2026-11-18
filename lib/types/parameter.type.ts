@@ -7,7 +7,9 @@ export interface IParameter {
   kelompok: string | null; // Kelompok, bisa null
   text: string | null; // Nama Parameter, bisa null
   memo: Record<string, string> | null; // Memo sebagai JSON object
-  type: string | null; // Tipe angka, bisa null
+  type: string | null; // id parameter lain
+  type_nama: string | null; // label gabungan parameter yang ditunjuk `type`
+  lookuplabel: string | null; // "GRP - SUBGRP - TEXT" baris ini
   default: string | null; // Nilai default, bisa null
   modifiedby: string | null; // Nama pengubah, bisa null
   info: string | null; // Informasi tambahan, bisa null

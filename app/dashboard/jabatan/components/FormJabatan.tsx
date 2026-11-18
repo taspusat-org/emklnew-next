@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import {
   Form,
@@ -8,19 +7,27 @@ import {
   FormLabel,
   FormMessage
 } from '@/components/ui/form';
-import { useGetMenu } from '@/lib/server/useMenu';
-import { Button } from '@/components/ui/button';
 import { useEffect, useRef, useState } from 'react';
-import { useSelector } from 'react-redux';
+import { useSelector, useDispatch } from 'react-redux';
 import { RootState } from '@/lib/store/store';
 import LookUp from '@/components/custom-ui/LookUp';
-import FormFooterButtons from '@/components/custom-ui/FormFooterButtons';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { IoMdClose } from 'react-icons/io';
-import { FaSave } from 'react-icons/fa';
-import { useDispatch } from 'react-redux';
 import { setSubmitClicked } from '@/lib/store/lookupSlice/lookupSlice';
+import FormFooterButtons from '@/components/custom-ui/FormFooterButtons';
+
+interface FormJabatanProps {
+  popOver: boolean;
+  setPopOver: (value: boolean) => void;
+  forms: any;
+  onSubmit: any;
+  mode: any;
+  handleClose: () => void;
+  isLoadingCreate: boolean;
+  isLoadingUpdate: boolean;
+  isLoadingDelete: boolean;
+}
 
 const FormJabatan = ({
   popOver,
@@ -32,43 +39,10 @@ const FormJabatan = ({
   isLoadingCreate,
   isLoadingUpdate,
   isLoadingDelete
-}: any) => {
-  const lookUpPropsStatusAktif = [
-    {
-      columns: [{ key: 'text', name: 'NAMA' }],
-      // filterby: { class: 'system', method: 'get' },
-      labelLookup: 'STATUS AKTIF LOOKUP',
-      required: true,
-      selectedRequired: false,
-      endpoint: 'parameter?grp=status+aktif',
-      label: 'STATUS AKTIF',
-      singleColumn: true,
-      pageSize: 20,
-      dataToPost: 'id',
-      showOnButton: true,
-      postData: 'text'
-    }
-  ];
-  const lookUpDivisi = [
-    {
-      columns: [{ key: 'nama', name: 'NAMA' }],
-      // filterby: { class: 'system', method: 'get' },
-      labelLookup: 'Divisi LOOKUP',
-      required: true,
-      selectedRequired: false,
-      endpoint: 'divisi',
-      label: 'DIVISI',
-      singleColumn: true,
-      pageSize: 20,
-      dataToPost: 'id',
-      showOnButton: true,
-      postData: 'nama'
-    }
-  ];
-  const formRef = useRef<HTMLFormElement | null>(null); // Ref untuk form
+}: FormJabatanProps) => {
+  const formRef = useRef<HTMLFormElement | null>(null);
   const openName = useSelector((state: RootState) => state.lookup.openName);
   const dispatch = useDispatch();
-
   return (
     <Dialog open={popOver} onOpenChange={setPopOver}>
       <DialogTitle hidden={true}>Title</DialogTitle>
@@ -76,7 +50,7 @@ const FormJabatan = ({
         <div className="flex items-center justify-between bg-background-form-header px-2 py-2">
           <h2 className="text-sm font-semibold">
             {mode === 'add'
-              ? 'Tambah Jabatan'
+              ? 'Add Jabatan'
               : mode === 'edit'
               ? 'Edit Jabatan'
               : mode === 'delete'
@@ -93,12 +67,16 @@ const FormJabatan = ({
             <IoMdClose className="h-5 w-5 font-bold text-white" />
           </div>
         </div>
+
         <div className="h-full flex-1 overflow-y-auto bg-background-card pl-1 pr-2">
           <div className="h-full bg-background-card px-5 py-3">
             <Form {...forms}>
               <form
                 ref={formRef}
-                onSubmit={onSubmit}
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  onSubmit(false);
+                }}
                 className="flex h-full flex-col gap-6"
               >
                 <div className="flex h-[100%] flex-col gap-2 lg:gap-3">
@@ -116,7 +94,6 @@ const FormJabatan = ({
                         <div className="flex flex-col lg:w-[85%]">
                           <FormControl>
                             <Input
-                              autoFocus
                               {...field}
                               value={field.value ?? ''}
                               type="text"
@@ -128,44 +105,17 @@ const FormJabatan = ({
                       </FormItem>
                     )}
                   />
-                  <div className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
-                    <div className="w-full lg:w-[15%]">
-                      <FormLabel
-                        required={true}
-                        className="text-sm font-semibold"
-                      >
-                        Divisi
-                      </FormLabel>
-                    </div>
-                    <div className="w-full lg:w-[85%]">
-                      {lookUpDivisi.map((props, index) => (
-                        <LookUp
-                          key={index}
-                          {...props}
-                          lookupValue={(id) =>
-                            forms.setValue('divisi_id', id)
-                          }
-                          inputLookupValue={forms.getValues('divisi_id')}
-                          lookupNama={forms.getValues('divisi')}
-                          // tanpa forms+name, error validasi divisi_id tak punya
-                          // tempat tampil (LookUp bukan FormField) → gagal senyap
-                          forms={forms}
-                          name="divisi_id"
-                          disabled={mode === 'view' || mode === 'delete'}
-                        />
-                      ))}
-                    </div>
-                  </div>
+
                   <FormField
                     name="keterangan"
                     control={forms.control}
                     render={({ field }) => (
                       <FormItem className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
                         <FormLabel
-                          required={true}
+                          required={false}
                           className="font-semibold lg:w-[15%]"
                         >
-                          Keterangan
+                          KETERANGAN
                         </FormLabel>
                         <div className="flex flex-col lg:w-[85%]">
                           <FormControl>
@@ -181,6 +131,7 @@ const FormJabatan = ({
                       </FormItem>
                     )}
                   />
+
                   <div className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
                     <div className="w-full lg:w-[15%]">
                       <FormLabel
@@ -191,20 +142,62 @@ const FormJabatan = ({
                       </FormLabel>
                     </div>
                     <div className="w-full lg:w-[85%]">
-                      {lookUpPropsStatusAktif.map((props, index) => (
-                        <LookUp
-                          key={index}
-                          {...props}
-                          lookupValue={(id) =>
-                            forms.setValue('statusaktif', id)
-                          }
-                          inputLookupValue={forms.getValues('statusaktif')}
-                          lookupNama={forms.getValues('statusaktif_nama')}
-                          forms={forms}
-                          name="statusaktif"
-                          disabled={mode === 'view' || mode === 'delete'}
-                        />
-                      ))}
+                      <LookUp
+                        columns={[{ key: 'text', name: 'STATUS AKTIF' }]}
+                        labelLookup="STATUS AKTIF LOOKUP"
+                        required={true}
+                        selectedRequired={false}
+                        endpoint="parameter?grp=status+aktif"
+                        label="STATUS AKTIF"
+                        reduxKey="STATUS AKTIF"
+                        singleColumn={true}
+                        pageSize={20}
+                        showOnButton={true}
+                        postData="text"
+                        dataToPost="id"
+                        lookupValue={(id) => {
+                          forms.setValue('statusaktif', String(id ?? ''));
+                        }}
+                        onSelectRow={(val) =>
+                          forms.setValue('statusaktif_text', val?.text)
+                        }
+                        lookupNama={forms.getValues('statusaktif_text')}
+                        disabled={mode === 'view' || mode === 'delete'}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
+                    <div className="w-full lg:w-[15%]">
+                      <FormLabel
+                        required={true}
+                        className="text-sm font-semibold"
+                      >
+                        Divisi
+                      </FormLabel>
+                    </div>
+                    <div className="w-full lg:w-[85%]">
+                      <LookUp
+                        columns={[{ key: 'nama', name: 'NAMA' }]}
+                        labelLookup="DIVISI LOOKUP"
+                        required={true}
+                        selectedRequired={false}
+                        endpoint="divisi"
+                        label="DIVISI"
+                        singleColumn={true}
+                        pageSize={20}
+                        showOnButton={true}
+                        postData="nama"
+                        dataToPost="id"
+                        lookupValue={(id) => {
+                          forms.setValue('divisi_id', String(id ?? ''));
+                        }}
+                        onSelectRow={(val) =>
+                          forms.setValue('divisi_id_text', val?.nama)
+                        }
+                        lookupNama={forms.getValues('divisi_id_text')}
+                        disabled={mode === 'view' || mode === 'delete'}
+                      />
                     </div>
                   </div>
                 </div>
@@ -212,12 +205,14 @@ const FormJabatan = ({
             </Form>
           </div>
         </div>
+
         <FormFooterButtons
           mode={mode}
           onSave={() => {
             onSubmit(false);
             dispatch(setSubmitClicked(true));
           }}
+          deleteMode={mode === 'delete'}
           onSaveAndAdd={() => {
             onSubmit(true);
             dispatch(setSubmitClicked(true));
@@ -226,7 +221,6 @@ const FormJabatan = ({
           isLoadingCreate={isLoadingCreate}
           isLoadingUpdate={isLoadingUpdate}
           isLoadingDelete={isLoadingDelete}
-          deleteMode={mode === 'delete'}
         />
       </DialogContent>
     </Dialog>

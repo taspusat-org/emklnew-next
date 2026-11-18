@@ -76,7 +76,12 @@ import {
   setProcessed,
   setProcessing
 } from '@/lib/store/loadingSlice/loadingSlice';
-import { exportBankFn, getBankFn } from '@/lib/apis/bank.api';
+import { getBankFn } from '@/lib/apis/bank.api';
+import {
+  generateBankExportFn,
+  generateBankReportFn
+} from '@/lib/apis/report.api';
+import { useReportPdfContext } from '@/hooks/ReportPdfProvider';
 import { useFormError } from '@/lib/hooks/formErrorContext';
 import FilterOptions from '@/components/custom-ui/FilterOptions';
 import {
@@ -97,7 +102,6 @@ import {
 import { EmptyRowsRenderer } from '@/components/EmptyRows';
 import { LoadRowsRenderer } from '@/components/LoadRows';
 import dynamic from 'next/dynamic';
-import { loadStimulsoftScript } from '@/lib/loadStimulsoft';
 interface Filter {
   page: number;
   limit: number;
@@ -192,6 +196,7 @@ const GridBank = () => {
   const [checkedRows, setCheckedRows] = useState<Set<string>>(new Set());
   const [isAllSelected, setIsAllSelected] = useState(false);
   const { alert } = useAlert();
+  const { generateReport, generateExport } = useReportPdfContext();
   const { user, cabang_id } = useSelector((state: RootState) => state.auth);
   const getCoa = useSelector((state: RootState) => state.lookup.data);
   const forms = useForm<BankInput>({
@@ -342,8 +347,7 @@ const GridBank = () => {
   const shiftSelectionForWindow = (deltaRows: number) => {
     const next = Math.max(0, selectedRowRef.current + deltaRows);
     selectedRowRef.current = next;
-    reanchorFromKeyboardRef.current =
-      interactionModeRef.current === 'keyboard';
+    reanchorFromKeyboardRef.current = interactionModeRef.current === 'keyboard';
   };
 
   const effectiveLimit = shouldBulkFetch ? filters.limit * 5 : filters.limit;
@@ -2518,24 +2522,19 @@ const GridBank = () => {
     }
   };
 
+  // Export & cetak jalan di backend (job background + socket); progres dan
+  // tombol Download/lihat PDF muncul di toast.
   const handleExport = async () => {
-    try {
-      const { page, limit, ...filtersWithoutLimit } = filters;
-
-      const response = await exportBankFn(filtersWithoutLimit); // Kirim data tanpa pagination
-
-      // Buat link untuk mendownload file
-      const link = document.createElement('a');
-      const url = window.URL.createObjectURL(response);
-      link.href = url;
-      link.download = `laporan_bank${Date.now()}.xlsx`; // Nama file yang diunduh
-      link.click(); // Trigger download
-
-      // Revoke URL setelah download
-      window.URL.revokeObjectURL(url);
-    } catch (error) {
-      console.error('Error exporting bank data:', error);
-    }
+    await generateExport({
+      label: 'Export Bank',
+      payload: {
+        search: filters.search,
+        filters: filters.filters,
+        sortBy: filters.sortBy,
+        sortDirection: filters.sortDirection
+      },
+      apiFn: generateBankExportFn
+    });
   };
 
   // const handleExportBySelect = async () => {
@@ -2573,82 +2572,20 @@ const GridBank = () => {
   // };
 
   const handleReport = async () => {
-    try {
-      dispatch(setProcessing());
-      const now = new Date();
-      const pad = (n: any) => n.toString().padStart(2, '0');
-      const tglcetak = `${pad(now.getDate())}-${pad(
-        now.getMonth() + 1
-      )}-${now.getFullYear()} ${pad(now.getHours())}:${pad(
-        now.getMinutes()
-      )}:${pad(now.getSeconds())}`;
-      const { page, limit, ...filtersWithoutLimit } = filters;
-      const response = await getBankFn(filtersWithoutLimit);
-      const reportRows = response.data.map((row) => ({
-        ...row,
-        judullaporan: 'Laporan Bank',
-        usercetak: user.username,
-        tglcetak: tglcetak,
-        judul: 'PT.TRANSPORINDO AGUNG SEJAHTERA'
-      }));
-
-      sessionStorage.setItem(
-        'filtersWithoutLimit',
-        JSON.stringify(filtersWithoutLimit)
-      );
-
-      await loadStimulsoftScript();
-
-      const Stimulsoft = (window as any).Stimulsoft;
-
-      Stimulsoft.Base.StiFontCollection.addOpentypeFontFile(
-        '/fonts/tahoma.ttf',
-        'Tahoma'
-      ); // Regular
-      Stimulsoft.Base.StiFontCollection.addOpentypeFontFile(
-        '/fonts/tahomabd.ttf',
-        'Tahoma'
-      ); // Bold
-      Stimulsoft.Base.StiLicense.Key =
-        '6vJhGtLLLz2GNviWmUTrhSqnOItdDwjBylQzQcAOiHksEid1Z5nN/hHQewjPL/4/AvyNDbkXgG4Am2U6dyA8Ksinqp' +
-        '6agGqoHp+1KM7oJE6CKQoPaV4cFbxKeYmKyyqjF1F1hZPDg4RXFcnEaYAPj/QLdRHR5ScQUcgxpDkBVw8XpueaSFBs' +
-        'JVQs/daqfpFiipF1qfM9mtX96dlxid+K/2bKp+e5f5hJ8s2CZvvZYXJAGoeRd6iZfota7blbsgoLTeY/sMtPR2yutv' +
-        'gE9TafuTEhj0aszGipI9PgH+A/i5GfSPAQel9kPQaIQiLw4fNblFZTXvcrTUjxsx0oyGYhXslAAogi3PILS/DpymQQ' +
-        '0XskLbikFsk1hxoN5w9X+tq8WR6+T9giI03Wiqey+h8LNz6K35P2NJQ3WLn71mqOEb9YEUoKDReTzMLCA1yJoKia6Y' +
-        'JuDgUf1qamN7rRICPVd0wQpinqLYjPpgNPiVqrkGW0CQPZ2SE2tN4uFRIWw45/IITQl0v9ClCkO/gwUtwtuugegrqs' +
-        'e0EZ5j2V4a1XDmVuJaS33pAVLoUgK0M8RG72';
-
-      const report = new Stimulsoft.Report.StiReport();
-      const dataSet = new Stimulsoft.System.Data.DataSet('Data');
-
-      // Load the report template (MRT file)
-      report.loadFile('/reports/LaporanBank.mrt');
-      report.dictionary.dataSources.clear();
-      dataSet.readJson({ data: reportRows });
-      report.regData(dataSet.dataSetName, '', dataSet);
-      report.dictionary.synchronize();
-
-      // Render the report asynchronously
-      report.renderAsync(() => {
-        // Export the report to PDF asynchronously
-        report.exportDocumentAsync((pdfData: any) => {
-          const pdfBlob = new Blob([new Uint8Array(pdfData)], {
-            type: 'application/pdf'
-          });
-          const pdfUrl = URL.createObjectURL(pdfBlob);
-
-          // Store the Blob URL in sessionStorage
-          sessionStorage.setItem('pdfUrl', pdfUrl);
-
-          dispatch(setProcessed());
-          // Navigate to the report page
-          window.open('/reports/bank', '_blank');
-        }, Stimulsoft.Report.StiExportFormat.Pdf);
-      });
-    } catch (error) {
-      console.error('Failed to generate report:', error);
-      dispatch(setProcessed());
-    }
+    await generateReport({
+      label: 'Bank',
+      payload: {
+        mrtName: 'LaporanBank.mrt',
+        search: filters.search,
+        filters: filters.filters,
+        sortBy: filters.sortBy,
+        sortDirection: filters.sortDirection,
+        judullaporan: 'Laporan Bank'
+      },
+      apiFn: generateBankReportFn,
+      // Tombol Export di viewer PDF memakai filter grid yang sama.
+      onExport: () => handleExport()
+    });
   };
 
   // const handleReportBySelect = async () => {
@@ -3440,10 +3377,16 @@ const GridBank = () => {
       forms.setValue('statusdefault', rowData?.statusdefault ?? '');
       forms.setValue('textdefault', rowData?.textdefault);
 
-      forms.setValue('formatpenerimaan', String(rowData?.formatpenerimaan ?? ''));
+      forms.setValue(
+        'formatpenerimaan',
+        String(rowData?.formatpenerimaan ?? '')
+      );
       forms.setValue('formatpenerimaantext', rowData?.formatpenerimaantext);
 
-      forms.setValue('formatpengeluaran', String(rowData?.formatpengeluaran ?? ''));
+      forms.setValue(
+        'formatpengeluaran',
+        String(rowData?.formatpengeluaran ?? '')
+      );
       forms.setValue('formatpengeluarantext', rowData?.formatpengeluarantext);
 
       forms.setValue(
@@ -3637,8 +3580,15 @@ const GridBank = () => {
               {
                 label: 'Print',
                 icon: <FaPrint />,
+                shortcut: 'P',
                 onClick: () => handleReport(),
                 className: 'bg-cyan-500 hover:bg-cyan-700'
+              },
+              {
+                label: 'Export',
+                icon: <FaFileExport />,
+                onClick: () => handleExport(),
+                className: 'bg-green-600 hover:bg-green-700'
               }
             ]}
             // customActions={[
