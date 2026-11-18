@@ -15,6 +15,7 @@ export const parameterSchema = z.object({
     .min(1, { message: dynamicRequiredMessage('TEXT') }),
   memo: z.record(z.string()).nullable().optional(),
   type: z.string().max(100, 'Maksimal 100').nullable().optional(),
+  type_nama: z.string().nullable().optional(),
   default: z.string().max(255, 'Maksimal 255 karakter').nullable().optional(),
   info: z.string().nullable().optional()
 });
