@@ -613,6 +613,7 @@ const GridPenerimaanEmklHeader = () => {
                 endpoint="bank"
                 value="id"
                 label="nama"
+                selectedValue={filters.filters.bank_id ?? ''}
                 onChange={(value) => handleFilterInputChange('bank_id', value)} // Menangani perubahan nilai di parent
               />
             </div>
@@ -1069,6 +1070,7 @@ const GridPenerimaanEmklHeader = () => {
                 filterBy={{ grp: 'JENIS POSTING', subgrp: 'JENIS POSTING' }}
                 value="id"
                 label="text"
+                selectedValue={filters.filters.jenisposting}
                 onChange={(value) =>
                   handleFilterInputChange('jenisposting', value)
                 } // Menangani perubahan nilai di parent

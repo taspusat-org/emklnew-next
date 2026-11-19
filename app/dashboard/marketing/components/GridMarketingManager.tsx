@@ -506,6 +506,7 @@ const GridMarketingManager = ({ activeTab }: GridProps) => {
                 value="id"
                 label="text"
                 filterBy={{ grp: 'STATUS APPROVAL', subgrp: 'STATUS APPROVAL' }}
+                selectedValue={filters.filters.statusapproval_nama}
                 onChange={(value) =>
                   handleFilterInputChange('statusapproval_nama', value)
                 } // Menangani perubahan nilai di parent
@@ -656,6 +657,7 @@ const GridMarketingManager = ({ activeTab }: GridProps) => {
                 value="id"
                 label="text"
                 filterBy={{ grp: 'STATUS AKTIF', subgrp: 'STATUS AKTIF' }}
+                selectedValue={filters.filters.statusaktif_nama}
                 onChange={(value) =>
                   handleFilterInputChange('statusaktif_nama', value)
                 } // Menangani perubahan nilai di parent

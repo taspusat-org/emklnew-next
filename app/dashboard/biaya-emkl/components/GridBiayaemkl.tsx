@@ -966,6 +966,7 @@ const GridBiayaEmkl = () => {
                 value="id"
                 label="text"
                 filterBy={{ grp: 'STATUS NILAI', subgrp: 'STATUS NILAI' }}
+                selectedValue={filters.filters.statusbiayabl}
                 onChange={(value) =>
                   handleColumnFilterChange('statusbiayabl', value)
                 } // Menangani perubahan nilai di parent
@@ -1054,6 +1055,7 @@ const GridBiayaEmkl = () => {
                 value="id"
                 label="text"
                 filterBy={{ grp: 'STATUS NILAI', subgrp: 'STATUS NILAI' }}
+                selectedValue={filters.filters.statusseal}
                 onChange={(value) =>
                   handleColumnFilterChange('statusseal', value)
                 } // Menangani perubahan nilai di parent
@@ -1142,6 +1144,7 @@ const GridBiayaEmkl = () => {
                 value="id"
                 label="text"
                 filterBy={{ grp: 'STATUS NILAI', subgrp: 'STATUS NILAI' }}
+                selectedValue={filters.filters.statustagih}
                 onChange={(value) =>
                   handleColumnFilterChange('statustagih', value)
                 } // Menangani perubahan nilai di parent
@@ -1230,6 +1233,7 @@ const GridBiayaEmkl = () => {
                 value="id"
                 label="text"
                 filterBy={{ grp: 'STATUS AKTIF', subgrp: 'STATUS AKTIF' }}
+                selectedValue={filters.filters.statusaktif}
                 onChange={(value) =>
                   handleColumnFilterChange('statusaktif', value)
                 } // Menangani perubahan nilai di parent

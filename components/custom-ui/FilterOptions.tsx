@@ -74,7 +74,7 @@ const FilterOptions: React.FC<SelectOptionProps> = ({
     defaultVal: string
   ) => {
     if (appliedKeys[columnKey]) return; // sudah pernah apply → skip
-    if (selectedValue !== undefined) return; // parent controlled → skip
+    if (selectedValue) return; // parent sudah punya nilai → skip
     if (!defaultVal || !currentOptions.length) return;
 
     const dv = defaultVal.toLowerCase();
@@ -190,7 +190,6 @@ const FilterOptions: React.FC<SelectOptionProps> = ({
       ? 'ALL'
       : options.find((o) => o.value === localSelectedValue)?.label ??
         localSelectedValue;
-  console.log('options selectedLabel', options, selectedLabel, endpoint);
   return (
     <Select value={localSelectedValue} onValueChange={handleChange}>
       <SelectTrigger className="filter-select z-[999999] mr-1 h-8 w-full cursor-pointer overflow-hidden rounded-none border border-input-border bg-background-input p-1 text-xs font-thin ">

@@ -370,6 +370,7 @@ const GridPenerimaanHeader = () => {
               <div
                 className="flex cursor-pointer items-center justify-center"
                 onClick={() => {
+                  discardPendingFilterUpdates();
                   setFilters({
                     ...filters,
                     search: '',
@@ -1432,8 +1433,12 @@ const GridPenerimaanHeader = () => {
     ];
   }, [filters, checkedRows, isAllSelected, rows, minVisiblePage]);
 
+  const pendingUpdates = useRef<Record<string, string>>({});
+
   const debouncedFilterUpdate = useRef(
     debounce((updates: Record<string, string>) => {
+      // buffer hanya berisi update yang belum di-flush
+      pendingUpdates.current = {};
       setFilters((prev) => ({
         ...prev,
         filters: { ...prev.filters, ...updates },
@@ -1449,7 +1454,10 @@ const GridPenerimaanHeader = () => {
     }, 300)
   ).current;
 
-  const pendingUpdates = useRef<Record<string, string>>({});
+  const discardPendingFilterUpdates = () => {
+    debouncedFilterUpdate.cancel();
+    pendingUpdates.current = {};
+  };
 
   const handleFilterInputChange = useCallback(
     (colKey: string, value: string) => {
@@ -1483,8 +1491,7 @@ const GridPenerimaanHeader = () => {
   const handleClearFilter = useCallback(
     (colKey: string) => {
       cancelPreviousRequest(abortControllerRef);
-      debouncedFilterUpdate.cancel();
-      pendingUpdates.current[colKey] = '';
+      debouncedFilterUpdate.flush();
 
       // ✅ Arahkan ke kolom yang di-clear
       const originalIndex = columns.findIndex((col) => col.key === colKey);
@@ -1513,6 +1520,7 @@ const GridPenerimaanHeader = () => {
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     cancelPreviousRequest(abortControllerRef);
+    discardPendingFilterUpdates();
     const searchValue = e.target.value;
 
     // ✅ Track global search input agar focus bisa di-restore
@@ -1606,7 +1614,7 @@ const GridPenerimaanHeader = () => {
 
   const handleClearInput = () => {
     cancelPreviousRequest(abortControllerRef);
-    debouncedFilterUpdate.cancel();
+    discardPendingFilterUpdates();
     activeFilterInputRef.current = null;
     pendingSelectIdxRef.current = 1; // ✅ Reset ke default idx 1
     setFilters((prev) => ({
@@ -2691,6 +2699,7 @@ const GridPenerimaanHeader = () => {
   useEffect(() => {
     if (!onReload) return;
 
+    discardPendingFilterUpdates();
     suppressScrollRef.current = true;
 
     setFilters((prev) => ({

@@ -836,6 +836,7 @@ const GridKaryawan = () => {
                 value="id"
                 label="text"
                 filterBy={{ grp: 'STATUS AKTIF', subgrp: 'STATUS AKTIF' }}
+                selectedValue={filters.filters.statusaktif}
                 onChange={(value) =>
                   handleColumnFilterChange('statusaktif', value)
                 } // Menangani perubahan nilai di parent
@@ -1574,7 +1575,9 @@ const GridKaryawan = () => {
     forms.reset();
   };
 
-  const statusAktifDefaultRef = useRef<{ id: string; text: string } | null>(null);
+  const statusAktifDefaultRef = useRef<{ id: string; text: string } | null>(
+    null
+  );
 
   const resetAddForm = async () => {
     let aktif = statusAktifDefaultRef.current;

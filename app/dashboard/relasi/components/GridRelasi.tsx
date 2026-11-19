@@ -840,6 +840,7 @@ const GridRelasi = () => {
                 value="id"
                 label="text"
                 filterBy={{ grp: 'STATUS AKTIF', subgrp: 'STATUS AKTIF' }}
+                selectedValue={filters.filters.statustitip_text}
                 onChange={(value) =>
                   handleColumnFilterChange('statustitip_text', value)
                 } // Menangani perubahan nilai di parent
@@ -1289,6 +1290,7 @@ const GridRelasi = () => {
                 value="id"
                 label="text"
                 filterBy={{ grp: 'STATUS AKTIF', subgrp: 'STATUS AKTIF' }}
+                selectedValue={filters.filters.statusaktif}
                 onChange={(value) =>
                   handleColumnFilterChange('statusaktif', value)
                 } // Menangani perubahan nilai di parent
