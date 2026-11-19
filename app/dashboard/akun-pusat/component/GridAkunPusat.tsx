@@ -839,6 +839,7 @@ const GridAkunPusat = () => {
                 endpoint="cabang"
                 value="id"
                 label="nama"
+                selectedValue={filters.filters.cabang_id ?? ''}
                 onChange={(value) =>
                   handleFilterInputChange('cabang_id', value)
                 } // Menangani perubahan nilai di parent
@@ -910,6 +911,7 @@ const GridAkunPusat = () => {
                 value="id"
                 label="text"
                 filterBy={{ grp: 'STATUS AKTIF', subgrp: 'STATUS AKTIF' }}
+                selectedValue={filters.filters.statusaktif ?? ''}
                 onChange={(value) =>
                   handleFilterInputChange('statusaktif', value)
                 } // Menangani perubahan nilai di parent

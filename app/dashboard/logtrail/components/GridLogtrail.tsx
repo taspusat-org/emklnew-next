@@ -228,6 +228,7 @@ const GridLogtrail = () => {
             <div
               className="flex h-[50%] w-full cursor-pointer items-center justify-center"
               onClick={() => {
+                discardPendingFilterUpdates();
                 setFilters({
                   ...filters,
                   search: '',
@@ -857,8 +858,12 @@ const GridLogtrail = () => {
     ];
   }, [filters, rows, filters.filters]);
 
+  const pendingUpdates = useRef<Record<string, string>>({});
+
   const debouncedFilterUpdate = useRef(
     debounce((updates: Record<string, string>) => {
+      // buffer hanya berisi update yang belum di-flush
+      pendingUpdates.current = {};
       setFilters((prev) => ({
         ...prev,
         filters: { ...prev.filters, ...updates },
@@ -874,7 +879,10 @@ const GridLogtrail = () => {
     }, 300)
   ).current;
 
-  const pendingUpdates = useRef<Record<string, string>>({});
+  const discardPendingFilterUpdates = () => {
+    debouncedFilterUpdate.cancel();
+    pendingUpdates.current = {};
+  };
 
   const handleFilterInputChange = useCallback(
     (colKey: string, value: string) => {
@@ -905,8 +913,7 @@ const GridLogtrail = () => {
   );
   const handleClearFilter = useCallback((colKey: string) => {
     cancelPreviousRequest(abortControllerRef);
-    debouncedFilterUpdate.cancel();
-    pendingUpdates.current[colKey] = '';
+    debouncedFilterUpdate.flush();
 
     const originalIndex = columns.findIndex((col) => col.key === colKey);
     const displayIndex =
@@ -931,6 +938,7 @@ const GridLogtrail = () => {
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     cancelPreviousRequest(abortControllerRef);
+    discardPendingFilterUpdates();
     const searchValue = e.target.value;
 
     activeFilterInputRef.current = inputRef.current;
@@ -1019,7 +1027,7 @@ const GridLogtrail = () => {
 
   const handleClearInput = () => {
     cancelPreviousRequest(abortControllerRef);
-    debouncedFilterUpdate.cancel();
+    discardPendingFilterUpdates();
     activeFilterInputRef.current = null;
     pendingSelectIdxRef.current = 1;
     setFilters((prev) => ({

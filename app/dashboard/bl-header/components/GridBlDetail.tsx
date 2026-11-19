@@ -952,6 +952,7 @@ const GridBlDetail = () => {
                 value="id"
                 label="text"
                 filterBy={{ grp: 'STATUS NILAI', subgrp: 'STATUS NILAI' }}
+                selectedValue={filters.filters.statuspisahbl_text}
                 onChange={(value) =>
                   handleFilterInputChange('statuspisahbl_text', value)
                 } // Menangani perubahan nilai di parent

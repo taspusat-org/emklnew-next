@@ -497,6 +497,7 @@ const GridRole = () => {
                 value="id"
                 label="text"
                 filterBy={{ grp: 'STATUS AKTIF', subgrp: 'STATUS AKTIF' }}
+                selectedValue={filters.filters.text}
                 onChange={(value) => handleColumnFilterChange('text', value)} // Menangani perubahan nilai di parent
               />
             </div>

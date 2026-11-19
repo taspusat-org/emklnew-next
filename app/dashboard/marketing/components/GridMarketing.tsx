@@ -646,6 +646,7 @@ const GridMarketing = () => {
                 value="id"
                 label="text"
                 filterBy={{ grp: 'STATUS AKTIF', subgrp: 'STATUS AKTIF' }}
+                selectedValue={filters.filters.statusaktif_nama}
                 onChange={(value) =>
                   handleFilterInputChange('statusaktif_nama', value)
                 } // Menangani perubahan nilai di parent
@@ -1007,6 +1008,7 @@ const GridMarketing = () => {
                 value="id"
                 label="text"
                 filterBy={{ grp: 'STATUS NILAI', subgrp: 'STATUS NILAI' }}
+                selectedValue={filters.filters.statustarget_nama}
                 onChange={(value) =>
                   handleFilterInputChange('statustarget_nama', value)
                 } // Menangani perubahan nilai di parent
@@ -1083,6 +1085,7 @@ const GridMarketing = () => {
                 value="id"
                 label="text"
                 filterBy={{ grp: 'STATUS NILAI', subgrp: 'STATUS NILAI' }}
+                selectedValue={filters.filters.statusbagifee_nama}
                 onChange={(value) =>
                   handleFilterInputChange('statusbagifee_nama', value)
                 } // Menangani perubahan nilai di parent
@@ -1160,6 +1163,7 @@ const GridMarketing = () => {
                 value="id"
                 label="text"
                 filterBy={{ grp: 'STATUS NILAI', subgrp: 'STATUS NILAI' }}
+                selectedValue={filters.filters.statusfeemanager_nama}
                 onChange={(value) =>
                   handleFilterInputChange('statusfeemanager_nama', value)
                 } // Menangani perubahan nilai di parent
@@ -1381,6 +1385,7 @@ const GridMarketing = () => {
                 value="id"
                 label="text"
                 filterBy={{ grp: 'STATUS NILAI', subgrp: 'STATUS NILAI' }}
+                selectedValue={filters.filters.statusprafee_nama}
                 onChange={(value) =>
                   handleFilterInputChange('statusprafee_nama', value)
                 } // Menangani perubahan nilai di parent

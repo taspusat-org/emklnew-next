@@ -373,6 +373,7 @@ const GridMenu = () => {
               <div
                 className="flex cursor-pointer items-center justify-center"
                 onClick={() => {
+                  discardPendingFilterUpdates();
                   setFilters({
                     ...filters,
                     search: '',
@@ -591,6 +592,7 @@ const GridMenu = () => {
                 value="id"
                 label="text"
                 filterBy={{ grp: 'STATUS AKTIF', subgrp: 'STATUS AKTIF' }}
+                selectedValue={filters.filters.statusaktif}
                 onChange={(value) =>
                   handleFilterInputChange('statusaktif', value)
                 } // Menangani perubahan nilai di parent
@@ -831,8 +833,12 @@ const GridMenu = () => {
     ];
   }, [filters, checkedRows, isAllSelected, rows, minVisiblePage]);
 
+  const pendingUpdates = useRef<Record<string, string>>({});
+
   const debouncedFilterUpdate = useRef(
     debounce((updates: Record<string, string>) => {
+      // buffer hanya berisi update yang belum di-flush
+      pendingUpdates.current = {};
       setFilters((prev) => ({
         ...prev,
         filters: { ...prev.filters, ...updates },
@@ -849,7 +855,10 @@ const GridMenu = () => {
     }, 300)
   ).current;
 
-  const pendingUpdates = useRef<Record<string, string>>({});
+  const discardPendingFilterUpdates = () => {
+    debouncedFilterUpdate.cancel();
+    pendingUpdates.current = {};
+  };
 
   const handleFilterInputChange = useCallback(
     (colKey: string, value: string) => {
@@ -881,8 +890,7 @@ const GridMenu = () => {
   );
   const handleClearFilter = useCallback((colKey: string) => {
     cancelPreviousRequest(abortControllerRef);
-    debouncedFilterUpdate.cancel();
-    pendingUpdates.current[colKey] = '';
+    debouncedFilterUpdate.flush();
 
     // ✅ Arahkan ke kolom yang di-clear
     const originalIndex = columns.findIndex((col) => col.key === colKey);
@@ -908,6 +916,7 @@ const GridMenu = () => {
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     cancelPreviousRequest(abortControllerRef);
+    discardPendingFilterUpdates();
     const searchValue = e.target.value;
 
     // ✅ Track global search input agar focus bisa di-restore
@@ -997,7 +1006,7 @@ const GridMenu = () => {
 
   const handleClearInput = () => {
     cancelPreviousRequest(abortControllerRef);
-    debouncedFilterUpdate.cancel();
+    discardPendingFilterUpdates();
     activeFilterInputRef.current = null;
     pendingSelectIdxRef.current = 1; // ✅ Reset ke default idx 1
     setFilters((prev) => ({

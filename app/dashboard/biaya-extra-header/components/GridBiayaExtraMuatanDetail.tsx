@@ -688,6 +688,7 @@ const GridBiayaExtraMuatanDetail = () => {
                 value="id"
                 label="text"
                 filterBy={{ grp: 'STATUS NILAI', subgrp: 'STATUS NILAI' }}
+                selectedValue={filters.filters.statustagih_text}
                 onChange={(value) =>
                   handleFilterInputChange('statustagih_text', value)
                 } // Menangani perubahan nilai di parent

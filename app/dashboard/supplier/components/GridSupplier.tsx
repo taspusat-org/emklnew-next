@@ -2280,6 +2280,7 @@ const GridSupplier = () => {
                 value="id"
                 label="text"
                 filterBy={{ grp: 'STATUS AKTIF', subgrp: 'STATUS AKTIF' }}
+                selectedValue={filters.filters.statusaktif_text}
                 onChange={(value) =>
                   handleFilterInputChange('statusaktif_text', value)
                 } // Menangani perubahan nilai di parent

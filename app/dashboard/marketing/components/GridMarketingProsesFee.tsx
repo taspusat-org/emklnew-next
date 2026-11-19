@@ -476,6 +476,7 @@ const GridMarketingProsesFee = ({ activeTab }: GridProps) => {
                 value="id"
                 label="text"
                 filterBy={{ grp: 'STATUS NILAI', subgrp: 'STATUS NILAI' }}
+                selectedValue={filters.filters.statuspotongbiayakantor_nama}
                 onChange={(value) =>
                   handleFilterInputChange('statuspotongbiayakantor_nama', value)
                 } // Menangani perubahan nilai di parent
@@ -550,6 +551,7 @@ const GridMarketingProsesFee = ({ activeTab }: GridProps) => {
                 value="id"
                 label="text"
                 filterBy={{ grp: 'STATUS AKTIF', subgrp: 'STATUS AKTIF' }}
+                selectedValue={filters.filters.statusaktif_nama}
                 onChange={(value) =>
                   handleFilterInputChange('statusaktif_nama', value)
                 } // Menangani perubahan nilai di parent

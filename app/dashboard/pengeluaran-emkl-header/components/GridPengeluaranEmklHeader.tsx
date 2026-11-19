@@ -659,6 +659,7 @@ const GridPengeluaranEmklHeader = () => {
                 endpoint="bank"
                 value="id"
                 label="nama"
+                selectedValue={filters.filters.bank_id ?? ''}
                 onChange={(value) => handleColumnFilterChange('bank_id', value)} // Menangani perubahan nilai di parent
               />
             </div>
@@ -1123,6 +1124,7 @@ const GridPengeluaranEmklHeader = () => {
                 filterBy={{ grp: 'JENIS POSTING', subgrp: 'JENIS POSTING' }}
                 value="id"
                 label="text"
+                selectedValue={filters.filters.jenisposting}
                 onChange={(value) =>
                   handleColumnFilterChange('jenisposting', value)
                 } // Menangani perubahan nilai di parent

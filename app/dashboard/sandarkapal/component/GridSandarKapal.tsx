@@ -671,6 +671,7 @@ const GridSandarKapal = () => {
                 value="id"
                 label="text"
                 filterBy={{ grp: 'STATUS AKTIF', subgrp: 'STATUS AKTIF' }}
+                selectedValue={filters.filters.statusaktif}
                 onChange={(value) =>
                   handleColumnFilterChange('statusaktif', value)
                 } // Menangani perubahan nilai di parent

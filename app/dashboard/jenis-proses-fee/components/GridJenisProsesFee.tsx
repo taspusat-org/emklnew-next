@@ -573,6 +573,7 @@ const GridJenisProsesFee = () => {
                 value="id"
                 label="text"
                 filterBy={{ grp: 'STATUS AKTIF', subgrp: 'STATUS AKTIF' }}
+                selectedValue={filters.filters.statusaktif_nama}
                 onChange={(value) =>
                   handleFilterInputChange('statusaktif_nama', value)
                 } // Menangani perubahan nilai di parent

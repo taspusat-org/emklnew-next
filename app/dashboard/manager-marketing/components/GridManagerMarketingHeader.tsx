@@ -759,6 +759,7 @@ const GridManagerMarketingHeader = () => {
                 value="id"
                 label="text"
                 filterBy={{ grp: 'STATUS NILAI', subgrp: 'STATUS NILAI' }}
+                selectedValue={filters.filters.statusmentor ?? ''}
                 onChange={(value) =>
                   handleColumnFilterChange('statusmentor', value)
                 } // Menangani perubahan nilai di parent
@@ -847,6 +848,7 @@ const GridManagerMarketingHeader = () => {
                   value="id"
                   label="text"
                   filterBy={{ grp: 'STATUS NILAI', subgrp: 'STATUS NILAI' }}
+                  selectedValue={filters.filters.statusleader ?? ''}
                   onChange={(value) =>
                     handleColumnFilterChange('statusleader', value)
                   } // Menangani perubahan nilai di parent
@@ -934,6 +936,7 @@ const GridManagerMarketingHeader = () => {
                   value="id"
                   label="text"
                   filterBy={{ grp: 'STATUS AKTIF', subgrp: 'STATUS AKTIF' }}
+                  selectedValue={filters.filters.statusaktif ?? ''}
                   onChange={(value) =>
                     handleColumnFilterChange('statusaktif', value)
                   } // Menangani perubahan nilai di parent
