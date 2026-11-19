@@ -91,6 +91,7 @@ interface BaseActionProps {
   disableAdd?: boolean;
   disableEdit?: boolean;
   isApproval?: boolean;
+  disableApproval?: boolean;
   disableDelete?: boolean;
   disableView?: boolean;
   disableExport?: boolean;
@@ -116,6 +117,7 @@ const ActionButton = ({
   dropdownMenus = [],
   disableAdd = false,
   isApproval = false,
+  disableApproval = false,
   disableEdit = false,
   disableDelete = false,
   disableView = false,
@@ -397,8 +399,9 @@ const ActionButton = ({
 
   // Computed value untuk menentukan apakah show dropdown
   const showApprovalDropdown = useMemo(() => {
+    if (disableApproval) return false;
     return hasApprovalPermission || hasNonApprovalPermission;
-  }, [hasApprovalPermission, hasNonApprovalPermission]);
+  }, [disableApproval, hasApprovalPermission, hasNonApprovalPermission]);
 
   // Computed value untuk data yang akan ditampilkan di dropdown
   const filteredApprovalData = useMemo(() => {
