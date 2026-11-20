@@ -50,10 +50,6 @@ import { Button } from '@/components/ui/button';
 import Image from 'next/image';
 import IcClose from '@/public/image/x.svg';
 import {
-  PelayaranInput,
-  pelayaranSchema
-} from '@/lib/validations/pelayaran.validation';
-import {
   useCreatePelayaran,
   useDeletePelayaran,
   useGetPelayaran,
@@ -127,6 +123,7 @@ const GridRelasi = () => {
   const [columnsWidth, setColumnsWidth] = useState<{ [key: string]: number }>(
     {}
   );
+  console.log('test');
   const [mode, setMode] = useState<string>('');
 
   const [dataGridKey, setDataGridKey] = useState(0);

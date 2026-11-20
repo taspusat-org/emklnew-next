@@ -1,17 +1,19 @@
-import { REQUIRED_FIELD } from '@/constants/validation';
 import { z } from 'zod';
+import { REQUIRED_FIELD } from '@/constants/validation';
 import { dynamicRequiredMessage } from '../utils';
 
-export const gandenganSchema = z.object({
-  // id & statusaktif menyimpan id parameter (varchar UUID), bukan angka.
-  // Jangan z.number() — lookup mengirim id berupa string sehingga z.number()
-  // menolaknya dan form gagal submit secara diam-diam (tidak bisa save).
+export const GandenganSchema = z.object({
+  // id & relasi (lookup/status) menyimpan id (varchar UUID), bukan angka.
   id: z.string().nullable().optional(),
-  nama: z.string().nonempty({ message: dynamicRequiredMessage('NAMA') }), // Nama wajib diisi
-  keterangan: z
+  nama: z
     .string()
-    .nonempty({ message: dynamicRequiredMessage('KETERANGAN') }), // Keterangan wajib diisi
-  statusaktif: z.string().min(1, { message: REQUIRED_FIELD }), // id parameter status aktif (varchar)
+    .trim()
+    .nonempty({ message: dynamicRequiredMessage('NAMA') })
+    .max(100, { message: 'NAMA MAKSIMAL 100 KARAKTER' }),
+  keterangan: z.string().trim().nullable().optional(),
+
+  statusaktif: z.string().min(1, { message: REQUIRED_FIELD }),
   statusaktif_text: z.string().nullable().optional()
 });
-export type GandenganInput = z.infer<typeof gandenganSchema>;
+
+export type GandenganInput = z.infer<typeof GandenganSchema>;

@@ -37,8 +37,8 @@ import { getHargatruckingFn } from '@/lib/apis/hargatrucking.api';
 import { getEmklFn } from '@/lib/apis/emkl.api';
 import { getDaftarblFn } from '@/lib/apis/daftarbl.api';
 import { getAllTradoFn } from '@/lib/apis/trado.api';
-import { getAllGandenganFn } from '@/lib/apis/gandengan.api';
 import { setFieldLength } from '@/lib/store/field-length/fieldLengthSlice';
+import { getGandenganFn } from '@/lib/apis/gandengan.api';
 
 interface ApiResponse {
   type: string;
@@ -91,7 +91,7 @@ const Page = () => {
           getEmklFn({ isLookUp: 'true' }),
           getDaftarblFn({ isLookUp: 'true' }),
           getAllTradoFn({ isLookUp: 'true' }),
-          getAllGandenganFn({ isLookUp: 'true' })
+          getGandenganFn({ isLookUp: 'true' })
         ]);
 
         if (jenisOrderParameterLookup.type === 'local') {

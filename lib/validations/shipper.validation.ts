@@ -1,138 +1,301 @@
 import { z } from 'zod';
-import { REQUIRED_FIELD } from '@/constants/validation';
-import { dynamicRequiredMessage } from '../utils';
+import { zodNumberField } from '../utils/field-helpers';
 
 export const ShipperSchema = z.object({
-  // id = varchar(200) UUID, bukan angka. z.number() lama menolak id UUID
-  // (atau via Number() jadi NaN) sehingga update mengenai baris salah / gagal.
+  // id & relasi (lookup/status) menyimpan id (varchar UUID), bukan angka.
   id: z.string().nullable().optional(),
-  nama: z.string().nonempty({ message: dynamicRequiredMessage('NAMA') }),
-  keterangan: z.string().nullable().optional(),
-  contactperson: z.string().nullable().optional(),
-  alamat: z.string().nullable().optional(),
 
-  coa: z.string().nonempty({ message: dynamicRequiredMessage('COA') }),
-  coa_text: z.string().nullable().optional(),
+  statusrelasi: z.string().nullable().optional(),
+  statusrelasi_text: z.string().nullable().optional(),
 
+  relasi_id: z.string().nullable().optional(),
+  relasi_id_text: z.string().nullable().optional(),
+  nama: z
+    .string()
+    .trim()
+    .max(8000, { message: 'NAMA MAKSIMAL 8000 KARAKTER' })
+    .nullable()
+    .optional(),
+  keterangan: z
+    .string()
+    .trim()
+    .max(8000, { message: 'KETERANGAN MAKSIMAL 8000 KARAKTER' })
+    .nullable()
+    .optional(),
+  contactperson: z
+    .string()
+    .trim()
+    .max(100, { message: 'CONTACTPERSON MAKSIMAL 100 KARAKTER' })
+    .nullable()
+    .optional(),
+  alamat: z
+    .string()
+    .trim()
+    .max(250, { message: 'ALAMAT MAKSIMAL 250 KARAKTER' })
+    .nullable()
+    .optional(),
+  coa: z
+    .string()
+    .trim()
+    .max(100, { message: 'COA MAKSIMAL 100 KARAKTER' })
+    .nullable()
+    .optional(),
   coapiutang: z
     .string()
-    .nonempty({ message: dynamicRequiredMessage('COA PIUTANG') }),
-  coapiutang_text: z.string().nullable().optional(),
-
+    .trim()
+    .max(100, { message: 'COAPIUTANG MAKSIMAL 100 KARAKTER' })
+    .nullable()
+    .optional(),
   coahutang: z
     .string()
-    .nonempty({ message: dynamicRequiredMessage('COA HUTANG') }),
-  coahutang_text: z.string().nullable().optional(),
-
-  kota: z.string().nullable().optional(),
-  kodepos: z.string().nullable().optional(),
-  telp: z.string().nullable().optional(),
+    .trim()
+    .max(100, { message: 'COAHUTANG MAKSIMAL 100 KARAKTER' })
+    .nullable()
+    .optional(),
+  kota: z
+    .string()
+    .trim()
+    .max(50, { message: 'KOTA MAKSIMAL 50 KARAKTER' })
+    .nullable()
+    .optional(),
+  kodepos: z
+    .string()
+    .trim()
+    .max(10, { message: 'KODEPOS MAKSIMAL 10 KARAKTER' })
+    .nullable()
+    .optional(),
+  telp: z
+    .string()
+    .trim()
+    .max(30, { message: 'TELP MAKSIMAL 30 KARAKTER' })
+    .nullable()
+    .optional(),
   email: z
     .string()
-    .email('Email harus mengandung @ dan domain yang valid')
+    .trim()
+    .max(1000, { message: 'EMAIL MAKSIMAL 1000 KARAKTER' })
     .nullable()
-    .or(z.literal('')),
-  fax: z.string().nullable().optional(),
-  web: z.string().nullable().optional(),
+    .optional(),
+  fax: z
+    .string()
+    .trim()
+    .max(30, { message: 'FAX MAKSIMAL 30 KARAKTER' })
+    .nullable()
+    .optional(),
+  web: z
+    .string()
+    .trim()
+    .max(30, { message: 'WEB MAKSIMAL 30 KARAKTER' })
+    .nullable()
+    .optional(),
+  creditlimit: zodNumberField('CREDITLIMIT', { required: false }),
+  creditterm: zodNumberField('CREDITTERM', { required: false, integer: true }),
+  credittermplus: zodNumberField('CREDITTERMPLUS', {
+    required: false,
+    integer: true
+  }),
+  npwp: z
+    .string()
+    .trim()
+    .max(30, { message: 'NPWP MAKSIMAL 30 KARAKTER' })
+    .nullable()
+    .optional(),
+  coagiro: z
+    .string()
+    .trim()
+    .max(100, { message: 'COAGIRO MAKSIMAL 100 KARAKTER' })
+    .nullable()
+    .optional(),
+  ppn: zodNumberField('PPN', { required: false }),
+  titipke: z
+    .string()
+    .trim()
+    .max(30, { message: 'TITIPKE MAKSIMAL 30 KARAKTER' })
+    .nullable()
+    .optional(),
+  ppnbatalmuat: zodNumberField('PPNBATALMUAT', { required: false }),
+  grup: z
+    .string()
+    .trim()
+    .max(100, { message: 'GRUP MAKSIMAL 100 KARAKTER' })
+    .nullable()
+    .optional(),
+  formatdeliveryreport: zodNumberField('FORMATDELIVERYREPORT', {
+    required: false,
+    integer: true
+  }),
+  comodity: z
+    .string()
+    .trim()
+    .max(100, { message: 'COMODITY MAKSIMAL 100 KARAKTER' })
+    .nullable()
+    .optional(),
+  namashippercetak: z
+    .string()
+    .trim()
+    .max(100, { message: 'NAMASHIPPERCETAK MAKSIMAL 100 KARAKTER' })
+    .nullable()
+    .optional(),
+  formatcetak: zodNumberField('FORMATCETAK', {
+    required: false,
+    integer: true
+  }),
 
-  creditlimit: z.coerce
-    .string({
-      required_error: dynamicRequiredMessage('CREDIT LIMIT'),
-      invalid_type_error: dynamicRequiredMessage('CREDIT LIMIT')
-    })
-    .refine((val) => val !== 'undefined' && val.trim() !== '', {
-      message: dynamicRequiredMessage('CREDIT LIMIT')
-    }),
-
-  creditterm: z.coerce
-    .number({
-      required_error: dynamicRequiredMessage('CREDIT TERM'),
-      invalid_type_error: dynamicRequiredMessage('CREDIT TERM')
-    })
-    .min(1, { message: dynamicRequiredMessage('CREDIT TERM') }),
-
-  credittermplus: z.coerce
-    .number({
-      required_error: dynamicRequiredMessage('CREDIT TERM PLUS'),
-      invalid_type_error: dynamicRequiredMessage('CREDIT TERM PLUS')
-    })
-    .min(1, { message: dynamicRequiredMessage('CREDIT TERM PLUS') }),
-
-  npwp: z.string().nonempty({ message: dynamicRequiredMessage('NPWP') }),
-
-  coagiro: z.string().nonempty({ message: dynamicRequiredMessage('COA GIRO') }),
-  coagiro_text: z.string().nullable().optional(),
-
-  ppn: z.string().nullable().optional(),
-  titipke: z.string().nullable().optional(),
-  ppnbatalmuat: z.string().nullable().optional(),
-  grup: z.string().nullable().optional(),
-  formatdeliveryreport: z.number().nullable().optional(),
-  comodity: z.string().nullable().optional(),
-  namashippercetak: z.string().nullable().optional(),
-  formatcetak: z.number().nullable().optional(),
-
-  // marketing_id = varchar(200) UUID (FK marketing), bukan angka. z.number()
-  // menolak id UUID → form shipper gagal disimpan. Validasi sebagai string.
-  marketing_id: z
-    .string({
-      required_error: dynamicRequiredMessage('MARKETING'),
-      invalid_type_error: dynamicRequiredMessage('MARKETING')
-    })
-    .min(1, { message: dynamicRequiredMessage('MARKETING') }),
-  marketing_text: z.string().nullable().optional(),
-
-  blok: z.string().nullable().optional(),
-  nomor: z.string().nullable().optional(),
-  rt: z.string().nullable().optional(),
-  rw: z.string().nullable().optional(),
-  kelurahan: z.string().nullable().optional(),
-  kabupaten: z.string().nullable().optional(),
-  kecamatan: z.string().nullable().optional(),
-  propinsi: z.string().nullable().optional(),
-  isdpp10psn: z.string().nullable().optional(),
-  usertracing: z.string().nullable().optional(),
-  passwordtracing: z.string().nullable().optional(),
-
+  marketing_id: z.string().nullable().optional(),
+  marketing_id_text: z.string().nullable().optional(),
+  blok: z
+    .string()
+    .trim()
+    .max(100, { message: 'BLOK MAKSIMAL 100 KARAKTER' })
+    .nullable()
+    .optional(),
+  nomor: z
+    .string()
+    .trim()
+    .max(100, { message: 'NOMOR MAKSIMAL 100 KARAKTER' })
+    .nullable()
+    .optional(),
+  rt: z
+    .string()
+    .trim()
+    .max(100, { message: 'RT MAKSIMAL 100 KARAKTER' })
+    .nullable()
+    .optional(),
+  rw: z
+    .string()
+    .trim()
+    .max(100, { message: 'RW MAKSIMAL 100 KARAKTER' })
+    .nullable()
+    .optional(),
+  kelurahan: z
+    .string()
+    .trim()
+    .max(100, { message: 'KELURAHAN MAKSIMAL 100 KARAKTER' })
+    .nullable()
+    .optional(),
+  kabupaten: z
+    .string()
+    .trim()
+    .max(100, { message: 'KABUPATEN MAKSIMAL 100 KARAKTER' })
+    .nullable()
+    .optional(),
+  kecamatan: z
+    .string()
+    .trim()
+    .max(100, { message: 'KECAMATAN MAKSIMAL 100 KARAKTER' })
+    .nullable()
+    .optional(),
+  propinsi: z
+    .string()
+    .trim()
+    .max(100, { message: 'PROPINSI MAKSIMAL 100 KARAKTER' })
+    .nullable()
+    .optional(),
+  isdpp10psn: zodNumberField('ISDPP10PSN', { required: false }),
+  usertracing: z
+    .string()
+    .trim()
+    .max(50, { message: 'USERTRACING MAKSIMAL 50 KARAKTER' })
+    .nullable()
+    .optional(),
+  passwordtracing: z
+    .string()
+    .trim()
+    .max(50, { message: 'PASSWORDTRACING MAKSIMAL 50 KARAKTER' })
+    .nullable()
+    .optional(),
   kodeprospek: z
     .string()
-    .nonempty({ message: dynamicRequiredMessage('KODE PROSPEK') }),
+    .trim()
+    .max(50, { message: 'KODEPROSPEK MAKSIMAL 50 KARAKTER' })
+    .nullable()
+    .optional(),
   namashipperprospek: z
     .string()
-    .nonempty({ message: dynamicRequiredMessage('NAMA SHIPPER PROSPEK') }),
-
+    .trim()
+    .max(200, { message: 'NAMASHIPPERPROSPEK MAKSIMAL 200 KARAKTER' })
+    .nullable()
+    .optional(),
   emaildelay: z
     .string()
-    .email('Email harus mengandung @ dan domain yang valid')
+    .trim()
+    .max(1000, { message: 'EMAILDELAY MAKSIMAL 1000 KARAKTER' })
     .nullable()
-    .or(z.literal('')),
-  keterangan1barisinvoice: z.string().nullable().optional(),
-  nik: z.string().nullable().optional(),
-  namaparaf: z.string().nullable().optional(),
-  saldopiutang: z.string().nullable().optional(),
-  keteranganshipperjobminus: z.string().nullable().optional(),
-  tglemailshipperjobminus: z.string().nullable().optional(),
-  tgllahir: z
+    .optional(),
+  keterangan1barisinvoice: z
     .string()
-    .nonempty({ message: dynamicRequiredMessage('TANGGAL LAHIR') }),
-  idshipperasal: z.number().nullable().optional(),
-  shipperasal_text: z.string().nullable().optional(),
+    .trim()
+    .max(100, { message: 'KETERANGAN1BARISINVOICE MAKSIMAL 100 KARAKTER' })
+    .nullable()
+    .optional(),
+  nik: z
+    .string()
+    .trim()
+    .max(30, { message: 'NIK MAKSIMAL 30 KARAKTER' })
+    .nullable()
+    .optional(),
+  namaparaf: z
+    .string()
+    .trim()
+    .max(100, { message: 'NAMAPARAF MAKSIMAL 100 KARAKTER' })
+    .nullable()
+    .optional(),
+  saldopiutang: zodNumberField('SALDOPIUTANG', { required: false }),
+  keteranganshipperjobminus: z
+    .string()
+    .trim()
+    .max(500, { message: 'KETERANGANSHIPPERJOBMINUS MAKSIMAL 500 KARAKTER' })
+    .nullable()
+    .optional(),
+  tglemailshipperjobminus: z.string().nullable().optional(),
+  tgllahir: z.string().nullable().optional(),
 
-  initial: z.string().nullable().optional(),
-  tipe: z.string().nullable().optional(),
-  idtipe: z.number().nullable().optional(),
-  idinitial: z.number().nullable().optional(),
-  nshipperprospek: z.string().nullable().optional(),
-  // parentshipper_id = varchar(200) UUID (self-FK ke shipper.id), bukan angka.
+  idshipperasal: z.string().nullable().optional(),
+  idshipperasal_text: z.string().nullable().optional(),
+  initial: z
+    .string()
+    .trim()
+    .max(100, { message: 'INITIAL MAKSIMAL 100 KARAKTER' })
+    .nullable()
+    .optional(),
+  tipe: z
+    .string()
+    .trim()
+    .max(100, { message: 'TIPE MAKSIMAL 100 KARAKTER' })
+    .nullable()
+    .optional(),
+  idtipe: zodNumberField('IDTIPE', { required: false, integer: true }),
+  idinitial: zodNumberField('IDINITIAL', { required: false, integer: true }),
+  nshipperprospek: z
+    .string()
+    .trim()
+    .max(500, { message: 'NSHIPPERPROSPEK MAKSIMAL 500 KARAKTER' })
+    .nullable()
+    .optional(),
+
   parentshipper_id: z.string().nullable().optional(),
-  parentshipper_text: z.string().nullable().optional(),
+  parentshipper_id_text: z.string().nullable().optional(),
+  npwpnik: z
+    .string()
+    .trim()
+    .max(16, { message: 'NPWPNIK MAKSIMAL 16 KARAKTER' })
+    .nullable()
+    .optional(),
+  nitku: z
+    .string()
+    .trim()
+    .max(22, { message: 'NITKU MAKSIMAL 22 KARAKTER' })
+    .nullable()
+    .optional(),
+  kodepajak: z
+    .string()
+    .trim()
+    .max(10, { message: 'KODEPAJAK MAKSIMAL 10 KARAKTER' })
+    .nullable()
+    .optional(),
 
-  npwpnik: z.string().nullable().optional(),
-  nitku: z.string().nullable().optional(),
-  kodepajak: z.string().nullable().optional(),
-
-  statusaktif: z.string().min(1, { message: REQUIRED_FIELD }),
-  text: z.string().nullable().optional()
+  statusaktif: z.string().nullable().optional(),
+  statusaktif_text: z.string().nullable().optional()
 });
 
 export type ShipperInput = z.infer<typeof ShipperSchema>;

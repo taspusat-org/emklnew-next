@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import {
   Form,
@@ -8,19 +7,28 @@ import {
   FormLabel,
   FormMessage
 } from '@/components/ui/form';
-import { Button } from '@/components/ui/button';
 import { useEffect, useRef, useState } from 'react';
-import { useSelector } from 'react-redux';
+import { useSelector, useDispatch } from 'react-redux';
 import { RootState } from '@/lib/store/store';
 import LookUp from '@/components/custom-ui/LookUp';
-import FormFooterButtons from '@/components/custom-ui/FormFooterButtons';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import InputCurrency from '@/components/custom-ui/InputCurrency';
 import { IoMdClose } from 'react-icons/io';
-import { FaSave } from 'react-icons/fa';
-import { useDispatch } from 'react-redux';
 import { setSubmitClicked } from '@/lib/store/lookupSlice/lookupSlice';
-import InputNumeric from '@/components/custom-ui/InputNumeric';
-import InputMask from '@mona-health/react-input-mask';
+import FormFooterButtons from '@/components/custom-ui/FormFooterButtons';
+
+interface FormEmklProps {
+  popOver: boolean;
+  setPopOver: (value: boolean) => void;
+  forms: any;
+  onSubmit: any;
+  mode: any;
+  handleClose: () => void;
+  isLoadingCreate: boolean;
+  isLoadingUpdate: boolean;
+  isLoadingDelete: boolean;
+}
 
 const FormEmkl = ({
   popOver,
@@ -32,41 +40,10 @@ const FormEmkl = ({
   isLoadingCreate,
   isLoadingUpdate,
   isLoadingDelete
-}: any) => {
-  const lookUpPropsStatusAktif = [
-    {
-      columns: [{ key: 'text', name: 'NAMA' }],
-      // filterby: { class: 'system', method: 'get' },
-      labelLookup: 'STATUS AKTIF LOOKUP',
-      required: true,
-      selectedRequired: false,
-      endpoint: 'parameter?grp=status+aktif',
-      label: 'status aktif',
-      singleColumn: true,
-      pageSize: 20,
-      showOnButton: true,
-      disabled: mode === 'view' || mode === 'delete' ? true : false,
-      postData: 'text',
-      dataToPost: 'id' //untuk pilih kolom yg mau diambil valuenya, bisa selain id
-    }
-  ];
-  const lookUpPropsStatusTrado = [
-    {
-      columns: [{ key: 'text', name: 'NAMA' }],
-      // filterby: { class: 'system', method: 'get' },
-      labelLookup: 'STATUS TRADO LOOKUP',
-      required: true,
-      selectedRequired: false,
-      endpoint: 'parameter?grp=status+trado',
-      label: 'status trado',
-      singleColumn: true,
-      pageSize: 20,
-      showOnButton: true,
-      disabled: mode === 'view' || mode === 'delete' ? true : false,
-      postData: 'text',
-      dataToPost: 'id' //untuk pilih kolom yg mau diambil valuenya, bisa selain id
-    }
-  ];
+}: FormEmklProps) => {
+  const formRef = useRef<HTMLFormElement | null>(null);
+  const openName = useSelector((state: RootState) => state.lookup.openName);
+  const dispatch = useDispatch();
   const lookUpPropsCoaGiro = [
     {
       columns: [
@@ -127,79 +104,6 @@ const FormEmkl = ({
       dataToPost: 'coa' //untuk pilih kolom yg mau diambil valuenya, bisa selain id
     }
   ];
-  const formRef = useRef<HTMLFormElement | null>(null); // Ref untuk form
-  const openName = useSelector((state: RootState) => state.lookup.openName);
-  const dispatch = useDispatch();
-
-  useEffect(() => {
-    // Fungsi untuk menangani pergerakan fokus berdasarkan tombol
-    const handleKeyDown = (event: KeyboardEvent) => {
-      // Jika popOverDate ada nilainya, jangan lakukan apa-apa
-      if (openName) {
-        return;
-      }
-
-      const form = formRef.current;
-
-      if (!form) return;
-
-      const inputs = Array.from(
-        form.querySelectorAll('input, select, textarea, button')
-      ).filter(
-        (element) =>
-          element.id !== 'image-dropzone' &&
-          element.tagName !== 'BUTTON' &&
-          !element.hasAttribute('readonly') // Pengecualian jika input readonly
-      ) as HTMLElement[]; // Ambil semua input dalam form kecuali button dan readonly inputs
-
-      const focusedElement = document.activeElement as HTMLElement;
-
-      let nextElement: HTMLElement | null = null;
-
-      if (event.key === 'ArrowDown' || event.key === 'Tab') {
-        nextElement = getNextFocusableElement(inputs, focusedElement, 'down');
-        if (event.key === 'Tab') {
-          event.preventDefault(); // Cegah default tab behavior jika ingin mengontrol pergerakan fokus
-        }
-      } else if (
-        event.key === 'ArrowUp' ||
-        (event.shiftKey && event.key === 'Tab')
-      ) {
-        nextElement = getNextFocusableElement(inputs, focusedElement, 'up');
-      }
-      // Jika ditemukan input selanjutnya, pindahkan fokus
-      if (nextElement) {
-        nextElement.focus();
-      }
-    };
-
-    // Fungsi untuk mendapatkan elemen input selanjutnya berdasarkan arah (down atau up)
-    const getNextFocusableElement = (
-      inputs: HTMLElement[],
-      currentElement: HTMLElement,
-      direction: 'up' | 'down'
-    ): HTMLElement | null => {
-      const index = Array.from(inputs).indexOf(currentElement as any);
-
-      if (direction === 'down') {
-        // Jika sudah di input terakhir, tidak perlu pindah fokus
-        if (index === inputs.length - 1) {
-          return null; // Tidak ada elemen selanjutnya
-        }
-        return inputs[index + 1]; // Fokus pindah ke input setelahnya
-      } else {
-        return inputs[index - 1]; // Fokus pindah ke input sebelumnya
-      }
-    };
-
-    // Menambahkan event listener untuk keydown
-    document.addEventListener('keydown', handleKeyDown);
-
-    // Membersihkan event listener ketika komponen tidak lagi digunakan
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [openName]); // Tambahkan popOverDate sebagai dependensi
   return (
     <Dialog open={popOver} onOpenChange={setPopOver}>
       <DialogTitle hidden={true}>Title</DialogTitle>
@@ -224,22 +128,98 @@ const FormEmkl = ({
             <IoMdClose className="h-5 w-5 font-bold text-white" />
           </div>
         </div>
+
         <div className="h-full flex-1 overflow-y-auto bg-background-card pl-1 pr-2">
           <div className="h-full bg-background-card px-5 py-3">
             <Form {...forms}>
               <form
                 ref={formRef}
-                onSubmit={onSubmit}
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  onSubmit(false);
+                }}
                 className="flex h-full flex-col gap-6"
               >
                 <div className="flex h-[100%] flex-col gap-2 lg:gap-3">
+                  <div className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
+                    <div className="w-full lg:w-[15%]">
+                      <FormLabel
+                        required={false}
+                        className="text-sm font-semibold"
+                      >
+                        Statusrelasi
+                      </FormLabel>
+                    </div>
+                    <div className="w-full lg:w-[85%]">
+                      <LookUp
+                        columns={[{ key: 'text', name: 'NAMA' }]}
+                        labelLookup="STATUSRELASI LOOKUP"
+                        filterby={{
+                          grp: 'STATUS RELASI',
+                          subgrp: 'STATUS RELASI'
+                        }}
+                        required={false}
+                        selectedRequired={false}
+                        endpoint="parameter"
+                        label="STATUSRELASI"
+                        singleColumn={true}
+                        pageSize={20}
+                        showOnButton={true}
+                        postData="text"
+                        dataToPost="id"
+                        lookupValue={(id) => {
+                          forms.setValue('statusrelasi', String(id ?? ''));
+                        }}
+                        onSelectRow={(val) =>
+                          forms.setValue('statusrelasi_text', val?.nama)
+                        }
+                        lookupNama={forms.getValues('statusrelasi_text')}
+                        disabled={mode === 'view' || mode === 'delete'}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
+                    <div className="w-full lg:w-[15%]">
+                      <FormLabel
+                        required={false}
+                        className="text-sm font-semibold"
+                      >
+                        Relasi
+                      </FormLabel>
+                    </div>
+                    <div className="w-full lg:w-[85%]">
+                      <LookUp
+                        columns={[{ key: 'nama', name: 'NAMA' }]}
+                        labelLookup="RELASI LOOKUP"
+                        required={false}
+                        selectedRequired={false}
+                        endpoint="relasi"
+                        label="RELASI"
+                        singleColumn={true}
+                        pageSize={20}
+                        showOnButton={true}
+                        postData="nama"
+                        dataToPost="id"
+                        lookupValue={(id) => {
+                          forms.setValue('relasi_id', String(id ?? ''));
+                        }}
+                        onSelectRow={(val) =>
+                          forms.setValue('relasi_text', val?.nama)
+                        }
+                        lookupNama={forms.getValues('relasi_text')}
+                        disabled={mode === 'view' || mode === 'delete'}
+                      />
+                    </div>
+                  </div>
+
                   <FormField
                     name="nama"
                     control={forms.control}
                     render={({ field }) => (
                       <FormItem className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
                         <FormLabel
-                          required={true}
+                          required={false}
                           className="font-semibold lg:w-[15%]"
                         >
                           NAMA
@@ -258,16 +238,17 @@ const FormEmkl = ({
                       </FormItem>
                     )}
                   />
+
                   <FormField
                     name="contactperson"
                     control={forms.control}
                     render={({ field }) => (
                       <FormItem className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
                         <FormLabel
-                          required={true}
+                          required={false}
                           className="font-semibold lg:w-[15%]"
                         >
-                          CONTACT PERSON
+                          CONTACTPERSON
                         </FormLabel>
                         <div className="flex flex-col lg:w-[85%]">
                           <FormControl>
@@ -283,13 +264,14 @@ const FormEmkl = ({
                       </FormItem>
                     )}
                   />
+
                   <FormField
                     name="alamat"
                     control={forms.control}
                     render={({ field }) => (
                       <FormItem className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
                         <FormLabel
-                          required={true}
+                          required={false}
                           className="font-semibold lg:w-[15%]"
                         >
                           ALAMAT
@@ -308,267 +290,7 @@ const FormEmkl = ({
                       </FormItem>
                     )}
                   />
-                  <FormField
-                    name="kota"
-                    control={forms.control}
-                    render={({ field }) => (
-                      <FormItem className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
-                        <FormLabel
-                          required={true}
-                          className="font-semibold lg:w-[15%]"
-                        >
-                          KOTA
-                        </FormLabel>
-                        <div className="flex flex-col lg:w-[85%]">
-                          <FormControl>
-                            <Input
-                              {...field}
-                              value={field.value ?? ''}
-                              type="text"
-                              readOnly={mode === 'view' || mode === 'delete'}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </div>
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    name="kodepos"
-                    control={forms.control}
-                    render={({ field }) => (
-                      <FormItem className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
-                        <FormLabel
-                          required={true}
-                          className="font-semibold lg:w-[15%]"
-                        >
-                          KODE POS
-                        </FormLabel>
-                        <div className="flex flex-col lg:w-[85%]">
-                          <FormControl>
-                            <Input
-                              {...field}
-                              value={field.value ?? ''}
-                              type="text"
-                              readOnly={mode === 'view' || mode === 'delete'}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </div>
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    name="notelp"
-                    control={forms.control}
-                    render={({ field }) => (
-                      <FormItem className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
-                        <FormLabel
-                          required={true}
-                          className="font-semibold lg:w-[15%]"
-                        >
-                          NO. TELP
-                        </FormLabel>
-                        <div className="flex flex-col lg:w-[85%]">
-                          <FormControl>
-                            <Input
-                              {...field}
-                              value={field.value ?? ''}
-                              type="text"
-                              readOnly={mode === 'view' || mode === 'delete'}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </div>
-                      </FormItem>
-                    )}
-                  />
 
-                  <FormField
-                    name="email"
-                    control={forms.control}
-                    render={({ field }) => (
-                      <FormItem className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
-                        <FormLabel className="font-semibold lg:w-[15%]">
-                          EMAIL
-                        </FormLabel>
-                        <div className="flex flex-col lg:w-[85%]">
-                          <FormControl>
-                            <Input
-                              {...field}
-                              value={field.value ?? ''}
-                              type="email"
-                              readOnly={mode === 'view' || mode === 'delete'}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </div>
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    name="fax"
-                    control={forms.control}
-                    render={({ field }) => (
-                      <FormItem className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
-                        <FormLabel className="font-semibold lg:w-[15%]">
-                          FAX
-                        </FormLabel>
-                        <div className="flex flex-col lg:w-[85%]">
-                          <FormControl>
-                            <Input
-                              {...field}
-                              value={field.value ?? ''}
-                              type="text"
-                              readOnly={mode === 'view' || mode === 'delete'}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </div>
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    name="alamatweb"
-                    control={forms.control}
-                    render={({ field }) => (
-                      <FormItem className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
-                        <FormLabel className="font-semibold lg:w-[15%]">
-                          WEB
-                        </FormLabel>
-                        <div className="flex flex-col lg:w-[85%]">
-                          <FormControl>
-                            <Input
-                              {...field}
-                              value={field.value ?? ''}
-                              type="text"
-                              readOnly={mode === 'view' || mode === 'delete'}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </div>
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    name="top"
-                    control={forms.control}
-                    render={({ field }) => (
-                      <FormItem className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
-                        <FormLabel
-                          required={true}
-                          className="font-semibold lg:w-[15%]"
-                        >
-                          TOP
-                        </FormLabel>
-                        <div className="flex flex-col lg:w-[85%]">
-                          <FormControl>
-                            <InputNumeric
-                              value={field.value ?? ''}
-                              onValueChange={(value: any) =>
-                                forms.setValue('top', Number(value))
-                              }
-                              readOnly={mode === 'view' || mode === 'delete'}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </div>
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    name="npwp"
-                    control={forms.control}
-                    render={({ field }) => (
-                      <FormItem className="flex w-full flex-col lg:flex-row lg:items-center">
-                        <FormLabel
-                          required={true}
-                          className="font-semibold lg:w-[15%]"
-                        >
-                          NPWP
-                        </FormLabel>
-                        <div className="flex flex-col lg:w-[85%]">
-                          <FormControl>
-                            <InputMask
-                              {...field}
-                              mask="99.999.999.9-999.999"
-                              // maskChar={null}
-                              maskPlaceholder={null}
-                              value={field.value ?? ''}
-                              className={`h-9 w-full rounded-sm border border-zinc-300 px-3 py-2 text-sm text-zinc-600 focus:border-blue-500 focus:bg-[#ffffee] focus-visible:outline-none`}
-                              onChange={field.onChange}
-                              type="text"
-                              readOnly={mode === 'view' || mode === 'delete'}
-                            >
-                              {/* {(inputProps) => (
-                                <input
-                                  {...inputProps}
-                                  type="text"
-                                  placeholder="dd-mm-yyyy"
-                                  className={`h-9 w-full rounded-sm border border-zinc-300 p-2 text-zinc-600 focus:border-blue-500 focus:bg-[#ffffee] ${
-                                    deleteMode
-                                      ? 'text-zinc-400'
-                                      : 'text-zinc-600'
-                                  } focus:outline-none focus:ring-0`}
-                                />
-                              )} */}
-                            </InputMask>
-                          </FormControl>
-                          <FormMessage />
-                        </div>
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    name="namapajak"
-                    control={forms.control}
-                    render={({ field }) => (
-                      <FormItem className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
-                        <FormLabel
-                          required={true}
-                          className="font-semibold lg:w-[15%]"
-                        >
-                          NAMA PAJAK
-                        </FormLabel>
-                        <div className="flex flex-col lg:w-[85%]">
-                          <FormControl>
-                            <Input
-                              {...field}
-                              value={field.value ?? ''}
-                              type="text"
-                              readOnly={mode === 'view' || mode === 'delete'}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </div>
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    name="alamatpajak"
-                    control={forms.control}
-                    render={({ field }) => (
-                      <FormItem className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
-                        <FormLabel
-                          required={true}
-                          className="font-semibold lg:w-[15%]"
-                        >
-                          ALAMAT PAJAK
-                        </FormLabel>
-                        <div className="flex flex-col lg:w-[85%]">
-                          <FormControl>
-                            <Input
-                              {...field}
-                              value={field.value ?? ''}
-                              type="text"
-                              readOnly={mode === 'view' || mode === 'delete'}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </div>
-                      </FormItem>
-                    )}
-                  />
                   <div className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
                     <div className="w-full lg:w-[15%]">
                       <FormLabel className="text-sm font-semibold">
@@ -628,44 +350,333 @@ const FormEmkl = ({
                       ))}
                     </div>
                   </div>
+
+                  <FormField
+                    name="kota"
+                    control={forms.control}
+                    render={({ field }) => (
+                      <FormItem className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
+                        <FormLabel
+                          required={false}
+                          className="font-semibold lg:w-[15%]"
+                        >
+                          KOTA
+                        </FormLabel>
+                        <div className="flex flex-col lg:w-[85%]">
+                          <FormControl>
+                            <Input
+                              {...field}
+                              value={field.value ?? ''}
+                              type="text"
+                              readOnly={mode === 'view' || mode === 'delete'}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </div>
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    name="kodepos"
+                    control={forms.control}
+                    render={({ field }) => (
+                      <FormItem className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
+                        <FormLabel
+                          required={false}
+                          className="font-semibold lg:w-[15%]"
+                        >
+                          KODEPOS
+                        </FormLabel>
+                        <div className="flex flex-col lg:w-[85%]">
+                          <FormControl>
+                            <Input
+                              {...field}
+                              value={field.value ?? ''}
+                              type="text"
+                              readOnly={mode === 'view' || mode === 'delete'}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </div>
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    name="notelp"
+                    control={forms.control}
+                    render={({ field }) => (
+                      <FormItem className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
+                        <FormLabel
+                          required={false}
+                          className="font-semibold lg:w-[15%]"
+                        >
+                          NOTELP
+                        </FormLabel>
+                        <div className="flex flex-col lg:w-[85%]">
+                          <FormControl>
+                            <Input
+                              {...field}
+                              value={field.value ?? ''}
+                              type="text"
+                              readOnly={mode === 'view' || mode === 'delete'}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </div>
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    name="email"
+                    control={forms.control}
+                    render={({ field }) => (
+                      <FormItem className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
+                        <FormLabel
+                          required={false}
+                          className="font-semibold lg:w-[15%]"
+                        >
+                          EMAIL
+                        </FormLabel>
+                        <div className="flex flex-col lg:w-[85%]">
+                          <FormControl>
+                            <Input
+                              {...field}
+                              value={field.value ?? ''}
+                              type="text"
+                              readOnly={mode === 'view' || mode === 'delete'}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </div>
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    name="fax"
+                    control={forms.control}
+                    render={({ field }) => (
+                      <FormItem className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
+                        <FormLabel
+                          required={false}
+                          className="font-semibold lg:w-[15%]"
+                        >
+                          FAX
+                        </FormLabel>
+                        <div className="flex flex-col lg:w-[85%]">
+                          <FormControl>
+                            <Input
+                              {...field}
+                              value={field.value ?? ''}
+                              type="text"
+                              readOnly={mode === 'view' || mode === 'delete'}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </div>
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    name="alamatweb"
+                    control={forms.control}
+                    render={({ field }) => (
+                      <FormItem className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
+                        <FormLabel
+                          required={false}
+                          className="font-semibold lg:w-[15%]"
+                        >
+                          ALAMATWEB
+                        </FormLabel>
+                        <div className="flex flex-col lg:w-[85%]">
+                          <FormControl>
+                            <Input
+                              {...field}
+                              value={field.value ?? ''}
+                              type="text"
+                              readOnly={mode === 'view' || mode === 'delete'}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </div>
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    name="top"
+                    control={forms.control}
+                    render={({ field }) => (
+                      <FormItem className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
+                        <FormLabel
+                          required={false}
+                          className="font-semibold lg:w-[15%]"
+                        >
+                          TOP
+                        </FormLabel>
+                        <div className="flex flex-col lg:w-[85%]">
+                          <FormControl>
+                            <InputCurrency
+                              value={field.value ?? ''}
+                              onValueChange={field.onChange}
+                              readOnly={mode === 'view' || mode === 'delete'}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </div>
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    name="npwp"
+                    control={forms.control}
+                    render={({ field }) => (
+                      <FormItem className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
+                        <FormLabel
+                          required={false}
+                          className="font-semibold lg:w-[15%]"
+                        >
+                          NPWP
+                        </FormLabel>
+                        <div className="flex flex-col lg:w-[85%]">
+                          <FormControl>
+                            <Input
+                              {...field}
+                              value={field.value ?? ''}
+                              type="text"
+                              readOnly={mode === 'view' || mode === 'delete'}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </div>
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    name="namapajak"
+                    control={forms.control}
+                    render={({ field }) => (
+                      <FormItem className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
+                        <FormLabel
+                          required={false}
+                          className="font-semibold lg:w-[15%]"
+                        >
+                          NAMAPAJAK
+                        </FormLabel>
+                        <div className="flex flex-col lg:w-[85%]">
+                          <FormControl>
+                            <Input
+                              {...field}
+                              value={field.value ?? ''}
+                              type="text"
+                              readOnly={mode === 'view' || mode === 'delete'}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </div>
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    name="alamatpajak"
+                    control={forms.control}
+                    render={({ field }) => (
+                      <FormItem className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
+                        <FormLabel
+                          required={false}
+                          className="font-semibold lg:w-[15%]"
+                        >
+                          ALAMATPAJAK
+                        </FormLabel>
+                        <div className="flex flex-col lg:w-[85%]">
+                          <FormControl>
+                            <Input
+                              {...field}
+                              value={field.value ?? ''}
+                              type="text"
+                              readOnly={mode === 'view' || mode === 'delete'}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </div>
+                      </FormItem>
+                    )}
+                  />
+
                   <div className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
                     <div className="w-full lg:w-[15%]">
-                      <FormLabel className="text-sm font-semibold">
-                        Status Aktif
+                      <FormLabel
+                        required={false}
+                        className="text-sm font-semibold"
+                      >
+                        Statustrado
                       </FormLabel>
                     </div>
                     <div className="w-full lg:w-[85%]">
-                      {lookUpPropsStatusAktif.map((props, index) => (
-                        <LookUp
-                          key={index}
-                          {...props}
-                          lookupValue={(id) =>
-                            forms.setValue('statusaktif', id)
-                          }
-                          inputLookupValue={forms.getValues('statusaktif')}
-                          lookupNama={forms.getValues('statusaktif_text')}
-                        />
-                      ))}
+                      <LookUp
+                        columns={[{ key: 'text', name: 'STATUS TRADO' }]}
+                        labelLookup="STATUSTRADO LOOKUP"
+                        required={false}
+                        selectedRequired={false}
+                        endpoint="parameter?grp=status+trado"
+                        label="STATUSTRADO"
+                        reduxKey="STATUS TRADO"
+                        singleColumn={true}
+                        pageSize={20}
+                        showOnButton={true}
+                        postData="text"
+                        dataToPost="id"
+                        lookupValue={(id) => {
+                          forms.setValue('statustrado', String(id ?? ''));
+                        }}
+                        onSelectRow={(val) =>
+                          forms.setValue('statustrado_text', val?.text)
+                        }
+                        lookupNama={forms.getValues('statustrado_text')}
+                        disabled={mode === 'view' || mode === 'delete'}
+                      />
                     </div>
                   </div>
+
                   <div className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
                     <div className="w-full lg:w-[15%]">
-                      <FormLabel className="text-sm font-semibold">
-                        Status Trado
+                      <FormLabel
+                        required={false}
+                        className="text-sm font-semibold"
+                      >
+                        Statusaktif
                       </FormLabel>
                     </div>
                     <div className="w-full lg:w-[85%]">
-                      {lookUpPropsStatusTrado.map((props, index) => (
-                        <LookUp
-                          key={index}
-                          {...props}
-                          lookupValue={(id) =>
-                            forms.setValue('statustrado', id)
-                          }
-                          inputLookupValue={forms.getValues('statustrado')}
-                          lookupNama={forms.getValues('statustrado_text')}
-                        />
-                      ))}
+                      <LookUp
+                        columns={[{ key: 'text', name: 'STATUS AKTIF' }]}
+                        labelLookup="STATUSAKTIF LOOKUP"
+                        required={false}
+                        selectedRequired={false}
+                        endpoint="parameter?grp=status+aktif"
+                        label="STATUSAKTIF"
+                        reduxKey="STATUS AKTIF"
+                        singleColumn={true}
+                        pageSize={20}
+                        showOnButton={true}
+                        postData="text"
+                        dataToPost="id"
+                        lookupValue={(id) => {
+                          forms.setValue('statusaktif', String(id ?? ''));
+                        }}
+                        onSelectRow={(val) =>
+                          forms.setValue('statusaktif_text', val?.text)
+                        }
+                        lookupNama={forms.getValues('statusaktif_text')}
+                        disabled={mode === 'view' || mode === 'delete'}
+                      />
                     </div>
                   </div>
                 </div>
@@ -673,12 +684,14 @@ const FormEmkl = ({
             </Form>
           </div>
         </div>
+
         <FormFooterButtons
           mode={mode}
           onSave={() => {
             onSubmit(false);
             dispatch(setSubmitClicked(true));
           }}
+          deleteMode={mode === 'delete'}
           onSaveAndAdd={() => {
             onSubmit(true);
             dispatch(setSubmitClicked(true));

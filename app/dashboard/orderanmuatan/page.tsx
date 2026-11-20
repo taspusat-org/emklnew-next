@@ -12,7 +12,6 @@ import { fieldLength } from '@/lib/apis/field-length.api';
 import { getPelayaranFn } from '@/lib/apis/pelayaran.api';
 import { getContainerFn } from '@/lib/apis/container.api';
 import { getParameterFn } from '@/lib/apis/parameter.api';
-import { getAllGandenganFn } from '@/lib/apis/gandengan.api';
 import { getJenisMuatanFn } from '@/lib/apis/jenismuatan.api';
 import { getSandarKapalFn } from '@/lib/apis/sandarkapal.api';
 import { getTujuankapalFn } from '@/lib/apis/tujuankapal.api';
@@ -33,6 +32,7 @@ import {
   JENISORDERIMPORTNAMA,
   JENISORDERMUATANNAMA
 } from '@/constants/orderan';
+import { getGandenganFn } from '@/lib/apis/gandengan.api';
 
 interface ApiResponse {
   type: string;
@@ -82,7 +82,7 @@ const Page = () => {
           getEmklFn({ isLookUp: 'true' }),
           getDaftarblFn({ isLookUp: 'true' }),
           getAllTradoFn({ isLookUp: 'true' }),
-          getAllGandenganFn({ isLookUp: 'true' })
+          getGandenganFn({ isLookUp: 'true' })
         ]);
 
         if (jenisOrderLookup.type === 'local') {

@@ -1,12 +1,16 @@
-import { REQUIRED_FIELD } from '@/constants/validation';
-import z from 'zod';
-import { dynamicRequiredMessage } from '../utils';
+import { z } from 'zod';
 
-export const pelayaranSchema = z.object({
+export const PelayaranSchema = z.object({
+  // id & relasi (lookup/status) menyimpan id (varchar UUID), bukan angka.
   id: z.string().nullable().optional(),
-  nama: z.string().nonempty({ message: dynamicRequiredMessage('NAMA') }),
-  keterangan: z.string().optional(),
-  statusaktif: z.string().min(1, `${REQUIRED_FIELD}`),
-  statusaktif_text: z.string().optional()
+
+  relasi_id: z.string().nullable().optional(),
+  relasi_id_text: z.string().nullable().optional(),
+  nama: z.string().trim().nullable().optional(),
+  keterangan: z.string().trim().nullable().optional(),
+
+  statusaktif: z.string().nullable().optional(),
+  statusaktif_text: z.string().nullable().optional()
 });
-export type PelayaranInput = z.infer<typeof pelayaranSchema>;
+
+export type PelayaranInput = z.infer<typeof PelayaranSchema>;

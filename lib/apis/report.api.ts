@@ -345,3 +345,67 @@ export const generateJabatanExportFn = async (
   const response = await api2.post('/jabatan/export', payload);
   return response.data;
 };
+
+/** Cetak laporan gandengan di background — lihat generateGroupbiayaextraReportFn. */
+export const generateGandenganReportFn = async (
+  payload: ReportJobPayload
+): Promise<ReportJobResponse> => {
+  const response = await api2.post('/gandengan/report', payload);
+  return response.data;
+};
+
+/** Export Excel gandengan di background — lihat generateAlatbayarExportFn. */
+export const generateGandenganExportFn = async (
+  payload: ExportJobPayload
+): Promise<ReportJobResponse> => {
+  const response = await api2.post('/gandengan/export', payload);
+  return response.data;
+};
+
+/** Cetak laporan Emkl di background — lihat generateGroupbiayaextraReportFn. */
+export const generateEmklReportFn = async (
+  payload: ReportJobPayload
+): Promise<ReportJobResponse> => {
+  const response = await api2.post('/emkl/report', payload);
+  return response.data;
+};
+
+/** Export Excel Emkl di background — lihat generateAlatbayarExportFn. */
+export const generateEmklExportFn = async (
+  payload: ExportJobPayload
+): Promise<ReportJobResponse> => {
+  const response = await api2.post('/emkl/export', payload);
+  return response.data;
+};
+
+/** Cetak laporan Pelayaran di background — lihat generateGroupbiayaextraReportFn. */
+export const generatePelayaranReportFn = async (
+  payload: ReportJobPayload
+): Promise<ReportJobResponse> => {
+  const response = await api2.post('/pelayaran/report', payload);
+  return response.data;
+};
+
+/** Export Excel Pelayaran di background — lihat generateAlatbayarExportFn. */
+export const generatePelayaranExportFn = async (
+  payload: ExportJobPayload
+): Promise<ReportJobResponse> => {
+  const response = await api2.post('/pelayaran/export', payload);
+  return response.data;
+};
+
+/** Cetak laporan Shipper  di background — lihat generateGroupbiayaextraReportFn. */
+export const generateShipperReportFn = async (
+  payload: ReportJobPayload
+): Promise<ReportJobResponse> => {
+  const response = await api2.post('/shipper/report', payload);
+  return response.data;
+};
+
+/** Export Excel Shipper  di background — lihat generateAlatbayarExportFn. */
+export const generateShipperExportFn = async (
+  payload: ExportJobPayload
+): Promise<ReportJobResponse> => {
+  const response = await api2.post('/shipper/export', payload);
+  return response.data;
+};

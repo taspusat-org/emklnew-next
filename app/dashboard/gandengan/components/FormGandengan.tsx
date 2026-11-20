@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import {
   Form,
@@ -8,16 +7,27 @@ import {
   FormLabel,
   FormMessage
 } from '@/components/ui/form';
-import { Button } from '@/components/ui/button';
 import { useEffect, useRef, useState } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState } from '@/lib/store/store';
 import LookUp from '@/components/custom-ui/LookUp';
-import FormFooterButtons from '@/components/custom-ui/FormFooterButtons';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { IoMdClose } from 'react-icons/io';
-import { FaSave } from 'react-icons/fa';
 import { setSubmitClicked } from '@/lib/store/lookupSlice/lookupSlice';
+import FormFooterButtons from '@/components/custom-ui/FormFooterButtons';
+
+interface FormGandenganProps {
+  popOver: boolean;
+  setPopOver: (value: boolean) => void;
+  forms: any;
+  onSubmit: any;
+  mode: any;
+  handleClose: () => void;
+  isLoadingCreate: boolean;
+  isLoadingUpdate: boolean;
+  isLoadingDelete: boolean;
+}
 
 const FormGandengan = ({
   popOver,
@@ -29,95 +39,10 @@ const FormGandengan = ({
   isLoadingCreate,
   isLoadingUpdate,
   isLoadingDelete
-}: any) => {
-  const lookUpPropsStatusAktif = [
-    {
-      columns: [{ key: 'text', name: 'NAMA' }],
-      // filterby: { class: 'system', method: 'get' },
-      labelLookup: 'STATUS AKTIF LOOKUP',
-      required: true,
-      selectedRequired: false,
-      endpoint: 'parameter?grp=status+aktif',
-      label: 'status aktif',
-      singleColumn: true,
-      pageSize: 20,
-      dataToPost: 'id',
-      showOnButton: true,
-      postData: 'text'
-    }
-  ];
-  const formRef = useRef<HTMLFormElement | null>(null); // Ref untuk form
+}: FormGandenganProps) => {
+  const formRef = useRef<HTMLFormElement | null>(null);
   const openName = useSelector((state: RootState) => state.lookup.openName);
   const dispatch = useDispatch();
-  useEffect(() => {
-    // Fungsi untuk menangani pergerakan fokus berdasarkan tombol
-    const handleKeyDown = (event: KeyboardEvent) => {
-      // Jika popOverDate ada nilainya, jangan lakukan apa-apa
-      if (openName) {
-        return;
-      }
-
-      const form = formRef.current;
-
-      if (!form) return;
-
-      const inputs = Array.from(
-        form.querySelectorAll('input, select, textarea, button')
-      ).filter(
-        (element) =>
-          element.id !== 'image-dropzone' &&
-          element.tagName !== 'BUTTON' &&
-          !element.hasAttribute('readonly') // Pengecualian jika input readonly
-      ) as HTMLElement[]; // Ambil semua input dalam form kecuali button dan readonly inputs
-
-      const focusedElement = document.activeElement as HTMLElement;
-
-      let nextElement: HTMLElement | null = null;
-
-      if (event.key === 'ArrowDown' || event.key === 'Tab') {
-        nextElement = getNextFocusableElement(inputs, focusedElement, 'down');
-        if (event.key === 'Tab') {
-          event.preventDefault(); // Cegah default tab behavior jika ingin mengontrol pergerakan fokus
-        }
-      } else if (
-        event.key === 'ArrowUp' ||
-        (event.shiftKey && event.key === 'Tab')
-      ) {
-        nextElement = getNextFocusableElement(inputs, focusedElement, 'up');
-      }
-      // Jika ditemukan input selanjutnya, pindahkan fokus
-      if (nextElement) {
-        nextElement.focus();
-      }
-    };
-
-    // Fungsi untuk mendapatkan elemen input selanjutnya berdasarkan arah (down atau up)
-    const getNextFocusableElement = (
-      inputs: HTMLElement[],
-      currentElement: HTMLElement,
-      direction: 'up' | 'down'
-    ): HTMLElement | null => {
-      const index = Array.from(inputs).indexOf(currentElement as any);
-
-      if (direction === 'down') {
-        // Jika sudah di input terakhir, tidak perlu pindah fokus
-        if (index === inputs.length - 1) {
-          return null; // Tidak ada elemen selanjutnya
-        }
-        return inputs[index + 1]; // Fokus pindah ke input setelahnya
-      } else {
-        return inputs[index - 1]; // Fokus pindah ke input sebelumnya
-      }
-    };
-
-    // Menambahkan event listener untuk keydown
-    document.addEventListener('keydown', handleKeyDown);
-
-    // Membersihkan event listener ketika komponen tidak lagi digunakan
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [openName]); // Tambahkan popOverDate sebagai dependensi
   return (
     <Dialog open={popOver} onOpenChange={setPopOver}>
       <DialogTitle hidden={true}>Title</DialogTitle>
@@ -125,12 +50,12 @@ const FormGandengan = ({
         <div className="flex items-center justify-between bg-background-form-header px-2 py-2">
           <h2 className="text-sm font-semibold">
             {mode === 'add'
-              ? 'Add Gandengan'
+              ? 'Add gandengan'
               : mode === 'edit'
-              ? 'Edit Gandengan'
+              ? 'Edit gandengan'
               : mode === 'delete'
-              ? 'Delete Gandengan'
-              : 'View Gandengan'}
+              ? 'Delete gandengan'
+              : 'View gandengan'}
           </h2>
           <div
             className="cursor-pointer rounded-md border border-zinc-200 bg-red-500 p-0 hover:bg-red-400"
@@ -142,6 +67,7 @@ const FormGandengan = ({
             <IoMdClose className="h-5 w-5 font-bold text-white" />
           </div>
         </div>
+
         <div className="h-full flex-1 overflow-y-auto bg-background-card pl-1 pr-2">
           <div className="h-full bg-background-card px-5 py-3">
             <Form {...forms}>
@@ -171,7 +97,7 @@ const FormGandengan = ({
                               {...field}
                               value={field.value ?? ''}
                               type="text"
-                              disabled={mode === 'view' || mode === 'delete'}
+                              readOnly={mode === 'view' || mode === 'delete'}
                             />
                           </FormControl>
                           <FormMessage />
@@ -186,10 +112,10 @@ const FormGandengan = ({
                     render={({ field }) => (
                       <FormItem className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
                         <FormLabel
-                          required={true}
+                          required={false}
                           className="font-semibold lg:w-[15%]"
                         >
-                          Keterangan
+                          KETERANGAN
                         </FormLabel>
                         <div className="flex flex-col lg:w-[85%]">
                           <FormControl>
@@ -197,7 +123,7 @@ const FormGandengan = ({
                               {...field}
                               value={field.value ?? ''}
                               type="text"
-                              disabled={mode === 'view' || mode === 'delete'}
+                              readOnly={mode === 'view' || mode === 'delete'}
                             />
                           </FormControl>
                           <FormMessage />
@@ -205,24 +131,39 @@ const FormGandengan = ({
                       </FormItem>
                     )}
                   />
+
                   <div className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
                     <div className="w-full lg:w-[15%]">
-                      <FormLabel className="text-sm font-semibold">
+                      <FormLabel
+                        required={true}
+                        className="text-sm font-semibold"
+                      >
                         Status Aktif
                       </FormLabel>
                     </div>
                     <div className="w-full lg:w-[85%]">
-                      {lookUpPropsStatusAktif.map((props, index) => (
-                        <LookUp
-                          key={index}
-                          {...props}
-                          lookupValue={(id) =>
-                            forms.setValue('statusaktif', id)
-                          }
-                          lookupNama={forms.getValues('statusaktif_text')}
-                          disabled={mode === 'view' || mode === 'delete'}
-                        />
-                      ))}
+                      <LookUp
+                        columns={[{ key: 'text', name: 'STATUS AKTIF' }]}
+                        labelLookup="STATUS AKTIF LOOKUP"
+                        required={true}
+                        selectedRequired={false}
+                        endpoint="parameter?grp=status+aktif"
+                        label="STATUS AKTIF"
+                        reduxKey="STATUS AKTIF"
+                        singleColumn={true}
+                        pageSize={20}
+                        showOnButton={true}
+                        postData="text"
+                        dataToPost="id"
+                        lookupValue={(id) => {
+                          forms.setValue('statusaktif', String(id ?? ''));
+                        }}
+                        onSelectRow={(val) =>
+                          forms.setValue('statusaktif_text', val?.text)
+                        }
+                        lookupNama={forms.getValues('statusaktif_text')}
+                        disabled={mode === 'view' || mode === 'delete'}
+                      />
                     </div>
                   </div>
                 </div>
@@ -230,13 +171,14 @@ const FormGandengan = ({
             </Form>
           </div>
         </div>
+
         <FormFooterButtons
           mode={mode}
-          deleteMode={mode === 'delete'}
           onSave={() => {
             onSubmit(false);
             dispatch(setSubmitClicked(true));
           }}
+          deleteMode={mode === 'delete'}
           onSaveAndAdd={() => {
             onSubmit(true);
             dispatch(setSubmitClicked(true));
