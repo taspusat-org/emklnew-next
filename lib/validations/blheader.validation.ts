@@ -66,8 +66,8 @@ export const blDetailSchema = z.object({
   bl_id: optionalId,
 
   bl_nobukti: z
-    .string({ message: dynamicRequiredMessage('NO BL CONECTING') })
-    .nonempty({ message: dynamicRequiredMessage('NO BL CONECTING') }),
+    .string({ message: dynamicRequiredMessage('NOMOR BL') })
+    .nonempty({ message: dynamicRequiredMessage('NOMOR BL') }),
 
   shippinginstructiondetail_nobukti: z
     .string({

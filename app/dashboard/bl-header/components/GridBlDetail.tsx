@@ -40,6 +40,7 @@ import DataGrid, {
 import DraggableColumn from '@/components/custom-ui/DraggableColumns';
 import { highlightText } from '@/components/custom-ui/HighlightText';
 import { useTheme } from 'next-themes';
+import { LIMIT } from '@/constants/constant';
 import { FaChevronDown, FaChevronRight } from 'react-icons/fa';
 import {
   getBlDetailFn,
@@ -161,7 +162,7 @@ const GridBlDetail = () => {
 
   const [filters, setFilters] = useState<Filter>({
     page: 1,
-    limit: 50,
+    limit: LIMIT,
     search: '',
     filters: filterBlDetail,
     sortBy: 'bl_nobukti',
@@ -2086,10 +2087,33 @@ const GridBlDetail = () => {
           rowIdx: 0,
           idx: pendingSelectIdxRef.current
         });
-        gridRef.current?.selectCell?.({
-          rowIdx: 0,
-          idx: pendingSelectIdxRef.current
-        });
+
+        // selectCell MEMINDAHKAN DOM focus, bukan cuma menandai sel aktif.
+        // Blok ini jalan tiap kali window detail dibangun ulang — dan itu
+        // terjadi setiap headerData.id berganti, termasuk saat halaman pertama
+        // dimuat. Tanpa penjaga di bawah, 50ms setelah grid master memilih
+        // barisnya fokus tersedot ke grid detail, sehingga Arrow/PageUp/
+        // PageDown di master tidak pernah bekerja sampai user mengklik master
+        // lebih dulu.
+        //
+        // Highlight baris 0 sudah diurus setSelectedRow(0) + getRowClass di
+        // atas, jadi melewatkan selectCell TIDAK membuat detail kehilangan
+        // penanda barisnya — yang dilewatkan hanya perpindahan fokusnya.
+        // Begitu user benar-benar masuk ke grid ini (klik / Tab), RDG memilih
+        // selnya sendiri.
+        //
+        // Bandingkan GridPanjarMuatanDetail: di sana selectCell HANYA dipanggil
+        // dari aksi user di dalam grid detail itu sendiri, tidak pernah saat
+        // grid-nya sekadar dimuat ulang.
+        const gridEl = gridRef.current?.element;
+        const fokusSedangDiDetail =
+          !!gridEl && gridEl.contains(document.activeElement);
+        if (fokusSedangDiDetail) {
+          gridRef.current?.selectCell?.({
+            rowIdx: 0,
+            idx: pendingSelectIdxRef.current
+          });
+        }
       }, 50);
     }
   }, [visiblePages, pageDataCache]);

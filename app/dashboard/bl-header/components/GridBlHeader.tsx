@@ -232,7 +232,57 @@ const GridBlHeader = () => {
   // sebanyak filters.limit. Geser juga selectedRowRef supaya baris DATA yang
   // sama tetap ter-highlight; commit ke state ditunda ke Row Combiner agar
   // selectedRow & rows berubah di render yang sama (highlight tidak berkedip).
+  // Index KOLOM sel aktif — dicatat supaya re-anchor selectCell setelah
+  // window bergeser tidak melompat ke kolom lain.
+  const selectedCellIdxRef = useRef<number>(1);
+
+  // Menjaga navigasi keyboard tetap hidup saat window bergeser: mengembalikan
+  // DOM focus ke sel aktif yang BARU. Tanpa ini, baris pemegang focus
+  // ter-unmount bersama halaman yang dibuang, focus jatuh ke <body>, dan
+  // Arrow/PageUp/PageDown berhenti bekerja begitu user ada di halaman kedua
+  // atau lebih.
+  //
+  // Modalitas input terakhir: 'keyboard' (Arrow/Page) atau 'pointer' (wheel /
+  // drag scrollbar). Menentukan apakah sel aktif ikut digeser & di-re-anchor
+  // saat window bergeser — scroll pakai mouse TIDAK boleh memindahkan sel aktif.
+  const interactionModeRef = useRef<'keyboard' | 'pointer'>('pointer');
+  // Diset saat window benar-benar bergeser: menandai apakah pergeseran itu dari
+  // keyboard, supaya kompensasi scroll tahu perlu re-anchor selectCell atau tidak.
+  const reanchorFromKeyboardRef = useRef(false);
+  // Snapshot: apakah sel aktif memegang DOM focus TEPAT SEBELUM window bergeser.
+  // Harus direkam sebelum commit, karena setelahnya elemen selnya sudah hilang.
+  const gridCellHadFocusRef = useRef(false);
+
+  // Sel aktif react-data-grid selalu punya tabindex="0" (roving tabindex).
+  // Header memakai role="columnheader", jadi selector ini hanya kena sel data —
+  // input filter di header TIDAK ikut tertangkap.
+  const getSelectedGridCell = (): HTMLElement | null =>
+    gridRef.current?.element?.querySelector<HTMLElement>(
+      ':scope > [role="row"] > [role="gridcell"][tabindex="0"]'
+    ) ?? null;
+
+  const isSelectedGridCellFocused = () => {
+    const cell = getSelectedGridCell();
+    return cell !== null && cell === document.activeElement;
+  };
+
+  // Saat window bergeser, baris pemegang DOM focus ikut ter-unmount sehingga
+  // focus jatuh ke <body> dan Arrow/PageUp/PageDown berhenti sampai ke grid.
+  // Kembalikan focus TANPA menggeser scroll.
+  const restoreGridCellFocus = () => {
+    if (!gridCellHadFocusRef.current) return;
+    gridCellHadFocusRef.current = false;
+    getSelectedGridCell()?.focus({ preventScroll: true });
+  };
+
   const shiftSelectionForWindow = (deltaRows: number) => {
+    const fromKeyboard = interactionModeRef.current === 'keyboard';
+    reanchorFromKeyboardRef.current = fromKeyboard;
+    // Rekam SEKARANG, sebelum React meng-unmount baris halaman yang dibuang.
+    gridCellHadFocusRef.current = isSelectedGridCellFocused();
+
+    // Pointer: biarkan index apa adanya supaya tetap sinkron dgn sel aktif RDG.
+    if (!fromKeyboard) return;
     selectedRowRef.current = Math.max(0, selectedRowRef.current + deltaRows);
   };
 
@@ -1224,7 +1274,7 @@ const GridBlHeader = () => {
         headerCellClass: 'column-headers',
         renderHeaderCell: (column: any) => (
           <div
-            title="Modified By"
+            title="MODIFIED BY"
             className="flex h-full cursor-pointer flex-col items-center gap-1"
           >
             <div
@@ -1291,7 +1341,7 @@ const GridBlHeader = () => {
         width: 250,
         renderHeaderCell: (column: any) => (
           <div
-            title="Created At"
+            title="CREATED AT"
             className="flex h-full cursor-pointer flex-col items-center gap-1"
           >
             <div
@@ -1358,7 +1408,7 @@ const GridBlHeader = () => {
         width: 250,
         renderHeaderCell: (column: any) => (
           <div
-            title="Updated At"
+            title="UPDATED AT"
             className="flex h-full cursor-pointer flex-col items-center gap-1"
           >
             <div
@@ -1829,25 +1879,48 @@ const GridBlHeader = () => {
   // Tanpa ini, gagal validasi zod = tombol SIMPAN diam saja. Error pada field
   // tersembunyi (id, nomor shipping) atau pada baris tree yang sedang tertutup
   // tidak pernah terlihat, jadi user tidak tahu apa yang harus diperbaiki.
+  // Tanpa ini, gagal validasi zod = tombol SIMPAN diam saja. Error pada field
+  // tersembunyi (id, nomor shipping) atau pada baris tree yang sedang tertutup
+  // tidak pernah terlihat, jadi user tidak tahu apa yang harus diperbaiki.
+  //
+  // Daftarnya TIDAK lagi dilempar ke alert modal: pesannya hilang begitu alert
+  // ditutup, padahal yang harus diperbaiki ada di grid detail di belakangnya.
+  // Sekarang dirender sebagai panel di dalam form (ringkasan-validasi-bl,
+  // lihat FormBlHeader) dan cukup di-scroll ke posisinya.
+  // Tanpa ini, gagal validasi zod = tombol SIMPAN diam saja.
+  //
+  // Error per-kolom TIDAK dialertkan: pesannya sudah tampil inline di bawah
+  // input lewat cellWithError, pola yang sama dengan FormShippingInstraction.
+  //
+  // Satu-satunya yang masih lewat alert adalah error pada ARRAY rincian. Kalau
+  // rinciannya kosong, grid rincian tidak punya baris sama sekali sehingga
+  // tidak ada sel tempat menempelkan pesannya.
+  //
+  // Pembedanya: zod menaruh pesan array-level di `detailsrincian.message`,
+  // sedangkan error per-field rincian membuat `detailsrincian` jadi ARRAY
+  // berisi objek error — yang itu sudah tertangani inline.
   const onInvalid = (errors: any) => {
-    const kumpulkan = (obj: any, jalur: string[] = []): string[] => {
-      if (!obj || typeof obj !== 'object') return [];
-      if (typeof obj.message === 'string') {
-        return [`${jalur.join('.')}: ${obj.message}`];
-      }
-      return Object.entries(obj).flatMap(([kunci, nilai]) =>
-        kumpulkan(nilai, [...jalur, kunci])
-      );
-    };
+    console.warn('[BL] validasi gagal:', errors);
 
-    const daftar = kumpulkan(errors);
-    console.warn('[BL] validasi gagal:', daftar);
+    const detail: any[] = Array.isArray(errors?.details) ? errors.details : [];
+    const barisRincianKosong = detail
+      .map((d, i) => {
+        const e = d?.detailsrincian;
+        if (!e || Array.isArray(e)) return null;
+        const pesan = e.message ?? e.root?.message;
+        return pesan ? i + 1 : null;
+      })
+      .filter((x): x is number => x !== null);
 
-    alert({
-      title: daftar.length > 0 ? daftar.join('\n') : 'DATA BELUM LENGKAP',
-      variant: 'danger',
-      submitText: 'OK'
-    });
+    if (barisRincianKosong.length > 0) {
+      alert({
+        title:
+          'RINCIAN BELUM DIISI PADA DETAIL BARIS ' +
+          barisRincianKosong.join(', '),
+        variant: 'danger',
+        submitText: 'OK'
+      });
+    }
   };
 
   const onSubmit = async (values: blHeaderInput, keepOpenModal = false) => {
@@ -2487,10 +2560,21 @@ const GridBlHeader = () => {
 
   // 3. Row Combiner — gabungkan halaman yang sedang terlihat jadi `rows`.
   useEffect(() => {
+    // Dedupe per id: setelah sebuah baris dihapus, halaman di server
+    // bergeser satu baris, sedangkan cache window masih memegang susunan
+    // lama — baris yang sama bisa muncul di dua halaman cache sekaligus dan
+    // react-data-grid melapor "two children with the same key".
     const combinedRows: BlHeader[] = [];
+    const idTerpakai = new Set<string>();
     visiblePages?.forEach((page) => {
       const pageData = pageDataCache.get(page);
-      if (pageData) combinedRows.push(...pageData);
+      if (!pageData) return;
+      pageData.forEach((row) => {
+        const id = String(row.id);
+        if (idTerpakai.has(id)) return;
+        idTerpakai.add(id);
+        combinedRows.push(row);
+      });
     });
 
     if (combinedRows.length === 0) return;
@@ -2604,6 +2688,22 @@ const GridBlHeader = () => {
       lastScrollTopRef.current = container.scrollTop;
       hasAdjustedScrollRef.current = true;
       pendingScrollAdjustment.current = 0;
+
+      // Scroll sudah dikompensasi, jadi baris target ada di posisi visual yang
+      // sama -> selectCell di sini tidak memicu scroll tambahan. Re-anchor HANYA
+      // untuk keyboard; saat mouse scroll, sel aktif tidak boleh ikut pindah.
+      if (reanchorFromKeyboardRef.current) {
+        const idx =
+          selectedCellIdxRef.current >= 0 ? selectedCellIdxRef.current : 1;
+        gridRef.current?.selectCell?.({
+          rowIdx: selectedRowRef.current,
+          idx
+        });
+        gridCellHadFocusRef.current = false;
+      } else {
+        restoreGridCellFocus();
+      }
+      reanchorFromKeyboardRef.current = false;
     }
   }, [rows]);
 
@@ -2762,7 +2862,25 @@ const GridBlHeader = () => {
       // PageUp/PageDown ditangkap di pembungkus, bukan di <DataGrid>:
       // react-data-grid tidak meneruskan prop DOM sembarangan, dan input
       // filter/search menelan event keyboard-nya sendiri.
-      onKeyDownCapture={handleKeyDownCapture}
+      onKeyDownCapture={(event) => {
+        // Tandai modalitas dulu, baru navigasi baris. handleKeyDownCapture
+        // yang benar-benar memindah baris saat fokus di input filter/search.
+        if (
+          event.key === 'ArrowDown' ||
+          event.key === 'ArrowUp' ||
+          event.key === 'PageDown' ||
+          event.key === 'PageUp'
+        ) {
+          interactionModeRef.current = 'keyboard';
+        }
+        handleKeyDownCapture(event);
+      }}
+      onWheelCapture={() => {
+        interactionModeRef.current = 'pointer';
+      }}
+      onPointerDownCapture={() => {
+        interactionModeRef.current = 'pointer';
+      }}
       className={`flex h-[100%] w-full justify-center`}
     >
       <div className="flex h-[100%] w-full flex-col rounded-sm border border-border bg-background">
@@ -2860,6 +2978,9 @@ const GridBlHeader = () => {
           onCellKeyDown={handleKeyDown}
           onScroll={handleScroll}
           onSelectedCellChange={(args) => {
+            selectedCellIdxRef.current = finalColumns.findIndex(
+              (c) => c.key === args.column.key
+            );
             handleCellClick({ row: args.row });
           }}
           renderers={{
@@ -2875,7 +2996,7 @@ const GridBlHeader = () => {
             onDelete={handleDelete}
             onView={handleView}
             rowsLength={rows.length}
-            totalItems={allBlHeader ? allBlHeader.pagination.totalItems : 0}
+            totalItems={allBlHeader?.pagination?.totalItems ?? 0}
             startRow={startRow}
             customActions={[
               {

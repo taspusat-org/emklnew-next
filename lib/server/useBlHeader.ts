@@ -51,30 +51,17 @@ export const useGetAllBlHeader = (
   } = {},
   signal?: AbortSignal
 ) => {
-  const dispatch = useDispatch();
-  const { alert } = useAlert();
-  const queryClient = useQueryClient();
-
+  // TANPA dispatch(setProcessing()). Overlay loading global itu dipakai untuk
+  // MUTASI (simpan/edit/hapus), bukan untuk memuat grid — sama seperti
+  // useGetAllBiayaExtraHeader. Grid ini berjendela: satu kali buka saja sudah
+  // menembak bulk fetch + beberapa prefetch, dan tiap pergeseran window
+  // menembak lagi. Menyalakan overlay global di query-nya membuat layar
+  // berkedip "loading" terus-menerus padahal grid sudah menampilkan data.
+  // Indikator yang relevan tetap ada di footer grid ({isLoading ?
+  // <LoadRowsRenderer /> : null}).
   return useQuery(
     ['blheader', filters],
-    async () => {
-      // Only trigger processing if the page is 1
-      if (filters.page === 1) {
-        dispatch(setProcessing());
-      }
-
-      try {
-        const data = await getAllBlHeaderHeaderFn(filters, signal);
-        return data;
-      } catch (error) {
-        // Show error toast and dispatch processed
-        dispatch(setProcessed());
-        throw error;
-      } finally {
-        // Regardless of success or failure, we dispatch setProcessed after the query finishes
-        dispatch(setProcessed());
-      }
-    },
+    async () => await getAllBlHeaderHeaderFn(filters, signal),
     {
       enabled: !signal?.aborted && (filters.page ?? 1) >= 1,
       staleTime: 0,

@@ -938,6 +938,14 @@ const FormBlHeader = ({
     ];
   }, [mode, detailErrors, biayaColumns, expandedRincianKey, isDark]);
   const columns = useMemo((): Column<BLDetail>[] => {
+    // Error per kolom detail, sama persis dengan FormShippingInstraction:
+    // pesannya dirender di bawah input lewat cellWithError, bukan dikumpulkan
+    // jadi satu panel atau alert.
+    const detailError = (row: any, field: string) =>
+      (detailErrors?.[row.detailIdx] as any)?.[field]?.message as
+        | string
+        | undefined;
+
     const rincianBlock = (row: any) => {
       const rincianRows: any[] = row.rincianRows ?? [];
 
@@ -1049,29 +1057,36 @@ const FormBlHeader = ({
                   <FaChevronRight size={11} />
                 )}
               </button>
-              {props.row.isAddRow ? (
-                ''
-              ) : (
-                <Input
-                  type="text"
-                  onFocus={() => {
-                    setEditingRowId(props.row.detailIdx);
-                    setEditingRowDetailRincianId(0);
-                  }}
-                  value={props.row.bl_nobukti}
-                  readOnly={mode == 'delete' || mode == 'view'}
-                  onKeyDown={inputStopPropagation}
-                  onClick={(e) => e.stopPropagation()}
-                  onChange={(e) => {
-                    handleInputChange(
-                      props.row.detailIdx,
-                      'bl_nobukti',
-                      e.target.value
+              {props.row.isAddRow
+                ? ''
+                : (() => {
+                    const error = detailError(props.row, 'bl_nobukti');
+                    return cellWithError(
+                      String(props.row.bl_nobukti ?? ''),
+                      error,
+                      <Input
+                        type="text"
+                        onFocus={() => {
+                          setEditingRowId(props.row.detailIdx);
+                          setEditingRowDetailRincianId(0);
+                        }}
+                        value={props.row.bl_nobukti}
+                        readOnly={mode == 'delete' || mode == 'view'}
+                        onKeyDown={inputStopPropagation}
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={(e) => {
+                          handleInputChange(
+                            props.row.detailIdx,
+                            'bl_nobukti',
+                            e.target.value
+                          );
+                        }}
+                        className={`h-2 min-h-9 w-full rounded border ${
+                          error ? 'border-destructive' : 'border-gray-300'
+                        }`}
+                      />
                     );
-                  }}
-                  className="h-2 min-h-9 w-full rounded border border-gray-300"
-                />
-              )}
+                  })()}
             </div>
           );
         }
@@ -1160,29 +1175,36 @@ const FormBlHeader = ({
         renderCell: (props: any) => {
           return (
             <div>
-              {props.row.isAddRow ? (
-                ''
-              ) : (
-                <Input
-                  type="text"
-                  value={props.row.keterangan}
-                  readOnly={mode == 'delete' || mode == 'view'}
-                  onFocus={() => {
-                    setEditingRowId(props.row.detailIdx);
-                    setEditingRowDetailRincianId(0);
-                  }}
-                  onKeyDown={inputStopPropagation}
-                  onClick={(e) => e.stopPropagation()}
-                  onChange={(e) =>
-                    handleInputChange(
-                      props.row.detailIdx,
-                      'keterangan',
-                      e.target.value
-                    )
-                  }
-                  className="h-2 min-h-9 w-full rounded border border-gray-300"
-                />
-              )}
+              {props.row.isAddRow
+                ? ''
+                : (() => {
+                    const error = detailError(props.row, 'keterangan');
+                    return cellWithError(
+                      String(props.row.keterangan ?? ''),
+                      error,
+                      <Input
+                        type="text"
+                        value={props.row.keterangan}
+                        readOnly={mode == 'delete' || mode == 'view'}
+                        onFocus={() => {
+                          setEditingRowId(props.row.detailIdx);
+                          setEditingRowDetailRincianId(0);
+                        }}
+                        onKeyDown={inputStopPropagation}
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={(e) =>
+                          handleInputChange(
+                            props.row.detailIdx,
+                            'keterangan',
+                            e.target.value
+                          )
+                        }
+                        className={`h-2 min-h-9 w-full rounded border ${
+                          error ? 'border-destructive' : 'border-gray-300'
+                        }`}
+                      />
+                    );
+                  })()}
             </div>
           );
         }
@@ -1401,7 +1423,8 @@ const FormBlHeader = ({
     expandedDetailIdx,
     expandedRincianKey,
     biayaByKey,
-    isDark
+    isDark,
+    detailErrors
   ]);
 
   useEffect(() => {
