@@ -1,22 +1,22 @@
 import { useMutation, useQuery, useQueryClient } from 'react-query';
+import { IErrorResponse } from '../types/user.type';
+import { AxiosError } from 'axios';
 import {
   deleteJenisOrderanFn,
   getJenisOrderanFn,
   storeJenisOrderanFn,
   updateJenisOrderanFn
 } from '../apis/jenisorderan.api';
-import { AxiosError } from 'axios';
-import { IErrorResponse } from '../types/user.type';
-import { useFormError } from '../hooks/formErrorContext';
 import { useAlert } from '../store/client/useAlert';
+import { useFormError } from '../hooks/formErrorContext';
 
 export const useGetJenisOrderan = (
   filters: {
     filters?: {
       nama?: string;
       keterangan?: string;
-      statusaktif?: string;
       format_nama?: string;
+      statusaktif?: string;
       modifiedby?: string;
       created_at?: string;
       updated_at?: string;
@@ -25,12 +25,12 @@ export const useGetJenisOrderan = (
     sortBy?: string;
     sortDirection?: string;
     limit?: number;
-    search?: string;
+    search?: string; // Kata kunci pencarian
   } = {},
   signal?: AbortSignal
 ) => {
   return useQuery(
-    ['jenisorderans', filters],
+    ['jenisorderan', filters],
     async () => await getJenisOrderanFn(filters, signal),
     {
       // Jangan fetch saat page < 1 (mis. trik setCurrentPage(0) untuk memaksa
@@ -45,30 +45,25 @@ export const useGetJenisOrderan = (
 
 export const useCreateJenisOrderan = () => {
   const { setError } = useFormError();
-  const queryClient = useQueryClient();
   const { alert } = useAlert();
 
+  // Sengaja TIDAK invalidateQueries('jenisorderan') di sini. Alur onSuccess di
+  // GridJenisOrderan sudah otoritatif: ia mengambil window baru dari redis lalu
+  // setCurrentPage(pageNumber) yang memicu refetch halaman yang BENAR.
+  // invalidateQueries malah me-refetch `currentPage` yang mungkin masih basi
+  // (mis. page 10093 pada tabel ~1jt baris) — query offset besar itu lambat,
+  // tiba paling akhir, dan menimpa fokus by-id -> baris fokus loncat ke baris 1.
   return useMutation(storeJenisOrderanFn, {
-    onSuccess: () => {
-      void queryClient.invalidateQueries('jenisorderans'); //pake s karena sebagai penamaan aja, karena kita pake mutasi, jadi pas crud dan ada data berubah kita ga fetch manual, pake ini aja asal keynya sama
-      // toast({
-      //   title: 'Proses Berhasil',
-      //   description: 'Data Berhasil Ditambahkan'
-      // });
-    },
     onError: (error: AxiosError) => {
       const errorResponse = error.response?.data as IErrorResponse;
 
       if (errorResponse !== undefined) {
-        // Menangani error berdasarkan path
         const errorFields = errorResponse.message || [];
 
         if (errorResponse.statusCode === 400) {
-          // Iterasi error message dan set error di form
           errorFields?.forEach((err: { path: string[]; message: string }) => {
-            const path = err.path[0]; // Ambil path error pertama (misalnya 'nama', 'akuntansi_id')
-
-            setError(path, err.message); // Update error di context
+            const path = err.path[0];
+            setError(path, err.message);
           });
         } else {
           alert({
@@ -89,25 +84,18 @@ export const useDeleteJenisOrderan = () => {
 
   return useMutation(deleteJenisOrderanFn, {
     onSuccess: () => {
-      void queryClient.invalidateQueries('jenisorderans');
-      // toast({
-      //   title: 'Proses Berhasil.',
-      //   description: 'Data Berhasil Dihapus.'
-      // });
+      void queryClient.invalidateQueries('jenisorderan');
     },
     onError: (error: AxiosError) => {
       const errorResponse = error.response?.data as IErrorResponse;
 
       if (errorResponse !== undefined) {
-        // Menangani error berdasarkan path
         const errorFields = errorResponse.message || [];
 
         if (errorResponse.statusCode === 400) {
-          // Iterasi error message dan set error di form
           errorFields?.forEach((err: { path: string[]; message: string }) => {
-            const path = err.path[0]; // Ambil path error pertama (misalnya 'nama', 'akuntansi_id')
-
-            setError(path, err.message); // Update error di context
+            const path = err.path[0];
+            setError(path, err.message);
           });
         } else {
           alert({
@@ -120,32 +108,25 @@ export const useDeleteJenisOrderan = () => {
     }
   });
 };
+
 export const useUpdateJenisOrderan = () => {
   const { setError } = useFormError();
-  const queryClient = useQueryClient();
   const { alert } = useAlert();
 
+  // Sama seperti create: JANGAN invalidateQueries di sini. onSuccess grid yang
+  // mengatur data + fokus. invalidateQueries me-refetch currentPage basi
+  // (page besar akibat ~1jt baris) yang lambat & menimpa fokus -> baris 1.
   return useMutation(updateJenisOrderanFn, {
-    onSuccess: () => {
-      void queryClient.invalidateQueries('jenisorderans');
-      // toast({
-      //   title: 'Proses Berhasil.',
-      //   description: 'Data Berhasil Diubah.'
-      // });
-    },
     onError: (error: AxiosError) => {
       const errorResponse = error.response?.data as IErrorResponse;
 
       if (errorResponse !== undefined) {
-        // Menangani error berdasarkan path
         const errorFields = errorResponse.message || [];
 
         if (errorResponse.statusCode === 400) {
-          // Iterasi error message dan set error di form
           errorFields?.forEach((err: { path: string[]; message: string }) => {
-            const path = err.path[0]; // Ambil path error pertama (misalnya 'nama', 'akuntansi_id')
-
-            setError(path, err.message); // Update error di context
+            const path = err.path[0];
+            setError(path, err.message);
           });
         } else {
           alert({

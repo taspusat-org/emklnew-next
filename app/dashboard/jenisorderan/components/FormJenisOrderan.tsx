@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import {
   Form,
@@ -8,16 +7,27 @@ import {
   FormLabel,
   FormMessage
 } from '@/components/ui/form';
-import { Button } from '@/components/ui/button';
 import { useEffect, useRef, useState } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState } from '@/lib/store/store';
 import LookUp from '@/components/custom-ui/LookUp';
-import FormFooterButtons from '@/components/custom-ui/FormFooterButtons';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { IoMdClose } from 'react-icons/io';
-import { FaSave } from 'react-icons/fa';
 import { setSubmitClicked } from '@/lib/store/lookupSlice/lookupSlice';
+import FormFooterButtons from '@/components/custom-ui/FormFooterButtons';
+
+interface FormJenisOrderanProps {
+  popOver: boolean;
+  setPopOver: (value: boolean) => void;
+  forms: any;
+  onSubmit: any;
+  mode: any;
+  handleClose: () => void;
+  isLoadingCreate: boolean;
+  isLoadingUpdate: boolean;
+  isLoadingDelete: boolean;
+}
 
 const FormJenisOrderan = ({
   popOver,
@@ -29,115 +39,10 @@ const FormJenisOrderan = ({
   isLoadingCreate,
   isLoadingUpdate,
   isLoadingDelete
-}: any) => {
-  const lookUpPropsStatusAktif = [
-    {
-      columns: [{ key: 'text', name: 'NAMA' }],
-      // filterby: { class: 'system', method: 'get' },
-      labelLookup: 'STATUS AKTIF LOOKUP',
-      required: true,
-      selectedRequired: false,
-      endpoint: 'parameter?grp=status+aktif',
-      label: 'status aktif',
-      singleColumn: true,
-      pageSize: 20,
-      dataToPost: 'id',
-      showOnButton: true,
-      postData: 'text'
-    }
-  ];
-
-  const lookupPropsFormat = [
-    {
-      columns: [
-        { key: 'subgrp', name: 'SUB GRUP' },
-        { key: 'text', name: 'FORMAT' }
-      ],
-      labelLookup: 'FORMAT LOOKUP',
-      required: true,
-      selectedRequired: false,
-      endpoint: `parameter?exclude=true&kelompok=`,
-      label: 'FORMAT',
-      singleColumn: false,
-      pageSize: 20,
-      disabled: mode === 'view' || mode === 'delete' ? true : false,
-      postData: 'text',
-      dataToPost: 'id'
-    }
-  ];
-
-  const formRef = useRef<HTMLFormElement | null>(null); // Ref untuk form
+}: FormJenisOrderanProps) => {
+  const formRef = useRef<HTMLFormElement | null>(null);
   const openName = useSelector((state: RootState) => state.lookup.openName);
   const dispatch = useDispatch();
-  useEffect(() => {
-    // Fungsi untuk menangani pergerakan fokus berdasarkan tombol
-    const handleKeyDown = (event: KeyboardEvent) => {
-      // Jika popOverDate ada nilainya, jangan lakukan apa-apa
-      if (openName) {
-        return;
-      }
-
-      const form = formRef.current;
-
-      if (!form) return;
-
-      const inputs = Array.from(
-        form.querySelectorAll('input, select, textarea, button')
-      ).filter(
-        (element) =>
-          element.id !== 'image-dropzone' &&
-          element.tagName !== 'BUTTON' &&
-          !element.hasAttribute('readonly') // Pengecualian jika input readonly
-      ) as HTMLElement[]; // Ambil semua input dalam form kecuali button dan readonly inputs
-
-      const focusedElement = document.activeElement as HTMLElement;
-
-      let nextElement: HTMLElement | null = null;
-
-      if (event.key === 'ArrowDown' || event.key === 'Tab') {
-        nextElement = getNextFocusableElement(inputs, focusedElement, 'down');
-        if (event.key === 'Tab') {
-          event.preventDefault(); // Cegah default tab behavior jika ingin mengontrol pergerakan fokus
-        }
-      } else if (
-        event.key === 'ArrowUp' ||
-        (event.shiftKey && event.key === 'Tab')
-      ) {
-        nextElement = getNextFocusableElement(inputs, focusedElement, 'up');
-      }
-      // Jika ditemukan input selanjutnya, pindahkan fokus
-      if (nextElement) {
-        nextElement.focus();
-      }
-    };
-
-    // Fungsi untuk mendapatkan elemen input selanjutnya berdasarkan arah (down atau up)
-    const getNextFocusableElement = (
-      inputs: HTMLElement[],
-      currentElement: HTMLElement,
-      direction: 'up' | 'down'
-    ): HTMLElement | null => {
-      const index = Array.from(inputs).indexOf(currentElement as any);
-
-      if (direction === 'down') {
-        // Jika sudah di input terakhir, tidak perlu pindah fokus
-        if (index === inputs.length - 1) {
-          return null; // Tidak ada elemen selanjutnya
-        }
-        return inputs[index + 1]; // Fokus pindah ke input setelahnya
-      } else {
-        return inputs[index - 1]; // Fokus pindah ke input sebelumnya
-      }
-    };
-
-    // Menambahkan event listener untuk keydown
-    document.addEventListener('keydown', handleKeyDown);
-
-    // Membersihkan event listener ketika komponen tidak lagi digunakan
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [openName]); // Tambahkan popOverDate sebagai dependensi
   return (
     <Dialog open={popOver} onOpenChange={setPopOver}>
       <DialogTitle hidden={true}>Title</DialogTitle>
@@ -162,6 +67,7 @@ const FormJenisOrderan = ({
             <IoMdClose className="h-5 w-5 font-bold text-white" />
           </div>
         </div>
+
         <div className="h-full flex-1 overflow-y-auto bg-background-card pl-1 pr-2">
           <div className="h-full bg-background-card px-5 py-3">
             <Form {...forms}>
@@ -191,7 +97,7 @@ const FormJenisOrderan = ({
                               {...field}
                               value={field.value ?? ''}
                               type="text"
-                              disabled={mode === 'view' || mode === 'delete'}
+                              readOnly={mode === 'view' || mode === 'delete'}
                             />
                           </FormControl>
                           <FormMessage />
@@ -209,7 +115,7 @@ const FormJenisOrderan = ({
                           required={true}
                           className="font-semibold lg:w-[15%]"
                         >
-                          Keterangan
+                          KETERANGAN
                         </FormLabel>
                         <div className="flex flex-col lg:w-[85%]">
                           <FormControl>
@@ -217,7 +123,7 @@ const FormJenisOrderan = ({
                               {...field}
                               value={field.value ?? ''}
                               type="text"
-                              disabled={mode === 'view' || mode === 'delete'}
+                              readOnly={mode === 'view' || mode === 'delete'}
                             />
                           </FormControl>
                           <FormMessage />
@@ -225,26 +131,6 @@ const FormJenisOrderan = ({
                       </FormItem>
                     )}
                   />
-                  <div className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
-                    <div className="w-full lg:w-[15%]">
-                      <FormLabel className="text-sm font-semibold">
-                        Status Aktif
-                      </FormLabel>
-                    </div>
-                    <div className="w-full lg:w-[85%]">
-                      {lookUpPropsStatusAktif.map((props, index) => (
-                        <LookUp
-                          key={index}
-                          {...props}
-                          lookupValue={(id) =>
-                            forms.setValue('statusaktif', id)
-                          }
-                          lookupNama={forms.getValues('statusaktif_text')}
-                          disabled={mode === 'view' || mode === 'delete'}
-                        />
-                      ))}
-                    </div>
-                  </div>
 
                   <div className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
                     <div className="w-full lg:w-[15%]">
@@ -252,24 +138,67 @@ const FormJenisOrderan = ({
                         required={true}
                         className="text-sm font-semibold"
                       >
-                        FORMAT
+                        Format
                       </FormLabel>
                     </div>
                     <div className="w-full lg:w-[85%]">
-                      {lookupPropsFormat.map((props, index) => (
-                        <LookUp
-                          key={index}
-                          {...props}
-                          lookupValue={(id) =>
-                            forms.setValue('statusformat', id)
-                          }
-                          onSelectRow={(val) =>
-                            forms.setValue('statusformat_nama', val?.text)
-                          }
-                          inputLookupValue={forms.getValues('statusformat')}
-                          lookupNama={forms.getValues('statusformat_nama')}
-                        />
-                      ))}
+                      <LookUp
+                        columns={[
+                          { key: 'subgrp', name: 'SUB GRUP' },
+                          { key: 'text', name: 'FORMAT' }
+                        ]}
+                        labelLookup="FORMAT LOOKUP"
+                        required={true}
+                        selectedRequired={false}
+                        endpoint="parameter?exclude=true&kelompok="
+                        label="FORMAT"
+                        singleColumn={false}
+                        pageSize={20}
+                        showOnButton={true}
+                        postData="text"
+                        dataToPost="id"
+                        lookupValue={(id) => {
+                          forms.setValue('statusformat', String(id ?? ''));
+                        }}
+                        onSelectRow={(val) =>
+                          forms.setValue('statusformat_text', val.text)
+                        }
+                        lookupNama={forms.getValues('statusformat_text')}
+                        disabled={mode === 'view' || mode === 'delete'}
+                      />
+                    </div>
+                  </div>
+                  <div className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
+                    <div className="w-full lg:w-[15%]">
+                      <FormLabel
+                        required={true}
+                        className="text-sm font-semibold"
+                      >
+                        Status Aktif
+                      </FormLabel>
+                    </div>
+                    <div className="w-full lg:w-[85%]">
+                      <LookUp
+                        columns={[{ key: 'text', name: 'STATUS' }]}
+                        labelLookup="STATUS AKTIF LOOKUP"
+                        required={true}
+                        selectedRequired={false}
+                        endpoint="parameter?grp=status+aktif"
+                        label="STATUS AKTIF"
+                        singleColumn={true}
+                        pageSize={20}
+                        showOnButton={true}
+                        postData="text"
+                        dataToPost="id"
+                        lookupValue={(id) => {
+                          forms.setValue('statusaktif', String(id ?? ''));
+                        }}
+                        onSelectRow={(val) =>
+                          forms.setValue('statusaktif_uuid', val.uuid)
+                        }
+                        lookupNama={forms.getValues('text')}
+                        disabled={mode === 'view' || mode === 'delete'}
+                      />
                     </div>
                   </div>
                 </div>
@@ -277,13 +206,14 @@ const FormJenisOrderan = ({
             </Form>
           </div>
         </div>
+
         <FormFooterButtons
           mode={mode}
-          deleteMode={mode === 'delete'}
           onSave={() => {
             onSubmit(false);
             dispatch(setSubmitClicked(true));
           }}
+          deleteMode={mode === 'delete'}
           onSaveAndAdd={() => {
             onSubmit(true);
             dispatch(setSubmitClicked(true));

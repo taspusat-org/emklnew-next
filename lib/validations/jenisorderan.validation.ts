@@ -1,21 +1,24 @@
-import { REQUIRED_FIELD } from '@/constants/validation';
 import { z } from 'zod';
+import { REQUIRED_FIELD } from '@/constants/validation';
 import { dynamicRequiredMessage } from '../utils';
 
 export const jenisorderanSchema = z.object({
-  // id menyimpan id varchar UUID, bukan angka. z.number() membuat Number(uuid)
-  // = NaN sehingga form & self-exclude uniqueness meleset.
+  // id & statusaktif menyimpan id parameter (varchar UUID), bukan angka.
   id: z.string().nullable().optional(),
-  nama: z.string().nonempty({ message: dynamicRequiredMessage('NAMA') }), // Nama wajib diisi
+  uuid: z.string().nullable().optional(),
+
+  nama: z.string().nonempty({ message: dynamicRequiredMessage('NAMA') }),
   keterangan: z
     .string()
-    .nonempty({ message: dynamicRequiredMessage('KETERANGAN') }), // Keterangan opsional
-  statusaktif: z.string().min(1, `${REQUIRED_FIELD}`), // Status aktif wajib diisi
-  statusaktif_text: z.string().nullable().optional(), // Email wajib diisi
+    .trim()
+    .nonempty({ message: dynamicRequiredMessage('KETERANGAN') }),
 
-  statusformat: z
-    .string()
-    .min(1, { message: dynamicRequiredMessage('FORMAT') }),
-  statusformat_nama: z.string().nullable().optional()
+  statusformat: z.string().min(1, { message: REQUIRED_FIELD }),
+  statusformat_text: z.string().nullable().optional(),
+
+  statusaktif: z.string().min(1, { message: REQUIRED_FIELD }),
+  statusaktif_uuid: z.string().nullable().optional(),
+  text: z.string().nullable().optional()
 });
+
 export type JenisOrderanInput = z.infer<typeof jenisorderanSchema>;
