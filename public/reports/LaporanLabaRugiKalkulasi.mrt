@@ -1,12 +1,12 @@
 {
   "ReportVersion": "2024.3.6",
-  "ReportGuid": "eb95e56c79517b495d43cc9fb9f91394",
+  "ReportGuid": "0e1deb6f1b05e5ef68ad856b1bffb356",
   "ReportName": "Report",
   "ReportAlias": "Report",
   "ReportFile": "/reports/LaporanLabaRugiKalkulasi.mrt",
   "ReportDescription": "14-10-2019",
   "ReportCreated": "/Date(0+0700)/",
-  "ReportChanged": "/Date(1767689509000+0700)/",
+  "ReportChanged": "/Date(1786085637000+0700)/",
   "EngineVersion": "EngineV2",
   "CalculationMode": "Interpretation",
   "ReportUnit": "Millimeters",
@@ -32,93 +32,153 @@
             "Name": "id",
             "NameInSource": "id",
             "Alias": "id",
-            "Type": "System.Decimal"
+            "Type": "System.String"
           },
           "1": {
-            "Name": "kodecabang",
-            "NameInSource": "kodecabang",
-            "Alias": "kodecabang",
+            "Name": "periode",
+            "NameInSource": "periode",
+            "Alias": "periode",
             "Type": "System.String"
           },
           "2": {
-            "Name": "nama",
-            "NameInSource": "nama",
-            "Alias": "nama",
+            "Name": "estkomisimarketing",
+            "NameInSource": "estkomisimarketing",
+            "Alias": "estkomisimarketing",
             "Type": "System.String"
           },
           "3": {
-            "Name": "keterangan",
-            "NameInSource": "keterangan",
-            "Alias": "keterangan",
+            "Name": "estkomisimarketing2",
+            "NameInSource": "estkomisimarketing2",
+            "Alias": "estkomisimarketing2",
             "Type": "System.String"
           },
           "4": {
-            "Name": "statusaktif",
-            "NameInSource": "statusaktif",
-            "Alias": "statusaktif",
-            "Type": "System.Decimal"
+            "Name": "komisimarketing",
+            "NameInSource": "komisimarketing",
+            "Alias": "komisimarketing",
+            "Type": "System.String"
           },
           "5": {
-            "Name": "cabang_id",
-            "NameInSource": "cabang_id",
-            "Alias": "cabang_id",
+            "Name": "biayakantorpusat",
+            "NameInSource": "biayakantorpusat",
+            "Alias": "biayakantorpusat",
             "Type": "System.String"
           },
           "6": {
-            "Name": "memo",
-            "NameInSource": "memo",
-            "Alias": "memo",
+            "Name": "biayatour",
+            "NameInSource": "biayatour",
+            "Alias": "biayatour",
             "Type": "System.String"
           },
           "7": {
-            "Name": "text",
-            "NameInSource": "text",
-            "Alias": "text",
+            "Name": "gajidireksi",
+            "NameInSource": "gajidireksi",
+            "Alias": "gajidireksi",
             "Type": "System.String"
           },
           "8": {
+            "Name": "estkomisikacab",
+            "NameInSource": "estkomisikacab",
+            "Alias": "estkomisikacab",
+            "Type": "System.String"
+          },
+          "9": {
+            "Name": "biayabonustriwulan",
+            "NameInSource": "biayabonustriwulan",
+            "Alias": "biayabonustriwulan",
+            "Type": "System.String"
+          },
+          "10": {
+            "Name": "estkomisikacabcabang1",
+            "NameInSource": "estkomisikacabcabang1",
+            "Alias": "estkomisikacabcabang1",
+            "Type": "System.String"
+          },
+          "11": {
+            "Name": "estkomisikacabcabang2",
+            "NameInSource": "estkomisikacabcabang2",
+            "Alias": "estkomisikacabcabang2",
+            "Type": "System.String"
+          },
+          "12": {
+            "Name": "statusfinalkomisimarketing",
+            "NameInSource": "statusfinalkomisimarketing",
+            "Alias": "statusfinalkomisimarketing",
+            "Type": "System.String"
+          },
+          "13": {
+            "Name": "statusfinalkomisimarketing_text",
+            "NameInSource": "statusfinalkomisimarketing_text",
+            "Alias": "statusfinalkomisimarketing_text",
+            "Type": "System.String"
+          },
+          "14": {
+            "Name": "statusfinalkomisimarketing_memo",
+            "NameInSource": "statusfinalkomisimarketing_memo",
+            "Alias": "statusfinalkomisimarketing_memo",
+            "Type": "System.String"
+          },
+          "15": {
+            "Name": "statusfinalbonustriwulan",
+            "NameInSource": "statusfinalbonustriwulan",
+            "Alias": "statusfinalbonustriwulan",
+            "Type": "System.String"
+          },
+          "16": {
+            "Name": "statusfinalbonustriwulan_text",
+            "NameInSource": "statusfinalbonustriwulan_text",
+            "Alias": "statusfinalbonustriwulan_text",
+            "Type": "System.String"
+          },
+          "17": {
+            "Name": "statusfinalbonustriwulan_memo",
+            "NameInSource": "statusfinalbonustriwulan_memo",
+            "Alias": "statusfinalbonustriwulan_memo",
+            "Type": "System.String"
+          },
+          "18": {
+            "Name": "info",
+            "NameInSource": "info",
+            "Alias": "info",
+            "Type": "System.String"
+          },
+          "19": {
             "Name": "modifiedby",
             "NameInSource": "modifiedby",
             "Alias": "modifiedby",
             "Type": "System.String"
           },
-          "9": {
-            "Name": "namacabang_hr",
-            "NameInSource": "namacabang_hr",
-            "Alias": "namacabang_hr",
-            "Type": "System.String"
-          },
-          "10": {
+          "20": {
             "Name": "created_at",
             "NameInSource": "created_at",
             "Alias": "created_at",
             "Type": "System.String"
           },
-          "11": {
+          "21": {
             "Name": "updated_at",
             "NameInSource": "updated_at",
             "Alias": "updated_at",
             "Type": "System.String"
           },
-          "12": {
+          "22": {
             "Name": "judullaporan",
             "NameInSource": "judullaporan",
             "Alias": "judullaporan",
             "Type": "System.String"
           },
-          "13": {
+          "23": {
             "Name": "usercetak",
             "NameInSource": "usercetak",
             "Alias": "usercetak",
             "Type": "System.String"
           },
-          "14": {
-            "Name": "glcetak",
-            "NameInSource": "glcetak",
-            "Alias": "glcetak",
+          "24": {
+            "Name": "tglcetak",
+            "NameInSource": "tglcetak",
+            "Alias": "tglcetak",
             "Type": "System.String"
           },
-          "15": {
+          "25": {
             "Name": "judul",
             "NameInSource": "judul",
             "Alias": "judul",
@@ -175,7 +235,7 @@
           "Ident": "StiPageFooterBand",
           "Name": "PageFooterBand1",
           "CanGrow": true,
-          "ClientRectangle": "0,283.9,202.1,5",
+          "ClientRectangle": "0,266.4,207.9,5",
           "ComponentPlacement": "pf.Page1",
           "Interaction": {
             "Ident": "StiInteraction"
@@ -225,7 +285,7 @@
           "Name": "HeaderBand1",
           "Guid": "dc01f612559e136b62d87cf4817ec9ff",
           "CanGrow": true,
-          "ClientRectangle": "0,4,202.1,49",
+          "ClientRectangle": "0,4,207.9,49",
           "ComponentPlacement": "h.ap.Page1",
           "Interaction": {
             "Ident": "StiInteraction"
@@ -874,7 +934,7 @@
           "Ident": "StiDataBand",
           "Name": "DataBand1",
           "CanGrow": true,
-          "ClientRectangle": "0,61,202.1,16",
+          "ClientRectangle": "0,61,207.9,16",
           "ComponentPlacement": "d.Page1",
           "Expressions": {
             "0": {
@@ -1092,7 +1152,7 @@
               },
               "MaxNumberOfLines": 6,
               "Text": {
-                "Value": "{data.statusfinalbonus_nama}"
+                "Value": "{data.statusfinalbonustriwulan_text}"
               },
               "VertAlignment": "Center",
               "Font": "Tahoma;;;",
@@ -1220,7 +1280,7 @@
               },
               "MaxNumberOfLines": 6,
               "Text": {
-                "Value": "{data.statusfinalkomisi_nama}"
+                "Value": "{data.statusfinalkomisimarketing_text}"
               },
               "VertAlignment": "Center",
               "Font": "Tahoma;;;",
@@ -1767,7 +1827,7 @@
         }
       },
       "PageWidth": 215.9,
-"PageHeight": 279.4,
+      "PageHeight": 279.4,
       "Watermark": {
         "TextBrush": "solid:50,0,0,0"
       },

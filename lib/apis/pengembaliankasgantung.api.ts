@@ -1,5 +1,4 @@
 import { GetParams } from '../types/all.type';
-import { IAllKasGantungHeader } from '../types/kasgantungheader.type';
 import {
   IAllPengembalianKasGantung,
   IAllPengembalianKasGantungDetail
@@ -7,37 +6,48 @@ import {
 import { buildQueryParams } from '../utils';
 import { api2 } from '../utils/AxiosInstance';
 import { PengembalianKasGantungHeaderInput } from '../validations/pengembaliankasgantung.validation';
+import {
+  BuktiJobPayload,
+  ExportBuktiJobPayload,
+  ReportJobResponse
+} from './report.api';
+
 interface UpdateParams {
   id: string;
   fields: PengembalianKasGantungHeaderInput;
 }
+interface validationFields {
+  aksi: string;
+  value: number | string;
+}
+
 export const getPengembalianKasGantungHeaderFn = async (
-  filters: GetParams = {}
+  filters: GetParams = {},
+  signal?: AbortSignal
 ): Promise<IAllPengembalianKasGantung> => {
   try {
     const queryParams = buildQueryParams(filters);
 
     const response = await api2.get('/pengembaliankasgantungheader', {
-      params: queryParams
+      params: queryParams,
+      signal
     });
 
     return response.data;
   } catch (error) {
+    if (signal?.aborted) {
+      throw new Error('Request was cancelled');
+    }
     console.error('Error:', error);
     throw new Error('Failed');
   }
 };
 
 export const getPengembalianKasGantungHeaderByIdFn = async (
-  id: string,
-  filters: GetParams = {}
+  id: string
 ): Promise<IAllPengembalianKasGantung> => {
   try {
-    const queryParams = buildQueryParams(filters);
-
-    const response = await api2.get(`/pengembaliankasgantungheader/${id}`, {
-      params: queryParams
-    });
+    const response = await api2.get(`/pengembaliankasgantungheader/${id}`);
 
     return response.data;
   } catch (error) {
@@ -46,25 +56,20 @@ export const getPengembalianKasGantungHeaderByIdFn = async (
   }
 };
 
-export const getPengembalianKasGantungReportFn = async (
-  filters: GetParams = {}
-): Promise<IAllPengembalianKasGantung> => {
-  try {
-    const queryParams = buildQueryParams(filters);
+export const getPengembalianKasGantungDetailFn = async (
+  filters: GetParams = {},
+  signal?: AbortSignal
+): Promise<IAllPengembalianKasGantungDetail> => {
+  const queryParams = buildQueryParams(filters);
 
-    const response = await api2.get(
-      '/pengembaliankasgantungheader/report-all',
-      {
-        params: queryParams
-      }
-    );
+  const response = await api2.get('/pengembaliankasgantungdetail', {
+    params: queryParams,
+    signal
+  });
 
-    return response.data;
-  } catch (error) {
-    console.error('Error:', error);
-    throw new Error('Failed');
-  }
+  return response.data;
 };
+
 export const storePengembalianKasGantungFn = async (
   fields: PengembalianKasGantungHeaderInput
 ) => {
@@ -72,22 +77,7 @@ export const storePengembalianKasGantungFn = async (
 
   return response.data;
 };
-export const getPengembalianKasGantungDetailFn = async (
-  filters: GetParams = {}
-): Promise<IAllPengembalianKasGantungDetail> => {
-  try {
-    const queryParams = buildQueryParams(filters);
 
-    const response = await api2.get('/pengembaliankasgantungdetail', {
-      params: queryParams
-    });
-
-    return response.data;
-  } catch (error) {
-    console.error('Error:', error);
-    throw new Error('Failed');
-  }
-};
 export const updatePengembalianKasGantungFn = async ({
   id,
   fields
@@ -98,33 +88,45 @@ export const updatePengembalianKasGantungFn = async ({
   );
   return response.data;
 };
+
 export const deletePengembalianKasGantung = async (id: string) => {
   try {
     const response = await api2.delete(`/pengembaliankasgantungheader/${id}`);
-    return response.data; // Optionally return response data if needed
+    return response.data;
   } catch (error) {
     console.error('Error deleting order:', error);
-    throw error; // Re-throw the error if you want to handle it in the calling function
+    throw error;
   }
 };
-export const exportPengembalianKasGantungFn = async (
-  id: string,
-  filters: any
-): Promise<Blob> => {
-  try {
-    const queryParams = buildQueryParams(filters);
 
-    const response = await api2.get(
-      `/pengembaliankasgantungheader/export/${id}`,
-      {
-        params: queryParams,
-        responseType: 'blob' // backend return file (Excel)
-      }
-    );
+export const checkValidationPengembalianKasGantungFn = async (
+  fields: validationFields
+) => {
+  const response = await api2.post(
+    `/pengembaliankasgantungheader/check-validation`,
+    fields
+  );
+  return response.data;
+};
 
-    return response.data; // ini sudah Blob
-  } catch (error) {
-    console.error('Error exporting data pengembalian kas gantung:', error);
-    throw new Error('Failed to export data pengembalian kas gantung');
-  }
+/** Cetak bukti Pengembalian Kas Gantung di background — lihat report.api.ts. */
+export const generatePengembalianKasGantungReportFn = async (
+  payload: BuktiJobPayload
+): Promise<ReportJobResponse> => {
+  const response = await api2.post(
+    '/pengembaliankasgantungheader/report',
+    payload
+  );
+  return response.data;
+};
+
+/** Export Excel satu bukti pengembalian kas gantung + rinciannya (background job). */
+export const generatePengembalianKasGantungExportFn = async (
+  payload: ExportBuktiJobPayload
+): Promise<ReportJobResponse> => {
+  const response = await api2.post(
+    '/pengembaliankasgantungheader/export',
+    payload
+  );
+  return response.data;
 };

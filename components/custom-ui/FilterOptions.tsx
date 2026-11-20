@@ -78,7 +78,7 @@ const FilterOptions: React.FC<SelectOptionProps> = ({
     defaultVal: string
   ) => {
     if (appliedKeys[appliedKey]) return; // sudah pernah apply → skip
-    if (selectedValue !== undefined) return; // parent controlled → skip
+    if (selectedValue) return; // parent sudah punya nilai → skip
     if (!defaultVal || !currentOptions.length) return;
 
     const dv = defaultVal.toLowerCase();

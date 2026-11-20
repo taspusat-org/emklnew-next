@@ -1724,6 +1724,7 @@ const GridEmkl = () => {
                 value="id"
                 label="text"
                 filterBy={{ grp: 'STATUS AKTIF', subgrp: 'STATUS AKTIF' }}
+                selectedValue={filters.filters.statusaktif}
                 onChange={(value) =>
                   handleColumnFilterChange('statusaktif', value)
                 } // Menangani perubahan nilai di parent
@@ -1794,6 +1795,7 @@ const GridEmkl = () => {
                 value="id"
                 label="text"
                 filterBy={{ grp: 'STATUS TRADO', subgrp: 'STATUS TRADO' }}
+                selectedValue={filters.filters.statustrado}
                 onChange={(value) =>
                   handleColumnFilterChange('statustrado', value)
                 } // Menangani perubahan nilai di parent
@@ -2559,7 +2561,9 @@ const GridEmkl = () => {
     clearError();
     forms.reset();
   };
-  const statusAktifDefaultRef = useRef<{ id: string; text: string } | null>(null);
+  const statusAktifDefaultRef = useRef<{ id: string; text: string } | null>(
+    null
+  );
 
   const resetAddForm = async () => {
     let aktif = statusAktifDefaultRef.current;

@@ -59,9 +59,10 @@ export const useCreateDivisi = () => {
       if (errorResponse !== undefined) {
         const errorFields = errorResponse.message || [];
 
-        if (errorResponse.statusCode === 400) {
+        if (errorResponse.statusCode === 400 && Array.isArray(errorFields)) {
+          // Iterasi error message dan set error di form
           errorFields?.forEach((err: { path: string[]; message: string }) => {
-            const path = err.path[0];
+            const path = err.path[0]; // Ambil path error pertama (misalnya 'nama', 'akuntansi_id')
             setError(path, err.message);
           });
         } else {
@@ -90,10 +91,10 @@ export const useDeleteDivisi = () => {
 
       if (errorResponse !== undefined) {
         const errorFields = errorResponse.message || [];
-
-        if (errorResponse.statusCode === 400) {
+        if (errorResponse.statusCode === 400 && Array.isArray(errorFields)) {
+          // Iterasi error message dan set error di form
           errorFields?.forEach((err: { path: string[]; message: string }) => {
-            const path = err.path[0];
+            const path = err.path[0]; // Ambil path error pertama (misalnya 'nama', 'akuntansi_id')
             setError(path, err.message);
           });
         } else {
@@ -121,10 +122,10 @@ export const useUpdateDivisi = () => {
 
       if (errorResponse !== undefined) {
         const errorFields = errorResponse.message || [];
-
-        if (errorResponse.statusCode === 400) {
+        if (errorResponse.statusCode === 400 && Array.isArray(errorFields)) {
+          // Iterasi error message dan set error di form
           errorFields?.forEach((err: { path: string[]; message: string }) => {
-            const path = err.path[0];
+            const path = err.path[0]; // Ambil path error pertama (misalnya 'nama', 'akuntansi_id')
             setError(path, err.message);
           });
         } else {

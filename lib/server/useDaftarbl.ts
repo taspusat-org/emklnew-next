@@ -59,7 +59,8 @@ export const useCreateDaftarbl = () => {
       if (errorResponse !== undefined) {
         const errorFields = errorResponse.message || [];
 
-        if (errorResponse.statusCode === 400) {
+        if (errorResponse.statusCode === 400 && Array.isArray(errorFields)) {
+          // Iterasi error message dan set error di form
           errorFields?.forEach((err: { path: string[]; message: string }) => {
             const path = err.path[0];
             setError(path, err.message);
@@ -91,7 +92,8 @@ export const useDeleteDaftarbl = () => {
       if (errorResponse !== undefined) {
         const errorFields = errorResponse.message || [];
 
-        if (errorResponse.statusCode === 400) {
+        if (errorResponse.statusCode === 400 && Array.isArray(errorFields)) {
+          // Iterasi error message dan set error di form
           errorFields?.forEach((err: { path: string[]; message: string }) => {
             const path = err.path[0];
             setError(path, err.message);
@@ -122,7 +124,8 @@ export const useUpdateDaftarbl = () => {
       if (errorResponse !== undefined) {
         const errorFields = errorResponse.message || [];
 
-        if (errorResponse.statusCode === 400) {
+        if (errorResponse.statusCode === 400 && Array.isArray(errorFields)) {
+          // Iterasi error message dan set error di form
           errorFields?.forEach((err: { path: string[]; message: string }) => {
             const path = err.path[0];
             setError(path, err.message);

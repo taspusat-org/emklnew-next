@@ -336,12 +336,17 @@ const GridHutangHeader = () => {
     streamBufferRef.current = new Map();
     prefetchingPagesRef.current = new Set();
   };
+  const pendingUpdates = useRef<Record<string, string>>({});
+
   const debouncedFilterUpdate = useRef(
     debounce((updates: Record<string, string>) => {
+      // buffer hanya berisi update yang belum di-flush
+      pendingUpdates.current = {};
       setFilters((prev) => ({
         ...prev,
         filters: { ...prev.filters, ...updates },
-        page: 1
+        page: 1,
+        search: ''
       }));
       setCheckedRows(new Set());
       setIsAllSelected(false);
@@ -353,7 +358,10 @@ const GridHutangHeader = () => {
     }, 300) // Bisa dikurangi jadi 250-300ms
   ).current;
 
-  const pendingUpdates = useRef<Record<string, string>>({});
+  const discardPendingFilterUpdates = () => {
+    debouncedFilterUpdate.cancel();
+    pendingUpdates.current = {};
+  };
 
   // Cari display-index kolom utk filter/sort key. Beberapa filter pakai suffix
   // _text (mis. 'bank_text') sementara kolomnya pakai _id ('bank_id') -- coba
@@ -391,6 +399,7 @@ const GridHutangHeader = () => {
               <div
                 className="flex cursor-pointer items-center justify-center"
                 onClick={() => {
+                  discardPendingFilterUpdates();
                   setFilters((prev) => ({
                     ...prev,
                     search: '',
@@ -1069,6 +1078,7 @@ const GridHutangHeader = () => {
   const handleFilterInputChange = useCallback(
     (colKey: string, value: string) => {
       cancelPreviousRequest(abortControllerRef);
+      setInputValue(''); // Reset global search input saat filter kolom diubah
       pendingUpdates.current[colKey] = value;
 
       // Track input yang sedang fokus agar focus bisa di-restore setelah re-fetch
@@ -1093,8 +1103,7 @@ const GridHutangHeader = () => {
   const handleClearFilter = useCallback(
     (colKey: string) => {
       cancelPreviousRequest(abortControllerRef);
-      debouncedFilterUpdate.cancel();
-      pendingUpdates.current[colKey] = '';
+      debouncedFilterUpdate.flush();
 
       // Arahkan focus ke kolom yang di-clear
       const displayIndex = getColumnDisplayIndex(colKey);
@@ -1118,6 +1127,7 @@ const GridHutangHeader = () => {
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     cancelPreviousRequest(abortControllerRef);
+    discardPendingFilterUpdates();
     const searchValue = e.target.value;
 
     // Track global search input agar focus bisa di-restore
@@ -1209,6 +1219,7 @@ const GridHutangHeader = () => {
 
   const handleClearInput = () => {
     cancelPreviousRequest(abortControllerRef);
+    discardPendingFilterUpdates();
     activeFilterInputRef.current = null;
     pendingSelectIdxRef.current = 1;
     setFilters((prev) => ({
@@ -2256,6 +2267,7 @@ const GridHutangHeader = () => {
   useEffect(() => {
     if (!onReload) return;
 
+    discardPendingFilterUpdates();
     suppressScrollRef.current = true;
 
     setFilters((prev) => ({

@@ -3,12 +3,16 @@ import { IAllScheduleKapal } from '../types/schedulekapal.type';
 import { buildQueryParams } from '../utils';
 import { api2 } from '../utils/AxiosInstance';
 
-export const getAllScheduleKapalsiFn = async (
-  filters: GetParams = {}
+export const getScheduleKapalFn = async (
+  filters: GetParams = {},
+  signal?: AbortSignal
 ): Promise<IAllScheduleKapal> => {
   try {
     const queryParams = buildQueryParams(filters);
-    const response = await api2.get('schedule-kapal', { params: queryParams });
+    const response = await api2.get('schedule-kapal', {
+      params: queryParams,
+      signal
+    });
 
     return response.data;
   } catch (error) {

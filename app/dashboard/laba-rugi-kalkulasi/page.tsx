@@ -29,31 +29,62 @@ const Page = () => {
         const result = await fieldLength('penerimaanemkl');
         dispatch(setFieldLength(result.data));
 
-        const [getStatusAktifLookup, getAkunPusatLookup] =
-          await Promise.all<ApiResponse>([
-            getParameterFn({ isLookUp: 'true' })
-          ]);
+        const [
+          getStatusKomisiFinalMarketingLookup,
+          getStatusFinalBonusTriwulanLookup
+        ] = await Promise.all<ApiResponse>([
+          getParameterFn({ isLookUp: 'true' }),
+          getParameterFn({ isLookUp: 'true' })
+        ]);
 
-        if (getStatusAktifLookup.type === 'local') {
-          const statusNilaiData = getStatusAktifLookup.data.filter(
-            (item: any) => item.grp === 'STATUS NILAI'
-          );
+        // STATUS FINAL KOMISI MARKETING
+        if (getStatusKomisiFinalMarketingLookup.type === 'local') {
+          const grpsToFilter = ['STATUS NILAI'];
 
-          const multipleUsing = ['STATUS NILAI KOMISI', 'STATUS NILAI BONUS'];
+          grpsToFilter.forEach((grp) => {
+            const filteredData =
+              getStatusKomisiFinalMarketingLookup.data.filter(
+                (item: any) => item.grp === grp
+              );
 
-          multipleUsing.forEach((labelKey) => {
-            dispatch(setData({ key: labelKey, data: statusNilaiData }));
+            dispatch(setData({ key: grp, data: filteredData }));
             dispatch(
-              setType({ key: labelKey, type: getStatusAktifLookup.type })
+              setType({
+                key: grp,
+                type: getStatusKomisiFinalMarketingLookup.type
+              })
             );
 
-            const defaultValue = statusNilaiData
+            const defaultValue = filteredData
               .map((item: any) => item.default)
               .find((val: any) => val !== null || '');
 
-            dispatch(
-              setDefault({ key: labelKey, isdefault: String(defaultValue) })
+            dispatch(setDefault({ key: grp, isdefault: String(defaultValue) }));
+          });
+        }
+
+        // STATUS FINAL BONUS TRIWULAN
+        if (getStatusFinalBonusTriwulanLookup.type === 'local') {
+          const grpsToFilter = ['STATUS NILAI'];
+
+          grpsToFilter.forEach((grp) => {
+            const filteredData = getStatusFinalBonusTriwulanLookup.data.filter(
+              (item: any) => item.grp === grp
             );
+
+            dispatch(setData({ key: grp, data: filteredData }));
+            dispatch(
+              setType({
+                key: grp,
+                type: getStatusFinalBonusTriwulanLookup.type
+              })
+            );
+
+            const defaultValue = filteredData
+              .map((item: any) => item.default)
+              .find((val: any) => val !== null || '');
+
+            dispatch(setDefault({ key: grp, isdefault: String(defaultValue) }));
           });
         }
       } catch (err) {

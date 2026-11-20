@@ -290,7 +290,8 @@ const GridShippingInstructionDetail = () => {
       setFilters((prev) => ({
         ...prev,
         filters: { ...prev.filters, [colKey]: value },
-        page: 1
+        page: 1,
+        search: ''
       }));
       setRows([]);
       setSelectedRow(0);
@@ -301,6 +302,7 @@ const GridShippingInstructionDetail = () => {
   const handleFilterInputChange = useCallback(
     (colKey: string, value: string) => {
       cancelPreviousRequest(abortControllerRef);
+      setInputValue(''); // Reset global search input saat filter kolom diubah
       debouncedFilterUpdate(colKey, value);
     },
     []
@@ -1039,6 +1041,7 @@ const GridShippingInstructionDetail = () => {
                 value="id"
                 label="text"
                 filterBy={{ grp: 'STATUS NILAI', subgrp: 'STATUS NILAI' }}
+                selectedValue={filters.filters.statuspisahbl_text}
                 onChange={(value) =>
                   handleFilterInputChange('statuspisahbl_text', value)
                 } // Menangani perubahan nilai di parent

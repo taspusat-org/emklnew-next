@@ -83,6 +83,11 @@ export const generateBiayaExtraHeaderReportFn = async (
   const response = await api2.post('/biayaextraheader/report', payload);
   return response.data;
 };
+
+/**
+ * Payload export Excel per transaksi — satu bukti beserta rinciannya, jadi
+ * yang dikirim hanya id barisnya (sama seperti cetak bukti).
+ */
 export interface ExportBuktiJobPayload {
   id: string;
 }
@@ -172,6 +177,22 @@ export const generateJenisOrderanExportFn = async (
   payload: ExportJobPayload
 ): Promise<ReportJobResponse> => {
   const response = await api2.post('/jenisorderan/export', payload);
+  return response.data;
+};
+
+/** Cetak laporan Alat Bayar di background — lihat generateGroupbiayaextraReportFn. */
+export const generateAlatbayarReportFn = async (
+  payload: ReportJobPayload
+): Promise<ReportJobResponse> => {
+  const response = await api2.post('/alatbayar/report', payload);
+  return response.data;
+};
+
+/** Cetak laporan Bank di background — lihat generateGroupbiayaextraReportFn. */
+export const generateBankReportFn = async (
+  payload: ReportJobPayload
+): Promise<ReportJobResponse> => {
+  const response = await api2.post('/bank/report', payload);
   return response.data;
 };
 
@@ -274,6 +295,13 @@ export const generateBlHeaderExportFn = async (
   return response.data;
 };
 
+export const generateBankExportFn = async (
+  payload: ExportJobPayload
+): Promise<ReportJobResponse> => {
+  const response = await api2.post('/bank/export', payload);
+  return response.data;
+};
+
 export const PDF_MIME = 'application/pdf';
 export const EXCEL_MIME =
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
@@ -300,4 +328,20 @@ export const downloadReportPdfFn = async (
 ): Promise<Blob> => {
   const { blob } = await downloadReportFileFn(downloadPath, PDF_MIME);
   return blob;
+};
+
+/** Cetak laporan Jabatan di background — lihat generateGroupbiayaextraReportFn. */
+export const generateJabatanReportFn = async (
+  payload: ReportJobPayload
+): Promise<ReportJobResponse> => {
+  const response = await api2.post('/jabatan/report', payload);
+  return response.data;
+};
+
+/** Export Excel Jabatan di background — lihat generateAlatbayarExportFn. */
+export const generateJabatanExportFn = async (
+  payload: ExportJobPayload
+): Promise<ReportJobResponse> => {
+  const response = await api2.post('/jabatan/export', payload);
+  return response.data;
 };

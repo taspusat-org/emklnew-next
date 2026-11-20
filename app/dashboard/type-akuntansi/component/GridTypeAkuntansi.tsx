@@ -416,6 +416,7 @@ const GridTypeAkuntansi = () => {
               <div
                 className="flex cursor-pointer items-center justify-center"
                 onClick={() => {
+                  discardPendingFilterUpdates();
                   setFilters({
                     ...filters,
                     search: '',
@@ -785,6 +786,7 @@ const GridTypeAkuntansi = () => {
                 value="id"
                 label="text"
                 filterBy={{ grp: 'STATUS AKTIF', subgrp: 'STATUS AKTIF' }}
+                selectedValue={filters.filters.statusaktif}
                 onChange={(value) =>
                   handleFilterInputChange('statusaktif', value)
                 } // Menangani perubahan nilai di parent
@@ -1040,12 +1042,17 @@ const GridTypeAkuntansi = () => {
   // Filter kolom di-batch: setiap ketikan menumpuk ke pendingUpdates lalu
   // dikirim sekali setelah debounce, sehingga mengetik cepat di dua kolom
   // berbeda tidak saling menimpa.
+  const pendingUpdates = useRef<Record<string, string>>({});
+
   const debouncedFilterUpdate = useRef(
     debounce((updates: Record<string, string>) => {
+      // buffer hanya berisi update yang belum di-flush
+      pendingUpdates.current = {};
       setFilters((prev) => ({
         ...prev,
         filters: { ...prev.filters, ...updates },
-        page: 1
+        page: 1,
+        search: ''
       }));
       setCheckedRows(new Set());
       setIsAllSelected(false);
@@ -1056,10 +1063,14 @@ const GridTypeAkuntansi = () => {
     }, 300)
   ).current;
 
-  const pendingUpdates = useRef<Record<string, string>>({});
+  const discardPendingFilterUpdates = () => {
+    debouncedFilterUpdate.cancel();
+    pendingUpdates.current = {};
+  };
 
   const handleFilterInputChange = useCallback(
     (colKey: string, value: string) => {
+      setInputValue(''); // Reset global search input saat filter kolom diubah
       cancelPreviousRequest(abortControllerRef);
       pendingUpdates.current[colKey] = value;
 
@@ -1088,6 +1099,7 @@ const GridTypeAkuntansi = () => {
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     cancelPreviousRequest(abortControllerRef);
+    discardPendingFilterUpdates();
     const searchValue = e.target.value;
 
     // Track global search input agar focus bisa di-restore
@@ -1122,8 +1134,7 @@ const GridTypeAkuntansi = () => {
   const handleClearFilter = useCallback(
     (colKey: string) => {
       cancelPreviousRequest(abortControllerRef);
-      debouncedFilterUpdate.cancel(); // Cancel pending updates
-      pendingUpdates.current[colKey] = '';
+      debouncedFilterUpdate.flush();
 
       const originalIndex = columns.findIndex((col) => col.key === colKey);
       const displayIndex =
@@ -1148,7 +1159,7 @@ const GridTypeAkuntansi = () => {
 
   const handleClearInput = () => {
     cancelPreviousRequest(abortControllerRef);
-    debouncedFilterUpdate.cancel();
+    discardPendingFilterUpdates();
     activeFilterInputRef.current = null;
     pendingSelectIdxRef.current = 1;
     setFilters((prev) => ({

@@ -3,7 +3,12 @@ import InputMask from '@mona-health/react-input-mask';
 import { Calendar } from '@/components/ui/calendar';
 import { FaCalendarAlt } from 'react-icons/fa';
 import { parse, format } from 'date-fns';
-import { isLeapYear, formatDateCalendar } from '@/lib/utils';
+import {
+  isLeapYear,
+  expandTwoDigitYear,
+  formatDateCalendar,
+  parseCalendarDate
+} from '@/lib/utils';
 import {
   Popover,
   PopoverAnchor,
@@ -121,6 +126,7 @@ const InputDatePicker: React.FC<DateInputProps> = ({
                 focusMaskedInput();
               }}
               className="z-5 absolute inset-0 flex cursor-text select-none items-center rounded-sm bg-background-input px-3 text-sm text-input-text"
+              style={{ right: showCalendar ? '36px' : '0' }}
             >
               {displayValue}
             </div>
@@ -144,7 +150,13 @@ const InputDatePicker: React.FC<DateInputProps> = ({
             onChange={onChange}
             readOnly={readOnly}
             onFocus={() => setIsFocused(true)}
-            onBlur={() => setIsFocused(false)}
+            onBlur={(e: React.FocusEvent<HTMLInputElement>) => {
+              setIsFocused(false);
+              if (readOnly || disabled) return;
+              // Tahun cuma diketik 2 digit ("20") → jadikan 4 digit ("2020")
+              const expanded = expandTwoDigitYear(e.target.value);
+              if (expanded) onChange?.({ target: { value: expanded } } as any);
+            }}
             beforeMaskedStateChange={({
               previousState,
               currentState,
@@ -262,20 +274,21 @@ const InputDatePicker: React.FC<DateInputProps> = ({
           avoidCollisions
           collisionPadding={8}
           sideOffset={0}
+          onEscapeKeyDown={(e) => {
+            // ESC ini hanya untuk menutup kalender (Radix menutupnya setelah
+            // callback ini). Jangan diteruskan ke listener ESC level-document di
+            // halaman (mis. Grid*: reset form + tutup dialog), kalau tidak
+            // dialog form ikut tertutup. Berlaku juga di luar DialogContent.
+            e.stopPropagation();
+          }}
         >
           <Calendar
             mode="single"
             captionLayout="dropdown-buttons"
             fromYear={fromYear}
             toYear={toYear}
-            defaultMonth={
-              value && value !== 'DD-MM-YYYY'
-                ? parse(value, 'dd-MM-yyyy', new Date())
-                : new Date()
-            }
-            selected={
-              value ? parse(value, 'dd-MM-yyyy', new Date()) : undefined
-            }
+            defaultMonth={parseCalendarDate(value) ?? new Date()}
+            selected={parseCalendarDate(value)}
             onSelect={(date) => {
               if (date) {
                 const formatted = formatDateCalendar(date);

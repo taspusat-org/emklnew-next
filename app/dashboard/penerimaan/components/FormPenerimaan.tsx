@@ -35,7 +35,10 @@ const FormPenerimaan = ({
   forms,
   onSubmit,
   mode,
-  handleClose
+  handleClose,
+  isLoadingCreate,
+  isLoadingUpdate,
+  isLoadingDelete
 }: any) => {
   const { theme, resolvedTheme } = useTheme();
   const isDark = theme === 'dark' || resolvedTheme === 'dark';
@@ -258,7 +261,7 @@ const FormPenerimaan = ({
                             ?.message as string
                         }
                         inputLookupValue={props.row.coa}
-                        lookupNama={props.row.coa_nama}
+                        lookupNama={props.row.coa_text}
                       />
                     )
                   )}
@@ -536,7 +539,7 @@ const FormPenerimaan = ({
         const formattedRows = allData.data.map((item: any) => ({
           id: item.id,
           coa: item.coa ?? '',
-          coa_nama: item.coa_nama ?? '',
+          coa_text: item.coa_text ?? '',
           nominal: item.nominal ?? '',
           keterangan: item.keterangan ?? '',
           isNew: false
@@ -553,7 +556,7 @@ const FormPenerimaan = ({
           {
             id: '0',
             coa: '',
-            coa_nama: '',
+            coa_text: '',
             nominal: '',
             keterangan: '',
             isNew: true
@@ -569,7 +572,7 @@ const FormPenerimaan = ({
       // Filter out the `isNew` field and any object with `id: "add_row"`
       const filteredRows = rows
         .filter((row) => row.id !== 'add_row') // Exclude rows with id "add_row"
-        .map(({ isNew, nominal, coa_nama, ...rest }) => ({
+        .map(({ isNew, nominal, coa_text, ...rest }) => ({
           ...rest,
           nominal: nominal ? String(nominal) : '' // Convert nominal to string (empty string if null or undefined)
         }));
@@ -577,6 +580,8 @@ const FormPenerimaan = ({
       forms.setValue('details', filteredRows);
     }
   }, [rows]);
+
+  console.log(forms.formState.errors);
   return (
     <Dialog open={popOver} onOpenChange={setPopOver}>
       <DialogTitle hidden={true}>Title</DialogTitle>
@@ -606,7 +611,13 @@ const FormPenerimaan = ({
             <Form {...forms}>
               <form
                 ref={formRef}
-                onSubmit={onSubmit}
+                // `onSubmit` adalah handler MENTAH dari grid, jadi pembungkusan
+                // handleSubmit dilakukan di sini. Submit native (mis. ENTER di
+                // sebuah field) diperlakukan sama dengan tombol SAVE:
+                // keepOpenModal = false, dialog menutup.
+                onSubmit={forms.handleSubmit((values: any) =>
+                  onSubmit(values, false)
+                )}
                 className="flex h-full flex-col gap-6"
               >
                 <div className="flex h-[100%] flex-col gap-2 lg:gap-3">
@@ -756,7 +767,9 @@ const FormPenerimaan = ({
                             forms.setValue('coakasmasuk', id)
                           }
                           inputLookupValue={forms.getValues('coakasmasuk')}
-                          lookupNama={forms.getValues('coakasmasuk_nama')}
+                          lookupNama={forms.getValues('coakasmasuk_text')}
+                          name="coakasmasuk"
+                          forms={forms}
                         />
                       ))}
                     </div>
@@ -776,7 +789,9 @@ const FormPenerimaan = ({
                           disabled={mode === 'view' || mode === 'delete'}
                           lookupValue={(id) => forms.setValue('relasi_id', id)}
                           inputLookupValue={forms.getValues('relasi_id')}
-                          lookupNama={forms.getValues('relasi_nama')}
+                          lookupNama={forms.getValues('relasi_text')}
+                          name="relasi_id"
+                          forms={forms}
                         />
                       ))}
                     </div>
@@ -786,10 +801,7 @@ const FormPenerimaan = ({
                     control={forms.control}
                     render={({ field }) => (
                       <FormItem className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
-                        <FormLabel
-                          required={true}
-                          className="font-semibold lg:w-[15%]"
-                        >
+                        <FormLabel className="font-semibold lg:w-[15%]">
                           NOMOR WARKAT
                         </FormLabel>
                         <div className="flex flex-col lg:w-[85%]">
@@ -808,7 +820,10 @@ const FormPenerimaan = ({
                   />
                   <div className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
                     <div className="w-full lg:w-[15%]">
-                      <FormLabel className="text-sm font-semibold">
+                      <FormLabel
+                        required={true}
+                        className="text-sm font-semibold"
+                      >
                         KAS/BANK
                       </FormLabel>
                     </div>
@@ -821,7 +836,9 @@ const FormPenerimaan = ({
                           disabled={mode === 'view' || mode === 'delete'}
                           lookupValue={(id) => forms.setValue('bank_id', id)}
                           inputLookupValue={forms.getValues('bank_id')}
-                          lookupNama={forms.getValues('bank_nama')}
+                          lookupNama={forms.getValues('bank_text')}
+                          name="bank_id"
+                          forms={forms}
                         />
                       ))}
                     </div>
@@ -843,7 +860,9 @@ const FormPenerimaan = ({
                             forms.setValue('alatbayar_id', String(id ?? ''))
                           }
                           inputLookupValue={forms.getValues('alatbayar_id')}
-                          lookupNama={forms.getValues('alatbayar_nama')}
+                          lookupNama={forms.getValues('alatbayar_text')}
+                          name="alatbayar_id"
+                          forms={forms}
                         />
                       ))}
                     </div>
@@ -853,10 +872,7 @@ const FormPenerimaan = ({
                     control={forms.control}
                     render={({ field }) => (
                       <FormItem className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
-                        <FormLabel
-                          required={true}
-                          className="font-semibold lg:w-[15%]"
-                        >
+                        <FormLabel className="font-semibold lg:w-[15%]">
                           TANGGAL LUNAS
                         </FormLabel>
                         <div className="flex flex-col lg:w-[85%]">
@@ -930,8 +946,13 @@ const FormPenerimaan = ({
         </div>
         <FormFooterButtons
           mode={mode}
-          onSave={onSubmit}
+          onSave={() => {
+            forms.handleSubmit((values: any) => onSubmit(values, false))();
+          }}
           onCancel={handleClose}
+          isLoadingCreate={isLoadingCreate}
+          isLoadingUpdate={isLoadingUpdate}
+          isLoadingDelete={isLoadingDelete}
           hideSaveAndAdd
         />
       </DialogContent>

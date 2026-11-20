@@ -1,4 +1,9 @@
 import { GetParams } from '../types/all.type';
+import {
+  BuktiJobPayload,
+  ExportBuktiJobPayload,
+  ReportJobResponse
+} from './report.api';
 import { api2 } from '../utils/AxiosInstance';
 import { buildQueryParams } from '../utils';
 import { IAllPenerimaanHeader } from '../types/penerimaan.type';
@@ -23,10 +28,13 @@ export const getPenerimaanHeaderFn = async (
     return response.data;
   } catch (error) {
     if (signal?.aborted) {
-      throw new Error('Request was cancelled');
+      throw error;
     }
-    console.error('Error:', error);
-    throw new Error('Failed');
+    console.error('Error fetching penerimaan header:', error);
+    // Lempar ulang error ASLINYA. Membungkusnya jadi `new Error('...')` membuang
+    // error.response — pemanggil kehilangan pesan + statusCode dari backend dan
+    // hanya bisa menampilkan teks generik. Berlaku untuk semua fungsi di file ini.
+    throw error;
   }
 };
 export const storePenerimaanFn = async (fields: PenerimaanHeaderInput) => {
@@ -35,19 +43,24 @@ export const storePenerimaanFn = async (fields: PenerimaanHeaderInput) => {
   return response.data;
 };
 export const getPenerimaanDetailFn = async (
-  filters: GetParams = {}
+  filters: GetParams = {},
+  signal?: AbortSignal
 ): Promise<IAllPenerimaanDetail> => {
   try {
     const queryParams = buildQueryParams(filters);
 
     const response = await api2.get('/penerimaandetail', {
-      params: queryParams
+      params: queryParams,
+      signal
     });
 
     return response.data;
   } catch (error) {
-    console.error('Error:', error);
-    throw new Error('Failed');
+    if (signal?.aborted) {
+      throw error;
+    }
+    console.error('Error fetching penerimaan detail:', error);
+    throw error;
   }
 };
 export const updatePenerimaanFn = async ({ id, fields }: UpdateParams) => {
@@ -71,8 +84,8 @@ export const getPenerimaanHeaderByIdFn = async (
 
     return response.data;
   } catch (error) {
-    console.error('Error:', error);
-    throw new Error('Failed');
+    console.error('Error fetching penerimaan header by id:', error);
+    throw error;
   }
 };
 export const exportPenerimaanFn = async (
@@ -90,6 +103,22 @@ export const exportPenerimaanFn = async (
     return response.data; // ini sudah Blob
   } catch (error) {
     console.error('Error exporting data penerimaan:', error);
-    throw new Error('Failed to export data penerimaan');
+    throw error;
   }
+};
+
+/** Cetak bukti Penerimaan di background (balas jobId, progres lewat socket `/report`). */
+export const generatePenerimaanHeaderReportFn = async (
+  payload: BuktiJobPayload
+): Promise<ReportJobResponse> => {
+  const response = await api2.post('/penerimaanheader/report', payload);
+  return response.data;
+};
+
+/** Export Excel satu bukti penerimaan + rinciannya (background job). */
+export const generatePenerimaanHeaderExportFn = async (
+  payload: ExportBuktiJobPayload
+): Promise<ReportJobResponse> => {
+  const response = await api2.post('/penerimaanheader/export', payload);
+  return response.data;
 };

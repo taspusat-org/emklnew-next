@@ -1099,6 +1099,7 @@ const GridPenerimaanEmkl = () => {
                 value="id"
                 label="text"
                 filterBy={{ grp: 'NILAI PROSES', subgrp: 'NILAI PROSES' }}
+                selectedValue={filters.filters.nilaiprosespenerimaan_text}
                 onChange={(value) =>
                   handleFilterInputChange('nilaiprosespenerimaan_text', value)
                 } // Menangani perubahan nilai di parent
@@ -1176,6 +1177,7 @@ const GridPenerimaanEmkl = () => {
                 value="id"
                 label="text"
                 filterBy={{ grp: 'NILAI PROSES', subgrp: 'NILAI PROSES' }}
+                selectedValue={filters.filters.nilaiprosespengeluaran_text}
                 onChange={(value) =>
                   handleFilterInputChange('nilaiprosespengeluaran_text', value)
                 } // Menangani perubahan nilai di parent
@@ -1253,6 +1255,7 @@ const GridPenerimaanEmkl = () => {
                 value="id"
                 label="text"
                 filterBy={{ grp: 'NILAI PROSES', subgrp: 'NILAI PROSES' }}
+                selectedValue={filters.filters.nilaiproseshutang_text}
                 onChange={(value) =>
                   handleFilterInputChange('nilaiproseshutang_text', value)
                 } // Menangani perubahan nilai di parent
@@ -1330,6 +1333,7 @@ const GridPenerimaanEmkl = () => {
                 value="id"
                 label="text"
                 filterBy={{ grp: 'STATUS NILAI', subgrp: 'STATUS NILAI' }}
+                selectedValue={filters.filters.statuspenarikan_text}
                 onChange={(value) =>
                   handleFilterInputChange('statuspenarikan_text', value)
                 } // Menangani perubahan nilai di parent
@@ -1478,6 +1482,7 @@ const GridPenerimaanEmkl = () => {
                 value="id"
                 label="text"
                 filterBy={{ grp: 'STATUS AKTIF', subgrp: 'STATUS AKTIF' }}
+                selectedValue={filters.filters.statusaktif_text}
                 onChange={(value) =>
                   handleFilterInputChange('statusaktif_text', value)
                 } // Menangani perubahan nilai di parent

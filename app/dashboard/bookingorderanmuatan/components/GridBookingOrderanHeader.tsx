@@ -2659,6 +2659,7 @@ const GridBookingMuatan = () => {
                 value="id"
                 label="text"
                 filterBy={{ grp: 'STATUS NILAI', subgrp: 'STATUS NILAI' }}
+                selectedValue={filters.filters.tradoluar_text}
                 onChange={(value) =>
                   // handleColumnFilterChange('tradoluar_text', value)
                   handleFilterInputChange('tradoluar_text', value)
@@ -2737,6 +2738,7 @@ const GridBookingMuatan = () => {
                 value="id"
                 label="text"
                 filterBy={{ grp: 'STATUS NILAI', subgrp: 'STATUS NILAI' }}
+                selectedValue={filters.filters.pisahbl_text}
                 onChange={(value) =>
                   handleFilterInputChange('pisahbl_text', value)
                 } // Menangani perubahan nilai di parent
@@ -2814,6 +2816,7 @@ const GridBookingMuatan = () => {
                 value="id"
                 label="text"
                 filterBy={{ grp: 'STATUS NILAI', subgrp: 'STATUS NILAI' }}
+                selectedValue={filters.filters.jobptd_text}
                 onChange={(value) =>
                   handleFilterInputChange('jobptd_text', value)
                 } // Menangani perubahan nilai di parent
@@ -2891,6 +2894,7 @@ const GridBookingMuatan = () => {
                 value="id"
                 label="text"
                 filterBy={{ grp: 'STATUS NILAI', subgrp: 'STATUS NILAI' }}
+                selectedValue={filters.filters.transit_text}
                 onChange={(value) =>
                   handleFilterInputChange('transit_text', value)
                 } // Menangani perubahan nilai di parent
@@ -2968,6 +2972,7 @@ const GridBookingMuatan = () => {
                 value="id"
                 label="text"
                 filterBy={{ grp: 'STATUS NILAI', subgrp: 'STATUS NILAI' }}
+                selectedValue={filters.filters.stuffingdepo_text}
                 onChange={(value) =>
                   handleFilterInputChange('stuffingdepo_text', value)
                 } // Menangani perubahan nilai di parent
@@ -3045,6 +3050,7 @@ const GridBookingMuatan = () => {
                 value="id"
                 label="text"
                 filterBy={{ grp: 'STATUS NILAI', subgrp: 'STATUS NILAI' }}
+                selectedValue={filters.filters.opendoor_text}
                 onChange={(value) =>
                   handleFilterInputChange('opendoor_text', value)
                 } // Menangani perubahan nilai di parent
@@ -3122,6 +3128,7 @@ const GridBookingMuatan = () => {
                 value="id"
                 label="text"
                 filterBy={{ grp: 'STATUS NILAI', subgrp: 'STATUS NILAI' }}
+                selectedValue={filters.filters.batalmuat_text}
                 onChange={(value) =>
                   handleFilterInputChange('batalmuat_text', value)
                 } // Menangani perubahan nilai di parent
@@ -3197,6 +3204,7 @@ const GridBookingMuatan = () => {
                 value="id"
                 label="text"
                 filterBy={{ grp: 'STATUS NILAI', subgrp: 'STATUS NILAI' }}
+                selectedValue={filters.filters.soc_text}
                 onChange={(value) => handleFilterInputChange('soc_text', value)} // Menangani perubahan nilai di parent
               />
             </div>
@@ -3272,6 +3280,7 @@ const GridBookingMuatan = () => {
                 value="id"
                 label="text"
                 filterBy={{ grp: 'STATUS NILAI', subgrp: 'STATUS NILAI' }}
+                selectedValue={filters.filters.pengurusandoor_text}
                 onChange={(value) =>
                   handleFilterInputChange('pengurusandoor_text', value)
                 } // Menangani perubahan nilai di parent
@@ -3349,6 +3358,7 @@ const GridBookingMuatan = () => {
                 value="id"
                 label="text"
                 filterBy={{ grp: 'STATUS APPROVAL', subgrp: 'STATUS APPROVAL' }}
+                selectedValue={filters.filters.approval_text}
                 onChange={(value) =>
                   handleFilterInputChange('approval_text', value)
                 } // Menangani perubahan nilai di parent

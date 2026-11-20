@@ -27,9 +27,9 @@ export default function AuthSessionSync() {
 
   useEffect(() => {
     if (!session?.user?.id) return;
-    // Providers ter-mount dua kali (root + dashboard layout) dan session di-
-    // refetch sendiri oleh next-auth; dispatch hanya saat nilainya beda supaya
-    // tidak ada rerender beruntun.
+    // Harus satu instance (Providers hanya di RootLayoutClient). Dua
+    // SessionProvider memegang session berbeda dan saling menimpa redux tanpa
+    // henti -> "Maximum update depth exceeded".
     if (session.user.id === userId && (session.token ?? null) === token) return;
 
     dispatch(

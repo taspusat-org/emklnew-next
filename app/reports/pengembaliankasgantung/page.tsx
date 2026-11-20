@@ -12,7 +12,6 @@ import '@react-pdf-viewer/zoom/lib/styles/index.css';
 import { printPlugin } from '@react-pdf-viewer/print';
 import { zoomPlugin } from '@react-pdf-viewer/zoom';
 
-import { exportPengembalianKasGantungFn } from '@/lib/apis/pengembaliankasgantung.api';
 import CustomPrintModal from '@/components/custom-ui/CustomPrint';
 import { HeaderPdfViewer } from '@/components/custom-ui/HeaderPdfViewer';
 import { setProcessed } from '@/lib/store/loadingSlice/loadingSlice';
@@ -47,26 +46,16 @@ const ReportMenuPage: React.FC = () => {
     if (storedId) setSavedId(storedId);
   }, []);
 
+  // Halaman ini SISA dari alur cetak lama (Stimulsoft di browser) dan sudah
+  // tidak dibuka dari mana pun: cetak & export pengembalian kas gantung kini
+  // berjalan sebagai job background di backend, dipicu dari
+  // GridPengembalianKasGantung dan diunduh lewat /report/download/:jobId.
+  // Tombol export di viewer ini dibiarkan tidak melakukan apa-apa karena
+  // endpoint sinkron GET /pengembaliankasgantungheader/export/:id sudah tidak ada.
   const handleExport = async (): Promise<void> => {
-    try {
-      if (!savedId) return;
-      const exportPayload = { ...savedFilters };
-      const response = await exportPengembalianKasGantungFn(
-        savedId,
-        exportPayload
-      );
-
-      const url = window.URL.createObjectURL(new Blob([response]));
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `laporan_pengembaliankasgantung_${Date.now()}.xlsx`;
-      document.body.appendChild(link);
-      link.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(link);
-    } catch (error) {
-      console.error('Error exporting pengembaliankasgantung data:', error);
-    }
+    console.warn(
+      'Export dari viewer lama sudah tidak didukung. Gunakan tombol Export di grid Pengembalian Kas Gantung.'
+    );
   };
 
   const onPrint = (): void => {

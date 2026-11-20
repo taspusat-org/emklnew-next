@@ -1122,6 +1122,7 @@ const GridEstimasiBiayaHeader = () => {
                 value="id"
                 label="text"
                 filterBy={{ grp: 'STATUS NILAI', subgrp: 'STATUS NILAI' }}
+                selectedValue={filters.filters.statusppn_text}
                 onChange={(value) =>
                   handleFilterInputChange('statusppn_text', value)
                 } // Menangani perubahan nilai di parent

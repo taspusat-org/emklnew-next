@@ -287,6 +287,7 @@ const GridCabang = () => {
             <div
               className="flex h-[50%] w-full cursor-pointer items-center justify-center"
               onClick={() => {
+                discardPendingFilterUpdates();
                 setFilters({
                   ...filters,
                   search: '',
@@ -584,6 +585,7 @@ const GridCabang = () => {
                 value="id"
                 label="text"
                 filterBy={{ grp: 'STATUS AKTIF', subgrp: 'STATUS AKTIF' }}
+                selectedValue={filters.filters.statusaktif}
                 onChange={(value) =>
                   handleFilterInputChange('statusaktif', value)
                 }
@@ -829,8 +831,12 @@ const GridCabang = () => {
     ];
   }, [filters, checkedRows, isAllSelected, rows, minVisiblePage]);
 
+  const pendingUpdates = useRef<Record<string, string>>({});
+
   const debouncedFilterUpdate = useRef(
     debounce((updates: Record<string, string>) => {
+      // buffer hanya berisi update yang belum di-flush
+      pendingUpdates.current = {};
       setFilters((prev) => ({
         ...prev,
         filters: { ...prev.filters, ...updates },
@@ -845,7 +851,10 @@ const GridCabang = () => {
     }, 300)
   ).current;
 
-  const pendingUpdates = useRef<Record<string, string>>({});
+  const discardPendingFilterUpdates = () => {
+    debouncedFilterUpdate.cancel();
+    pendingUpdates.current = {};
+  };
 
   const handleFilterInputChange = useCallback(
     (colKey: string, value: string) => {
@@ -875,8 +884,7 @@ const GridCabang = () => {
   );
   const handleClearFilter = useCallback((colKey: string) => {
     cancelPreviousRequest(abortControllerRef);
-    debouncedFilterUpdate.cancel();
-    pendingUpdates.current[colKey] = '';
+    debouncedFilterUpdate.flush();
 
     const originalIndex = columns.findIndex((col) => col.key === colKey);
     const displayIndex =
@@ -901,6 +909,7 @@ const GridCabang = () => {
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     cancelPreviousRequest(abortControllerRef);
+    discardPendingFilterUpdates();
     const searchValue = e.target.value;
 
     activeFilterInputRef.current = inputRef.current;
@@ -987,7 +996,7 @@ const GridCabang = () => {
 
   const handleClearInput = () => {
     cancelPreviousRequest(abortControllerRef);
-    debouncedFilterUpdate.cancel();
+    discardPendingFilterUpdates();
     activeFilterInputRef.current = null;
     pendingSelectIdxRef.current = 1;
     setFilters((prev) => ({

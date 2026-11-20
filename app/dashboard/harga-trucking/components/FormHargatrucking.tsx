@@ -118,7 +118,6 @@ const FormMenu = ({
   const formRef = useRef<HTMLFormElement | null>(null); // Ref untuk form
   const openName = useSelector((state: RootState) => state.lookup.openName);
   const dispatch = useDispatch();
-
   return (
     <Dialog open={popOver} onOpenChange={setPopOver}>
       <DialogTitle hidden={true}>Title</DialogTitle>
@@ -152,33 +151,29 @@ const FormMenu = ({
                 className="flex h-full flex-col gap-6"
               >
                 <div className="flex h-[100%] flex-col gap-2 lg:gap-3">
-                  {/* <FormField
-                    name="tujuankapal_text"
+                  <FormField
+                    name="tarifdetail_id"
                     control={forms.control}
                     render={({ field }) => (
                       <FormItem className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
-                        <FormLabel
-                          className="text-sm font-semibold lg:w-[15%]"
-                        >
-                          Tarif Detail
+                        <FormLabel className="font-semibold lg:w-[15%]">
+                          TARIF DETAIL ID
                         </FormLabel>
                         <div className="flex flex-col lg:w-[85%]">
-                          {lookUpPropsTujuankapal.map((props, index) => (
-                            <LookUp
-                              key={index}
-                              {...props}
-                              lookupValue={(id) =>
-                                forms.setValue('tujuankapal_id', id)
-                              }
-                              lookupNama={forms.getValues('tujuankapal_text')}
-                              disabled={mode === 'view' || mode === 'delete'}
+                          <FormControl>
+                            <Input
+                              {...field}
+                              value={field.value ?? ''}
+                              type="text"
+                              // readOnly={mode === 'view' || mode === 'delete'}
+                              disabled
                             />
-                          ))}
+                          </FormControl>
                           <FormMessage />
                         </div>
                       </FormItem>
                     )}
-                  /> */}
+                  />
 
                   <FormField
                     name="tujuankapal_text"

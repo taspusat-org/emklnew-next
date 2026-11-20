@@ -3,16 +3,16 @@ import { IMeta } from './error.type';
 export interface IScheduleKapal {
   id: string;
   jenisorder_id: string | null;
-  jenisorderan_nama: string | null | undefined | '';
+  jenisorder_text: string | null | undefined | '';
   keterangan: string | null;
   kapal_id: number | null;
-  kapal_nama: string | null;
+  kapal_text: string | null;
   pelayaran_id: number | null;
-  pelayaran_nama: string | null;
+  pelayaran_text: string | null;
   tujuankapal_id: number | null;
-  tujuankapal_nama: string | null;
+  tujuankapal_text: string | null;
   asalkapal_id: number | null;
-  asalkapal_nama: string | null;
+  asalkapal_text: string | null;
   tglberangkat: string | null;
   tgltiba: string | null;
   tglclosing: string | null;
@@ -20,7 +20,7 @@ export interface IScheduleKapal {
   statustibakapal: string | null;
   batasmuatankapal: string | null;
   statusaktif: string | null;
-  statusaktif_nama: string | null;
+  statusaktif_text: string | null;
   modifiedby: string | null;
   created_at: string | null;
   updated_at: string | null;
@@ -32,40 +32,21 @@ export interface IAllScheduleKapal {
   pagination: IMeta;
 }
 
-// export interface InterfaceFilter {
-//   jenisorderan_nama: string | null | undefined | '';
-//   keterangan: string;
-//   kapal_nama: string;
-//   pelayaran_nama: string;
-//   tujuankapal_nama: string;
-//   asalkapal_nama: string;
-//   tglberangkat: string;
-//   tgltiba: string;
-//   tglclosing: string;
-//   statusberangkatkapal: string;
-//   statustibakapal: string;
-//   batasmuatankapal: string;
-//   statusaktif_nama: string;
-//   modifiedby: string;
-//   created_at: string;
-//   updated_at: string;
-// }
-
-export const defaultFilter = {
-  jenisorderan_nama: '',
+export const filterSchedulekapal = {
+  jenisorder_text: '',
   keterangan: '',
   voyberangkat: '',
-  kapal_nama: '',
-  pelayaran_nama: '',
-  tujuankapal_nama: '',
-  asalkapal_nama: '',
+  kapal_text: '',
+  pelayaran_text: '',
+  tujuankapal_text: '',
+  asalkapal_text: '',
   tglberangkat: '',
   tgltiba: '',
   tglclosing: '',
   statusberangkatkapal: '',
   statustibakapal: '',
   batasmuatankapal: '',
-  statusaktif_nama: '',
+  text: '',
   modifiedby: '',
   created_at: '',
   updated_at: ''

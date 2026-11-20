@@ -404,7 +404,7 @@ const FormBank = ({
                           lookupValue={(value) => {
                             forms.setValue('statusbank', value);
                           }}
-                          lookupNama={forms.getValues('textbank')}
+                          lookupNama={forms.getValues('statusbank_text')}
                           disabled={mode === 'view' || mode === 'delete'}
                         />
                       ))}
@@ -452,7 +452,7 @@ const FormBank = ({
                           lookupValue={(value) => {
                             forms.setValue('statusdefault', value);
                           }}
-                          lookupNama={forms.getValues('textdefault')}
+                          lookupNama={forms.getValues('statusdefault_text')}
                           disabled={mode === 'view' || mode === 'delete'}
                         />
                       ))}

@@ -115,14 +115,27 @@ interface Filter {
 // Kolom `memo` bertipe text di database: bisa datang sebagai string JSON,
 // objek (bila sudah ter-parse), atau null.
 const parseMemo = (memo: unknown): Record<string, string> => {
-  if (!memo) return {};
-  if (typeof memo === 'object') return memo as Record<string, string>;
-  try {
-    const parsed = JSON.parse(String(memo));
-    return parsed && typeof parsed === 'object' ? parsed : {};
-  } catch {
-    return {};
+  let parsed: unknown = memo;
+  if (typeof memo === 'string') {
+    try {
+      parsed = JSON.parse(memo);
+    } catch {
+      return {};
+    }
   }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+  // Schema memo = z.record(z.string()); nilai angka/null dari data lama membuat
+  // submit gagal diam-diam karena field memo tidak punya FormMessage.
+  return Object.fromEntries(
+    Object.entries(parsed as Record<string, unknown>).map(([key, value]) => [
+      key,
+      value == null
+        ? ''
+        : typeof value === 'object'
+        ? JSON.stringify(value)
+        : String(value)
+    ])
+  );
 };
 
 const GridParameter = () => {
@@ -324,6 +337,7 @@ const GridParameter = () => {
       text: '',
       memo: {},
       type: '',
+      type_nama: '',
       default: '',
       info: ''
     }
@@ -411,6 +425,7 @@ const GridParameter = () => {
               <div
                 className="flex cursor-pointer items-center justify-center"
                 onClick={() => {
+                  discardPendingFilterUpdates();
                   setFilters({
                     ...filters,
                     search: '',
@@ -793,12 +808,17 @@ const GridParameter = () => {
     ];
   }, [filters, checkedRows, isAllSelected, rows, minVisiblePage]);
 
+  const pendingUpdates = useRef<Record<string, string>>({});
+
   const debouncedFilterUpdate = useRef(
     debounce((updates: Record<string, string>) => {
+      // buffer hanya berisi update yang belum di-flush
+      pendingUpdates.current = {};
       setFilters((prev) => ({
         ...prev,
         filters: { ...prev.filters, ...updates },
-        page: 1
+        page: 1,
+        search: ''
       }));
       setCheckedRows(new Set());
       setIsAllSelected(false);
@@ -809,11 +829,15 @@ const GridParameter = () => {
     }, 300)
   ).current;
 
-  const pendingUpdates = useRef<Record<string, string>>({});
+  const discardPendingFilterUpdates = () => {
+    debouncedFilterUpdate.cancel();
+    pendingUpdates.current = {};
+  };
 
   const handleFilterInputChange = useCallback(
     (colKey: string, value: string) => {
       cancelPreviousRequest(abortControllerRef);
+      setInputValue(''); // Reset global search input saat filter kolom diubah
       pendingUpdates.current[colKey] = value;
 
       // ✅ Hanya track jika activeElement memang filter input kolom ini
@@ -842,8 +866,7 @@ const GridParameter = () => {
   const handleClearFilter = useCallback(
     (colKey: string) => {
       cancelPreviousRequest(abortControllerRef);
-      debouncedFilterUpdate.cancel();
-      pendingUpdates.current[colKey] = '';
+      debouncedFilterUpdate.flush();
 
       // ✅ Arahkan ke kolom yang di-clear
       const originalIndex = columns.findIndex((col) => col.key === colKey);
@@ -871,6 +894,7 @@ const GridParameter = () => {
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     cancelPreviousRequest(abortControllerRef);
+    discardPendingFilterUpdates();
     const searchValue = e.target.value;
 
     // ✅ Track global search input agar focus bisa di-restore
@@ -965,7 +989,7 @@ const GridParameter = () => {
 
   const handleClearInput = () => {
     cancelPreviousRequest(abortControllerRef);
-    debouncedFilterUpdate.cancel();
+    discardPendingFilterUpdates();
     activeFilterInputRef.current = null;
     pendingSelectIdxRef.current = 1; // ✅ Reset ke default idx 1
     setFilters((prev) => ({
@@ -1522,6 +1546,7 @@ const GridParameter = () => {
       text: '',
       memo: {},
       type: '',
+      type_nama: '',
       default: '',
       info: ''
     });
@@ -1793,22 +1818,42 @@ const GridParameter = () => {
     }
   };
 
+  const fillFormFromRow = (rowData?: IParameter) => {
+    if (!rowData) return;
+    forms.setValue('id', rowData.id ?? '');
+    forms.setValue('grp', rowData.grp || '');
+    forms.setValue('subgrp', rowData.subgrp || '');
+    forms.setValue('kelompok', rowData.kelompok || '');
+    forms.setValue('text', rowData.text || '');
+    forms.setValue('memo', parseMemo(rowData.memo));
+    forms.setValue('type', rowData.type || '');
+    forms.setValue('type_nama', rowData.type_nama || '');
+    forms.setValue('default', rowData.default || '');
+    forms.setValue('info', rowData.info || '');
+  };
+
+  // Form diisi SEBELUM dialog dibuka: tabel memo di FormParameter dibangun
+  // sekali saat popOver jadi true, dan effect anak jalan lebih dulu dari effect
+  // pengisi form di grid — tanpa ini memo tampil kosong setelah form di-reset.
+  const openFormForSelectedRow = (nextMode: 'edit' | 'view' | 'delete') => {
+    fillFormFromRow(rows[selectedRow]);
+    setMode(nextMode);
+    setPopOver(true);
+  };
+
   const handleEdit = async () => {
     if (!(await runCheckValidation('EDIT'))) return;
-    setPopOver(true);
-    setMode('edit');
+    openFormForSelectedRow('edit');
   };
 
   const handleDelete = async () => {
     if (!(await runCheckValidation('DELETE'))) return;
-    setMode('delete');
-    setPopOver(true);
+    openFormForSelectedRow('delete');
   };
 
   const handleView = () => {
     if (selectedRow !== null) {
-      setMode('view');
-      setPopOver(true);
+      openFormForSelectedRow('view');
     }
   };
 
@@ -2390,17 +2435,8 @@ const GridParameter = () => {
   }, [isTransitioning, isFetching]);
 
   useEffect(() => {
-    const rowData = rows[selectedRow];
     if (selectedRow !== null && rows.length > 0 && mode !== 'add') {
-      forms.setValue('id', rowData?.id ?? '');
-      forms.setValue('grp', rowData?.grp || ''); // Jika null, set ke string kosong
-      forms.setValue('subgrp', rowData?.subgrp || '');
-      forms.setValue('kelompok', rowData?.kelompok || '');
-      forms.setValue('text', rowData?.text || '');
-      forms.setValue('memo', parseMemo(rowData?.memo));
-      forms.setValue('type', rowData?.type || '');
-      forms.setValue('default', rowData?.default || '');
-      forms.setValue('info', rowData?.info || '');
+      fillFormFromRow(rows[selectedRow]);
     }
     // JANGAN forms.reset() saat mode 'add' di sini. Effect ini ikut ter-trigger
     // setiap kali `rows` di-update background fetch (bulk/prefetch) selama modal

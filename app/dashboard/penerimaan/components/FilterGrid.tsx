@@ -1,74 +1,85 @@
+// FilterGrid.tsx
 'use client';
-import React, { useEffect, useState } from 'react';
-import { useDispatch } from 'react-redux';
-import {
-  setOnReload,
-  setSelectedDate,
-  setSelectedDate2
-} from '@/lib/store/filterSlice/filterSlice';
-import { useSelector } from 'react-redux';
+import { useState } from 'react';
+import { useDispatch, useSelector } from 'react-redux';
+import { setPending, commitFilter } from '@/lib/store/filterSlice/filterSlice';
+import { RootState } from '@/lib/store/store';
+import PeriodeValidation from '@/components/custom-ui/PeriodeValidate';
+import LookUp from '@/components/custom-ui/LookUp';
 import { Button } from '@/components/ui/button';
 import { IoMdRefresh } from 'react-icons/io';
-import PeriodeValidation from '@/components/custom-ui/PeriodeValidate';
 
 const FilterGrid = () => {
   const dispatch = useDispatch();
-  const { onReload } = useSelector((state: any) => state.filter);
+  const pending = useSelector((state: RootState) => state.filter.pending);
   const [triggerValidation, setTriggerValidation] = useState(false);
 
-  const onSubmit = () => {
-    setTriggerValidation(true);
-  };
-
   const handleValidationResult = (isValid: boolean) => {
-    if (triggerValidation) {
-      if (isValid) {
-        dispatch(setOnReload(true));
-      }
-      setTriggerValidation(false);
-    }
+    if (!triggerValidation) return;
+    setTriggerValidation(false);
+    if (!isValid) return;
+
+    // ✅ Atomic commit — satu action, satu re-render
+    dispatch(commitFilter());
   };
-  useEffect(() => {
-    const now = new Date();
-    const fmt = (date: Date) =>
-      `${String(date.getDate()).padStart(2, '0')}-${String(
-        date.getMonth() + 1
-      ).padStart(2, '0')}-${date.getFullYear()}`;
-
-    const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const lastOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-
-    dispatch(setSelectedDate(fmt(firstOfMonth)));
-    dispatch(setSelectedDate2(fmt(lastOfMonth)));
-  }, [dispatch]);
-  useEffect(() => {
-    if (onReload) {
-      // Simulate a reload operation
-      dispatch(setOnReload(false));
-    }
-  }, [onReload]);
 
   return (
-    <div className={`flex h-[100%] w-full justify-center`}>
+    <div className="flex h-[100%] w-full justify-center">
       <div className="flex h-[100%] w-full flex-col rounded-sm border border-border bg-background-grid-header">
         <div className="flex h-[30px] w-full flex-row items-center rounded-t-sm border-b border-border px-2" />
         <div className="bg-background-header p-4">
           <PeriodeValidation
             label="periode"
+            date1={pending.tglDari}
+            date2={pending.tglSampai}
+            onDate1Change={(val) => dispatch(setPending({ tglDari: val }))}
+            onDate2Change={(val) => dispatch(setPending({ tglSampai: val }))}
             onValidationChange={handleValidationResult}
             triggerValidation={triggerValidation}
           />
 
-          <Button
-            variant="default"
-            className="mt-2 flex flex-row items-center justify-center"
-            onClick={onSubmit}
-          >
-            <IoMdRefresh />
-            <p style={{ fontSize: 12 }} className="font-normal">
-              Reload
-            </p>
-          </Button>
+          <div className="mt-2 flex w-[50%] flex-col items-center justify-between lg:flex-row">
+            <label className="w-full text-sm font-bold lg:w-[20%]">
+              Bank:
+              <span style={{ color: 'red', marginLeft: '4px' }}>*</span>
+            </label>
+            <div className="relative w-full lg:w-[60%]">
+              <LookUp
+                key={'bankfilter'}
+                columns={[{ key: 'nama', name: 'BANK' }]}
+                labelLookup="BANK LOOKUP"
+                label="BANK FILTER"
+                required
+                selectedRequired={false}
+                endpoint="bank"
+                singleColumn
+                pageSize={20}
+                showOnButton
+                postData="nama"
+                dataToPost="id"
+                onSelectRow={(val) =>
+                  dispatch(setPending({ bank_id: val.id, bank_nama: val.nama }))
+                }
+                onClear={() =>
+                  dispatch(setPending({ bank_id: '', bank_nama: '' }))
+                }
+                lookupNama={pending.bank_nama}
+              />
+            </div>
+          </div>
+
+          <div className="mt-2 flex gap-2">
+            <Button
+              variant="default"
+              className="flex flex-row items-center justify-center"
+              onClick={() => setTriggerValidation(true)}
+            >
+              <IoMdRefresh />
+              <p style={{ fontSize: 12 }} className="font-normal">
+                Reload
+              </p>
+            </Button>
+          </div>
         </div>
       </div>
     </div>

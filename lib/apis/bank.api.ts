@@ -15,22 +15,20 @@ export const getBankFn = async (
 ): Promise<IAllBank> => {
   try {
     const queryParams = buildQueryParams(filters);
-
     const response = await api2.get('/bank', {
       params: queryParams,
       signal
     });
-
     return response.data;
   } catch (error) {
     if (signal?.aborted) {
       throw new Error('Request was cancelled');
     }
-    console.error('Error fetching Akun Pusat:', error);
-    throw new Error('Failed to fetch Akun Pusat');
+    console.error('Error fetching Bank:', error);
+    throw new Error('Failed to fetch Bank');
   }
 };
-export const deleteBankFn = async (id: string) => {
+export const deleteBankFn = async (id: string): Promise<unknown> => {
   try {
     const response = await api2.delete(`/bank/${id}`);
     return response.data; // Optionally return response data if needed
@@ -46,7 +44,6 @@ export const updateBankFn = async ({ id, fields }: UpdateMenuParams) => {
 
 export const storeBankFn = async (fields: BankInput) => {
   const response = await api2.post(`/bank`, fields);
-
   return response.data;
 };
 

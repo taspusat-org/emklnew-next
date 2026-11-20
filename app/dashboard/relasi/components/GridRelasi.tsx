@@ -223,7 +223,8 @@ const GridRelasi = () => {
       setFilters((prev) => ({
         ...prev,
         filters: { ...prev.filters, [colKey]: value },
-        page: 1
+        page: 1,
+        search: ''
       }));
       setCheckedRows(new Set());
       setIsAllSelected(false);
@@ -236,6 +237,7 @@ const GridRelasi = () => {
   const handleFilterInputChange = useCallback(
     (colKey: string, value: string) => {
       cancelPreviousRequest(abortControllerRef);
+      setInputValue(''); // Reset global search input saat filter kolom diubah
       debouncedFilterUpdate(colKey, value);
     },
     []
@@ -838,6 +840,7 @@ const GridRelasi = () => {
                 value="id"
                 label="text"
                 filterBy={{ grp: 'STATUS AKTIF', subgrp: 'STATUS AKTIF' }}
+                selectedValue={filters.filters.statustitip_text}
                 onChange={(value) =>
                   handleColumnFilterChange('statustitip_text', value)
                 } // Menangani perubahan nilai di parent
@@ -1287,6 +1290,7 @@ const GridRelasi = () => {
                 value="id"
                 label="text"
                 filterBy={{ grp: 'STATUS AKTIF', subgrp: 'STATUS AKTIF' }}
+                selectedValue={filters.filters.statusaktif}
                 onChange={(value) =>
                   handleColumnFilterChange('statusaktif', value)
                 } // Menangani perubahan nilai di parent

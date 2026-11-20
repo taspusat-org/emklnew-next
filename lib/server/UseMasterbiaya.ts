@@ -70,7 +70,7 @@ export const useCreateMasterBiaya = () => {
       const errorResponse = error.response?.data as IErrorResponse;
       if (errorResponse !== undefined) {
         const errorFields = errorResponse.message || [];
-        if (errorResponse.statusCode === 400) {
+        if (errorResponse.statusCode === 400 && Array.isArray(errorFields)) {
           errorFields?.forEach((err: { path: string[]; message: string }) => {
             const path = err.path[0]; // Ambil path error pertama (misalnya 'nama', 'akuntansi_id')
 
@@ -104,7 +104,7 @@ export const useDeleteMasterBiaya = () => {
       const errorResponse = error.response?.data as IErrorResponse;
       if (errorResponse !== undefined) {
         const errorFields = errorResponse.message || [];
-        if (errorResponse.statusCode === 400) {
+        if (errorResponse.statusCode === 400 && Array.isArray(errorFields)) {
           errorFields?.forEach((err: { path: string[]; message: string }) => {
             const path = err.path[0]; // Ambil path error pertama (misalnya 'nama', 'akuntansi_id')
 

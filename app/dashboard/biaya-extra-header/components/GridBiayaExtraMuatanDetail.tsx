@@ -263,7 +263,8 @@ const GridBiayaExtraMuatanDetail = () => {
       setFilters((prev) => ({
         ...prev,
         filters: { ...prev.filters, [colKey]: value },
-        page: 1
+        page: 1,
+        search: ''
       }));
       setRows([]);
       resetBufferingCache();
@@ -272,6 +273,7 @@ const GridBiayaExtraMuatanDetail = () => {
 
   const handleFilterInputChange = useCallback(
     (colKey: string, value: string) => {
+      setInputValue(''); // Reset global search input saat filter kolom diubah
       debouncedFilterUpdate(colKey, value);
       setTimeout(() => {
         setSelectedRow(0);
@@ -686,6 +688,7 @@ const GridBiayaExtraMuatanDetail = () => {
                 value="id"
                 label="text"
                 filterBy={{ grp: 'STATUS NILAI', subgrp: 'STATUS NILAI' }}
+                selectedValue={filters.filters.statustagih_text}
                 onChange={(value) =>
                   handleFilterInputChange('statustagih_text', value)
                 } // Menangani perubahan nilai di parent

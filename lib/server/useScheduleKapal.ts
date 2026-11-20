@@ -1,35 +1,25 @@
 import { useQuery } from 'react-query';
-import { getAllScheduleKapalsiFn } from '../apis/schedulekapal.api';
+import { getScheduleKapalFn } from '../apis/schedulekapal.api';
+import { filterSchedulekapal } from '../types/schedulekapal.type';
 
-export const useGetAllScheduleKapal = (
+export const useGetScheduleKapal = (
   filters: {
     page?: number;
     limit?: number;
     search?: string;
     sortBy?: string;
     sortDirection?: string;
-    filters?: {
-      jenisorderan_nama?: string | null | undefined | '';
-      keterangan?: string;
-      kapal_nama?: string;
-      pelayaran_nama?: string;
-      tujuankapal_nama?: string;
-      asalkapal_nama?: string;
-      tglberangkat?: string;
-      tgltiba?: string;
-      tglclosing?: string;
-      statusberangkatkapal?: string;
-      statustibakapal?: string;
-      batasmuatankapal?: string;
-      statusaktif_nama?: string;
-      modifiedby?: string;
-      created_at?: string;
-      updated_at?: string;
-    };
-  } = {}
+    filters?: Partial<typeof filterSchedulekapal>;
+  } = {},
+  signal?: AbortSignal
 ) => {
   return useQuery(
     ['schedulekapal', filters],
-    async () => await getAllScheduleKapalsiFn(filters)
+    async () => await getScheduleKapalFn(filters, signal),
+    {
+      enabled: !signal?.aborted && (filters.page ?? 1) >= 1,
+      staleTime: 0,
+      cacheTime: 0
+    }
   );
 };

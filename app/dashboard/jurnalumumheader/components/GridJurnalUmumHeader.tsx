@@ -139,6 +139,7 @@ const GridJurnalUmumHeader = () => {
   const isDark = theme === 'dark' || resolvedTheme === 'dark';
   const [selectedRow, setSelectedRow] = useState<number>(0);
   const [isFirstLoad, setIsFirstLoad] = useState(true);
+  const searchParams = useSearchParams();
 
   const [totalPages, setTotalPages] = useState(1);
   const [popOver, setPopOver] = useState<boolean>(false);
@@ -356,6 +357,7 @@ const GridJurnalUmumHeader = () => {
               <div
                 className="flex cursor-pointer items-center justify-center"
                 onClick={() => {
+                  discardPendingFilterUpdates();
                   setFilters({
                     ...filters,
                     search: '',
@@ -709,6 +711,7 @@ const GridJurnalUmumHeader = () => {
                 value="id"
                 label="text"
                 filterBy={{ grp: 'STATUS APPROVAL', subgrp: 'STATUS APPROVAL' }}
+                selectedValue={filters.filters.statusapproval}
                 onChange={(value) =>
                   handleFilterInputChange('statusapproval', value)
                 } // Menangani perubahan nilai di parent
@@ -792,6 +795,7 @@ const GridJurnalUmumHeader = () => {
                 value="id"
                 label="text"
                 filterBy={{ grp: 'STATUS APPROVAL', subgrp: 'STATUS APPROVAL' }}
+                selectedValue={filters.filters.statuscetak}
                 onChange={(value) =>
                   handleFilterInputChange('statuscetak', value)
                 } // Menangani perubahan nilai di parent
@@ -1033,12 +1037,17 @@ const GridJurnalUmumHeader = () => {
     ];
   }, [filters, checkedRows, isAllSelected, rows, minVisiblePage]);
 
+  const pendingUpdates = useRef<Record<string, string>>({});
+
   const debouncedFilterUpdate = useRef(
     debounce((updates: Record<string, string>) => {
+      // buffer hanya berisi update yang belum di-flush
+      pendingUpdates.current = {};
       setFilters((prev) => ({
         ...prev,
         filters: { ...prev.filters, ...updates },
-        page: 1
+        page: 1,
+        search: ''
       }));
       setCheckedRows(new Set());
       setIsAllSelected(false);
@@ -1049,11 +1058,15 @@ const GridJurnalUmumHeader = () => {
     }, 300)
   ).current;
 
-  const pendingUpdates = useRef<Record<string, string>>({});
+  const discardPendingFilterUpdates = () => {
+    debouncedFilterUpdate.cancel();
+    pendingUpdates.current = {};
+  };
 
   const handleFilterInputChange = useCallback(
     (colKey: string, value: string) => {
       cancelPreviousRequest(abortControllerRef);
+      setInputValue(''); // Reset global search input saat filter kolom diubah
       pendingUpdates.current[colKey] = value;
 
       // ✅ Hanya track jika activeElement memang filter input kolom ini
@@ -1082,8 +1095,7 @@ const GridJurnalUmumHeader = () => {
   const handleClearFilter = useCallback(
     (colKey: string) => {
       cancelPreviousRequest(abortControllerRef);
-      debouncedFilterUpdate.cancel();
-      pendingUpdates.current[colKey] = '';
+      debouncedFilterUpdate.flush();
 
       // ✅ Arahkan ke kolom yang di-clear
       const originalIndex = columns.findIndex((col) => col.key === colKey);
@@ -1112,6 +1124,7 @@ const GridJurnalUmumHeader = () => {
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     cancelPreviousRequest(abortControllerRef);
+    discardPendingFilterUpdates();
     const searchValue = e.target.value;
 
     // ✅ Track global search input agar focus bisa di-restore
@@ -1205,7 +1218,7 @@ const GridJurnalUmumHeader = () => {
 
   const handleClearInput = () => {
     cancelPreviousRequest(abortControllerRef);
-    debouncedFilterUpdate.cancel();
+    discardPendingFilterUpdates();
     activeFilterInputRef.current = null;
     pendingSelectIdxRef.current = 1; // ✅ Reset ke default idx 1
     setFilters((prev) => ({
@@ -2266,7 +2279,26 @@ const GridJurnalUmumHeader = () => {
   useEffect(() => {
     setIsFirstLoad(true);
   }, []);
+  useEffect(() => {
+    // Ambil parameter nobukti dari URL
+    const rawNobukti = searchParams.get('nobukti');
 
+    // Set filters
+    setFilters((prevFilters: Filter) => ({
+      ...prevFilters,
+      filters: {
+        ...prevFilters.filters,
+        nobukti: rawNobukti ?? ''
+      }
+    }));
+
+    // Menambahkan timeout 1 detik sebelum menghapus parameter dari URL
+    setTimeout(() => {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('nobukti');
+      window.history.replaceState({}, '', url.toString());
+    }, 1000); // Delay 1 detik (1000 ms)
+  }, []);
   useEffect(() => {
     if (isFirstLoad && gridRef.current && rows.length > 0) {
       setSelectedRow(0);
@@ -2290,6 +2322,7 @@ const GridJurnalUmumHeader = () => {
   useEffect(() => {
     if (!onReload) return;
 
+    discardPendingFilterUpdates();
     suppressScrollRef.current = true;
 
     setFilters((prev) => ({

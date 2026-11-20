@@ -11,7 +11,24 @@ import {
 interface UpdateUserParams {
   id: string;
   fields: UserInput;
+  idempotencyKey?: string;
 }
+
+interface StoreUserParams {
+  fields: UserInput;
+  idempotencyKey?: string;
+}
+
+interface DeleteUserParams {
+  id: string;
+  idempotencyKey?: string;
+}
+
+// Backend memakai header ini untuk mengenali kiriman ulang dari aksi yang sama
+// (mis. user menekan SIMPAN lagi setelah timeout) dan membalas hasil kiriman
+// pertama, bukan membuat data dobel.
+const idempotencyConfig = (key?: string) =>
+  key ? { headers: { 'Idempotency-Key': key } } : undefined;
 
 export const getAllUserFn = async (
   filters: GetParams = {},
@@ -32,9 +49,15 @@ export const getAllUserFn = async (
   }
 };
 
-export const deleteUserFn = async (id: string) => {
+export const deleteUserFn = async ({
+  id,
+  idempotencyKey
+}: DeleteUserParams) => {
   try {
-    const response = await api2.delete(`/user/${id}`);
+    const response = await api2.delete(
+      `/user/${id}`,
+      idempotencyConfig(idempotencyKey)
+    );
     return response.data;
   } catch (error) {
     console.error('Error deleting order:', error);
@@ -42,14 +65,29 @@ export const deleteUserFn = async (id: string) => {
   }
 };
 
-export const updateUserFn = async ({ id, fields }: UpdateUserParams) => {
-  const response = await api2.put(`/user/update/${id}`, fields);
+export const updateUserFn = async ({
+  id,
+  fields,
+  idempotencyKey
+}: UpdateUserParams) => {
+  const response = await api2.put(
+    `/user/update/${id}`,
+    fields,
+    idempotencyConfig(idempotencyKey)
+  );
 
   return response.data;
 };
 
-export const storeUserFn = async (fields: UserInput) => {
-  const response = await api2.post(`/user`, fields);
+export const storeUserFn = async ({
+  fields,
+  idempotencyKey
+}: StoreUserParams) => {
+  const response = await api2.post(
+    `/user`,
+    fields,
+    idempotencyConfig(idempotencyKey)
+  );
 
   return response.data;
 };

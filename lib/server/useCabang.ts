@@ -58,7 +58,7 @@ export const useCreateCabang = () => {
       if (errorResponse !== undefined) {
         const errorFields = errorResponse.message || [];
 
-        if (errorResponse.statusCode === 400) {
+        if (errorResponse.statusCode === 400 && Array.isArray(errorFields)) {
           errorFields?.forEach((err: { path: string[]; message: string }) => {
             const path = err.path[0];
 
@@ -91,7 +91,7 @@ export const useDeleteCabang = () => {
       if (errorResponse !== undefined) {
         const errorFields = errorResponse.message || [];
 
-        if (errorResponse.statusCode === 400) {
+        if (errorResponse.statusCode === 400 && Array.isArray(errorFields)) {
           errorFields?.forEach((err: { path: string[]; message: string }) => {
             const path = err.path[0];
 
@@ -123,7 +123,7 @@ export const useUpdateCabang = () => {
       if (errorResponse !== undefined) {
         const errorFields = errorResponse.message || [];
 
-        if (errorResponse.statusCode === 400) {
+        if (errorResponse.statusCode === 400 && Array.isArray(errorFields)) {
           errorFields?.forEach((err: { path: string[]; message: string }) => {
             const path = err.path[0];
 

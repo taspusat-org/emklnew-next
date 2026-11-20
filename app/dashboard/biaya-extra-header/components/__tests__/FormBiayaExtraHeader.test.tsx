@@ -6,6 +6,7 @@ import {
   getBtn,
   saveButton,
   userEvent,
+  screen,
   buildValidObject
 } from '@/lib/test-utils/formHarness';
 
@@ -68,8 +69,20 @@ describe('FormBiayaExtraHeader', () => {
     expect(saveButton()).toBeDisabled();
   });
 
+  test('add mode renders an editable detail row without waiting for detail data', () => {
+    // Di mode add tidak ada header terpilih, jadi query detail mati. Grid harus
+    // tetap menampilkan satu baris kosong + baris tombol tambah, bukan fallback
+    // "NO ROWS DATA FOUND".
+    renderForm(Form, { schema, mode: 'add' });
+    expect(screen.queryByText('NO ROWS DATA FOUND')).not.toBeInTheDocument();
+    expect(screen.getByText('1')).toBeInTheDocument();
+  });
+
   test('cancel triggers handleClose', async () => {
-    const { handleClose } = renderForm(Form, { schema, defaultValues: validData });
+    const { handleClose } = renderForm(Form, {
+      schema,
+      defaultValues: validData
+    });
     await userEvent.click(getBtn('Cancel'));
     expect(handleClose).toHaveBeenCalled();
   });

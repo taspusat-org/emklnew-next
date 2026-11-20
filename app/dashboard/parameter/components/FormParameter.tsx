@@ -12,6 +12,7 @@ import {
 import { useEffect, useRef, useState } from 'react';
 import { FaRegPlusSquare, FaTrashAlt } from 'react-icons/fa';
 import FormFooterButtons from '@/components/custom-ui/FormFooterButtons';
+import LookUp from '@/components/custom-ui/LookUp';
 import {
   Select,
   SelectContent,
@@ -47,6 +48,26 @@ interface FieldLengths {
     [key: string]: FieldLengthDetails;
   };
 }
+
+// postData memakai label gabungan karena text saja tidak unik antar grup; resolve
+// lookupNama mencocokkan teks, jadi teks ambigu bisa menimpa id yang tersimpan.
+const lookUpPropsType = {
+  columns: [
+    { key: 'grp', name: 'GRP' },
+    { key: 'subgrp', name: 'SUBGRP' },
+    { key: 'text', name: 'TEXT' }
+  ],
+  labelLookup: 'TYPE LOOKUP',
+  required: false,
+  selectedRequired: false,
+  endpoint: 'parameter',
+  label: 'TYPE',
+  singleColumn: false,
+  pageSize: 20,
+  dataToPost: 'id',
+  postData: 'lookuplabel',
+  showOnButton: true
+};
 
 const FormParameter = ({
   popOver,
@@ -417,20 +438,23 @@ const FormParameter = ({
                   <FormField
                     name="type"
                     control={forms.control}
-                    render={({ field }) => (
+                    render={() => (
                       <FormItem className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
                         <FormLabel className="font-semibold lg:w-[20%]">
                           Type
                         </FormLabel>
                         <div className="flex flex-col lg:w-[80%]">
-                          <FormControl>
-                            <Input
-                              {...field}
-                              value={field.value ?? ''}
-                              type="text"
-                              readOnly={readOnly}
-                            />
-                          </FormControl>
+                          <LookUp
+                            {...lookUpPropsType}
+                            lookupValue={(id) =>
+                              forms.setValue(
+                                'type',
+                                id == null ? null : String(id)
+                              )
+                            }
+                            lookupNama={forms.getValues('type_nama')}
+                            disabled={readOnly}
+                          />
                           <FormMessage />
                         </div>
                       </FormItem>

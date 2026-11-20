@@ -573,6 +573,7 @@ const GridGroupInvoice = () => {
                 value="id"
                 label="text"
                 filterBy={{ grp: 'STATUS AKTIF', subgrp: 'STATUS AKTIF' }}
+                selectedValue={filters.filters.statusaktif_nama}
                 onChange={(value) =>
                   handleFilterInputChange('statusaktif_nama', value)
                 } // Menangani perubahan nilai di parent
@@ -1102,10 +1103,7 @@ const GridGroupInvoice = () => {
     }
   };
 
-  const onSubmit = async (
-    values: GroupInvoiceInput,
-    keepOpenModal = false
-  ) => {
+  const onSubmit = async (values: GroupInvoiceInput, keepOpenModal = false) => {
     const selectedRowId = rows[selectedRow]?.id;
     try {
       dispatch(setProcessing());
@@ -1280,12 +1278,7 @@ const GridGroupInvoice = () => {
       const newOrder = [...prevOrder];
       newOrder.splice(targetIndex, 0, newOrder.splice(sourceIndex, 1)[0]);
 
-      saveGridConfig(
-        user.id,
-        'GridGroupInvoice',
-        [...newOrder],
-        columnsWidth
-      );
+      saveGridConfig(user.id, 'GridGroupInvoice', [...newOrder], columnsWidth);
       return newOrder;
     });
   };

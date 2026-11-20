@@ -326,6 +326,7 @@ const GridKasGantungHeader = () => {
               <div
                 className="flex cursor-pointer items-center justify-center"
                 onClick={() => {
+                  discardPendingFilterUpdates();
                   setFilters({
                     ...filters,
                     search: '',
@@ -545,6 +546,7 @@ const GridKasGantungHeader = () => {
                 endpoint="bank"
                 value="id"
                 label="nama"
+                selectedValue={filters.filters.bank_id}
                 onChange={(value) => handleFilterInputChange('bank_id', value)}
               />
             </div>
@@ -1383,12 +1385,17 @@ const GridKasGantungHeader = () => {
     ];
   }, [filters, checkedRows, isAllSelected, rows, minVisiblePage]);
 
+  const pendingUpdates = useRef<Record<string, string>>({});
+
   const debouncedFilterUpdate = useRef(
     debounce((updates: Record<string, string>) => {
+      // buffer hanya berisi update yang belum di-flush
+      pendingUpdates.current = {};
       setFilters((prev) => ({
         ...prev,
         filters: { ...prev.filters, ...updates },
-        page: 1
+        page: 1,
+        search: ''
       }));
       setCheckedRows(new Set());
       setIsAllSelected(false);
@@ -1399,11 +1406,15 @@ const GridKasGantungHeader = () => {
     }, 300)
   ).current;
 
-  const pendingUpdates = useRef<Record<string, string>>({});
+  const discardPendingFilterUpdates = () => {
+    debouncedFilterUpdate.cancel();
+    pendingUpdates.current = {};
+  };
 
   const handleFilterInputChange = useCallback(
     (colKey: string, value: string) => {
       cancelPreviousRequest(abortControllerRef);
+      setInputValue(''); // Reset global search input saat filter kolom diubah
       pendingUpdates.current[colKey] = value;
 
       // Hanya track jika activeElement memang filter input kolom ini
@@ -1432,8 +1443,7 @@ const GridKasGantungHeader = () => {
   const handleClearFilter = useCallback(
     (colKey: string) => {
       cancelPreviousRequest(abortControllerRef);
-      debouncedFilterUpdate.cancel();
-      pendingUpdates.current[colKey] = '';
+      debouncedFilterUpdate.flush();
 
       // Arahkan ke kolom yang di-clear
       const originalIndex = columns.findIndex((col) => col.key === colKey);
@@ -1462,6 +1472,7 @@ const GridKasGantungHeader = () => {
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     cancelPreviousRequest(abortControllerRef);
+    discardPendingFilterUpdates();
     const searchValue = e.target.value;
 
     // Track global search input agar focus bisa di-restore
@@ -1555,7 +1566,7 @@ const GridKasGantungHeader = () => {
 
   const handleClearInput = () => {
     cancelPreviousRequest(abortControllerRef);
-    debouncedFilterUpdate.cancel();
+    discardPendingFilterUpdates();
     activeFilterInputRef.current = null;
     pendingSelectIdxRef.current = 1; // Reset ke default idx 1
     setFilters((prev) => ({
@@ -2600,6 +2611,7 @@ const GridKasGantungHeader = () => {
   useEffect(() => {
     if (!onReload) return;
 
+    discardPendingFilterUpdates();
     suppressScrollRef.current = true;
 
     setFilters((prev) => ({
