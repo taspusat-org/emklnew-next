@@ -49,39 +49,18 @@ export const useGetAllPanjarHeader = (
   } = {},
   signal?: AbortSignal
 ) => {
-  const dispatch = useDispatch();
+  // TANPA dispatch(setProcessing()). Overlay loading global itu dipakai untuk
+  // MUTASI (simpan/edit/hapus), bukan untuk memuat grid — sama seperti
+  // useGetAllBiayaExtraHeader. Grid ini berjendela: satu kali buka saja sudah
+  // menembak bulk fetch + beberapa prefetch, dan tiap pergeseran window
+  // menembak lagi. Menyalakan overlay global di query-nya membuat layar
+  // berkedip "loading" terus-menerus padahal grid sudah menampilkan data.
+  // Indikator yang relevan tetap ada di footer grid ({isLoading ?
+  // <LoadRowsRenderer /> : null}).
   return useQuery(
     ['panjarheader', filters],
-    async () => {
-      // Only trigger processing if the page is 1
-      if (filters.page === 1) {
-        dispatch(setProcessing());
-      }
-
-      try {
-        const data = await getAllPanjarHeaderFn(filters, signal);
-        return data;
-      } catch (error) {
-        // Show error toast and dispatch processed
-        dispatch(setProcessed());
-        // toast({
-        //   variant: 'destructive',
-        //   title: 'Gagal',
-        //   description: 'Terjadi masalah dengan permintaan Anda.'
-        // });
-        throw error;
-      } finally {
-        // Regardless of success or failure, we dispatch setProcessed after the query finishes
-        dispatch(setProcessed());
-      }
-    },
+    async () => await getAllPanjarHeaderFn(filters, signal),
     {
-      // Optionally, you can use the `onSettled` callback if you want to reset the processing state after query success or failure
-      onSettled: () => {
-        if (filters.page === 1) {
-          dispatch(setProcessed());
-        }
-      },
       enabled: !signal?.aborted && (filters.page ?? 1) >= 1,
       staleTime: 0,
       cacheTime: 0

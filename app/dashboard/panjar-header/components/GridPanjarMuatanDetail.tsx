@@ -42,6 +42,7 @@ import { getPanjarMuatanDetailFn } from '@/lib/apis/panjarheader.api';
 import DraggableColumn from '@/components/custom-ui/DraggableColumns';
 import { highlightText } from '@/components/custom-ui/HighlightText';
 import { useTheme } from 'next-themes';
+import { HEADER_ROW_HEIGHT, LIMIT, ROW_HEIGHT } from '@/constants/constant';
 
 interface Filter {
   page: number;
@@ -79,7 +80,7 @@ const GridPanjarMuatanDetail = () => {
 
   const [filters, setFilters] = useState<Filter>({
     page: 1,
-    limit: 50,
+    limit: LIMIT,
     search: '',
     filters: { ...filterPanjarMuatanDetail },
     sortBy: 'nobukti',
@@ -93,7 +94,11 @@ const GridPanjarMuatanDetail = () => {
   // ambang batas, data sudah ada dan window bergeser tanpa spinner.
   const WINDOW_SIZE = 5;
   const STREAM_BUFFER_SIZE = 5;
-  const ROW_HEIGHT = 30; // harus sama dengan prop rowHeight DataGrid di bawah
+  // ROW_HEIGHT/HEADER_ROW_HEIGHT/LIMIT diambil dari constants/constant seperti
+  // GridBiayaExtraMuatanDetail. Dulu grid ini punya `const ROW_HEIGHT = 30`
+  // sendiri yang menutupi konstanta bersama — dua sumber angka untuk hal yang
+  // sama, dan matematika kompensasi scroll harus memakai angka yang persis sama
+  // dengan prop rowHeight DataGrid.
 
   const [shouldBulkFetch, setShouldBulkFetch] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
@@ -126,7 +131,57 @@ const GridPanjarMuatanDetail = () => {
   // Menggeser index baris terpilih saat window bergeser, supaya baris DATA yang
   // sama tetap ter-highlight. Posisi visual dijaga oleh kompensasi scrollTop
   // (pendingScrollAdjustment), jadi jangan panggil selectCell di sini.
+  // Index KOLOM sel aktif — dicatat supaya re-anchor selectCell setelah
+  // window bergeser tidak melompat ke kolom lain.
+  const selectedCellIdxRef = useRef<number>(1);
+
+  // Menjaga navigasi keyboard tetap hidup saat window bergeser: mengembalikan
+  // DOM focus ke sel aktif yang BARU. Tanpa ini, baris pemegang focus
+  // ter-unmount bersama halaman yang dibuang, focus jatuh ke <body>, dan
+  // Arrow/PageUp/PageDown berhenti bekerja begitu user ada di halaman kedua
+  // atau lebih.
+  //
+  // Modalitas input terakhir: 'keyboard' (Arrow/Page) atau 'pointer' (wheel /
+  // drag scrollbar). Menentukan apakah sel aktif ikut digeser & di-re-anchor
+  // saat window bergeser — scroll pakai mouse TIDAK boleh memindahkan sel aktif.
+  const interactionModeRef = useRef<'keyboard' | 'pointer'>('pointer');
+  // Diset saat window benar-benar bergeser: menandai apakah pergeseran itu dari
+  // keyboard, supaya kompensasi scroll tahu perlu re-anchor selectCell atau tidak.
+  const reanchorFromKeyboardRef = useRef(false);
+  // Snapshot: apakah sel aktif memegang DOM focus TEPAT SEBELUM window bergeser.
+  // Harus direkam sebelum commit, karena setelahnya elemen selnya sudah hilang.
+  const gridCellHadFocusRef = useRef(false);
+
+  // Sel aktif react-data-grid selalu punya tabindex="0" (roving tabindex).
+  // Header memakai role="columnheader", jadi selector ini hanya kena sel data —
+  // input filter di header TIDAK ikut tertangkap.
+  const getSelectedGridCell = (): HTMLElement | null =>
+    gridRef.current?.element?.querySelector<HTMLElement>(
+      ':scope > [role="row"] > [role="gridcell"][tabindex="0"]'
+    ) ?? null;
+
+  const isSelectedGridCellFocused = () => {
+    const cell = getSelectedGridCell();
+    return cell !== null && cell === document.activeElement;
+  };
+
+  // Saat window bergeser, baris pemegang DOM focus ikut ter-unmount sehingga
+  // focus jatuh ke <body> dan Arrow/PageUp/PageDown berhenti sampai ke grid.
+  // Kembalikan focus TANPA menggeser scroll.
+  const restoreGridCellFocus = () => {
+    if (!gridCellHadFocusRef.current) return;
+    gridCellHadFocusRef.current = false;
+    getSelectedGridCell()?.focus({ preventScroll: true });
+  };
+
   const shiftSelectionForWindow = (deltaRows: number) => {
+    const fromKeyboard = interactionModeRef.current === 'keyboard';
+    reanchorFromKeyboardRef.current = fromKeyboard;
+    // Rekam SEKARANG, sebelum React meng-unmount baris halaman yang dibuang.
+    gridCellHadFocusRef.current = isSelectedGridCellFocused();
+
+    // Pointer: biarkan index apa adanya supaya tetap sinkron dgn sel aktif RDG.
+    if (!fromKeyboard) return;
     selectedRowRef.current = Math.max(0, selectedRowRef.current + deltaRows);
   };
 
@@ -1163,6 +1218,22 @@ const GridPanjarMuatanDetail = () => {
       hasAdjustedScrollRef.current = true;
 
       pendingScrollAdjustment.current = 0;
+
+      // Scroll sudah dikompensasi, jadi baris target ada di posisi visual yang
+      // sama -> selectCell di sini tidak memicu scroll tambahan. Re-anchor HANYA
+      // untuk keyboard; saat mouse scroll, sel aktif tidak boleh ikut pindah.
+      if (reanchorFromKeyboardRef.current) {
+        const idx =
+          selectedCellIdxRef.current >= 0 ? selectedCellIdxRef.current : 1;
+        gridRef.current?.selectCell?.({
+          rowIdx: selectedRowRef.current,
+          idx
+        });
+        gridCellHadFocusRef.current = false;
+      } else {
+        restoreGridCellFocus();
+      }
+      reanchorFromKeyboardRef.current = false;
     }
   }, [rows]);
 
@@ -1195,7 +1266,28 @@ const GridPanjarMuatanDetail = () => {
 
   return (
     <div className={`flex h-[100%] w-full justify-center`}>
-      <div className="flex h-[100%] w-full flex-col rounded-sm border border-border bg-background">
+      <div
+        className="flex h-[100%] w-full flex-col rounded-sm border border-border bg-background"
+        // Menandai modalitas input terakhir:
+        // keyboard -> sel aktif ikut digeser & di-re-anchor saat window
+        // bergeser; pointer -> sel aktif dibiarkan di posisinya.
+        onKeyDownCapture={(event) => {
+          if (
+            event.key === 'ArrowDown' ||
+            event.key === 'ArrowUp' ||
+            event.key === 'PageDown' ||
+            event.key === 'PageUp'
+          ) {
+            interactionModeRef.current = 'keyboard';
+          }
+        }}
+        onWheelCapture={() => {
+          interactionModeRef.current = 'pointer';
+        }}
+        onPointerDownCapture={() => {
+          interactionModeRef.current = 'pointer';
+        }}
+      >
         <div className="flex h-[38px] w-full flex-row items-center justify-between rounded-t-sm border-b border-border bg-background-grid-header px-2">
           <div className="flex flex-row items-center">
             <label htmlFor="" className="text-xs">
@@ -1245,7 +1337,7 @@ const GridPanjarMuatanDetail = () => {
           onColumnResize={onColumnResize}
           onColumnsReorder={onColumnsReorder}
           rows={rows}
-          headerRowHeight={70}
+          headerRowHeight={HEADER_ROW_HEIGHT}
           onCellKeyDown={handleKeyDown}
           rowHeight={ROW_HEIGHT}
           onScroll={handleScroll}
@@ -1257,6 +1349,9 @@ const GridPanjarMuatanDetail = () => {
           rowClass={getRowClass}
           onCellClick={handleCellClick}
           onSelectedCellChange={(args) => {
+            selectedCellIdxRef.current = finalColumns.findIndex(
+              (c) => c.key === args.column.key
+            );
             handleCellClick({ row: args.row });
           }}
         />
