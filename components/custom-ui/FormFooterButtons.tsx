@@ -77,7 +77,7 @@ export default function FormFooterButtons({
   // form yang cuma mengirim `mode` (FormPengeluaran, FormJurnalUmum, FormHutang,
   // FormKasGantung, FormPenerimaan, dll) tetap menampilkan "SAVE" saat menghapus.
   // Prop `deleteMode` tetap didukung untuk grid lama yang memakai state boolean
-  // sendiri (GridParameter/GridRole/GridErrors/GridOffdays) dan tidak mengirim
+  // sendiri (GridParameter/GridRole/GridErrors/GridHarilibur) dan tidak mengirim
   // mode='delete'.
   const isDelete = deleteMode || mode === 'delete';
   const showSaveAndAdd =
