@@ -4,20 +4,22 @@ export interface EstimasiBiayaHeader {
   id: string;
   nobukti: string;
   tglbukti: string;
-  jenisorder_id: number;
+  // Semua *_id bertipe UUID teks di database (mis. '02-019f5a2c-...'), BUKAN
+  // angka — konvensinya sama dengan BLDetail.bl_id.
+  jenisorder_id: string;
   jenisorder_nama: string;
-  orderan_id: number;
+  orderan_id: string;
   orderan_nobukti: string;
   nominal: string;
-  shipper_id: number;
+  shipper_id: string;
   shipper_nama: string;
   statusppn: string;
   statusppn_nama: string;
-  asuransi_id: number;
+  asuransi_id: string;
   asuransi_nama: string;
-  comodity_id: number;
+  comodity_id: string;
   comodity_nama: string;
-  consignee_id: number;
+  consignee_id: string;
   consignee_nama: string;
   modifiedby: string | null;
   created_at: string | null;
@@ -32,10 +34,10 @@ export interface IAllEstimasiBiayaHeader {
 export interface EstimasiBiayaDetailBiaya {
   id: number | string;
   nobukti: string;
-  estimasibiaya_id: number;
-  link_id: number;
+  estimasibiaya_id: string;
+  link_id: string;
   link_nama: string;
-  biayaemkl_id: number;
+  biayaemkl_id: string;
   biayaemkl_nama: string;
   nominal: string;
   nilaiasuransi: string;
@@ -53,10 +55,10 @@ export interface IAllEstimasiBiayaDetailBiaya {
 export interface EstimasiBiayaDetailInvoice {
   id: number | string;
   nobukti: string;
-  estimasibiaya_id: number;
-  link_id: number;
+  estimasibiaya_id: string;
+  link_id: string;
   link_nama: string;
-  biayaemkl_id: number;
+  biayaemkl_id: string;
   biayaemkl_nama: string;
   nominal: string;
   [key: string]: string | number | boolean | null | undefined;

@@ -77,6 +77,10 @@ const FormEstimasiBiayaHeader = ({
   >([]);
 
   const dispatch = useDispatch();
+  // Menandai transisi modal tertutup -> terbuka, supaya baris detail
+  // di-reset sekali saat dibuka dan tidak membawa isi modal sebelumnya.
+  const modalTerbukaBiayaRef = useRef(false);
+  const modalTerbukaInvoiceRef = useRef(false);
   const gridRef = useRef<DataGridHandle>(null);
   const formRef = useRef<HTMLFormElement | null>(null); // Ref untuk form
   const openName = useSelector((state: RootState) => state.lookup.openName);
@@ -167,18 +171,18 @@ const FormEstimasiBiayaHeader = ({
     }
   ];
 
-  const lookupAsuransiTapiPakeTypeAkuntansiDulu = [
+  const lookupAsuransi = [
     {
       columns: [{ key: 'nama', name: 'NAMA' }],
       labelLookup: 'ASURANSI LOOKUP',
       selectedRequired: false,
       required: true,
-      endpoint: 'type-akuntansi',
+      endpoint: 'asuransi',
       label: 'ASURANSI',
       singleColumn: true,
       pageSize: 20,
       disabled: mode === 'view' || mode === 'delete' ? true : false,
-      postData: 'text',
+      postData: 'nama',
       dataToPost: 'id'
     }
   ];
@@ -218,7 +222,7 @@ const FormEstimasiBiayaHeader = ({
       columns: [{ key: 'nama', name: 'NAMA' }],
       labelLookup: 'BIAYA EMKL DETAIL BIAYA',
       selectedRequired: false,
-      endpoint: `biayaemkl?jenisorder_id=1`,
+      endpoint: `biayaemkl`,
       label: 'BIAYA EMKL DETAIL BIAYA',
       singleColumn: true,
       pageSize: 20,
@@ -233,7 +237,7 @@ const FormEstimasiBiayaHeader = ({
       columns: [{ key: 'nama', name: 'NAMA' }],
       labelLookup: 'BIAYA EMKL DETAIL INVOICE',
       selectedRequired: false,
-      endpoint: `biayaemkl?jenisorder_id=1&statustagih=14`,
+      endpoint: `biayaemkl?statustagih_text=YA`,
       label: 'BIAYA EMKL DETAIL INVOICE',
       singleColumn: true,
       pageSize: 20,
@@ -273,12 +277,12 @@ const FormEstimasiBiayaHeader = ({
 
   const addRow = () => {
     const newRow: Partial<EstimasiBiayaDetailBiaya> & { isNew: boolean } = {
-      id: 0,
+      id: '0',
       nobukti: '',
-      estimasibiaya_id: 0,
-      link_id: 0,
+      estimasibiaya_id: '',
+      link_id: '',
       link_nama: '',
-      biayaemkl_id: 0,
+      biayaemkl_id: '',
       biayaemkl_nama: '',
       nominal: '',
       nilaiasuransi: '',
@@ -297,12 +301,12 @@ const FormEstimasiBiayaHeader = ({
 
   const addRowDetailInvoice = () => {
     const newRow: Partial<EstimasiBiayaDetailInvoice> & { isNew: boolean } = {
-      id: 0,
+      id: '0',
       nobukti: '',
-      estimasibiaya_id: 0,
-      link_id: 0,
+      estimasibiaya_id: '',
+      link_id: '',
       linkdetailinvoice_nama: '',
-      biayaemkl_id: 0,
+      biayaemkl_id: '',
       biayaemkldetailinvoice_nama: '',
       nominal: '',
       isNew: true
@@ -471,7 +475,11 @@ const FormEstimasiBiayaHeader = ({
                     {...orderan}
                     label={`BIAYAEMKL_${props.rowIdx}_LOOKUP`} // Ensure you use row.id or rowIdx for unique labeling
                     lookupValue={(id) => {
-                      handleInputChange(props.rowIdx, 'biayaemkl_id', id); // Use props.rowIdx to get the correct index
+                      handleInputChange(
+                        props.rowIdx,
+                        'biayaemkl_id',
+                        String(id ?? '')
+                      ); // Use props.rowIdx to get the correct index
                     }}
                     onSelectRow={(val) => {
                       handleInputChange(
@@ -480,12 +488,12 @@ const FormEstimasiBiayaHeader = ({
                         val?.nama
                       );
                       if (val.id != 2) {
-                        handleInputChange(props.rowIdx, 'link_id', 0);
+                        handleInputChange(props.rowIdx, 'link_id', '');
                         handleInputChange(props.rowIdx, 'link_nama', '');
                       }
                     }}
                     onClear={() => {
-                      handleInputChange(props.rowIdx, 'link_id', 0);
+                      handleInputChange(props.rowIdx, 'link_id', '');
                       handleInputChange(props.rowIdx, 'link_nama', '');
                     }}
                     lookupNama={
@@ -522,7 +530,11 @@ const FormEstimasiBiayaHeader = ({
                     disabled={props.row.biayaemkl_id !== 2}
                     label={`link_${props.rowIdx}_LOOKUP`} // Ensure you use row.id or rowIdx for unique labeling
                     lookupValue={(id) => {
-                      handleInputChange(props.rowIdx, 'link_id', id); // Use props.rowIdx to get the correct index
+                      handleInputChange(
+                        props.rowIdx,
+                        'link_id',
+                        String(id ?? '')
+                      ); // Use props.rowIdx to get the correct index
                     }}
                     onSelectRow={(val) =>
                       handleInputChange(
@@ -868,7 +880,7 @@ const FormEstimasiBiayaHeader = ({
                           handleInputChangeDetailInvoice(
                             props.rowIdx,
                             'biayaemkl_id',
-                            id
+                            String(id ?? '')
                           ); // Use props.rowIdx to get the correct index
                         }}
                         onSelectRow={(val) => {
@@ -881,7 +893,7 @@ const FormEstimasiBiayaHeader = ({
                             handleInputChangeDetailInvoice(
                               props.rowIdx,
                               'link_id',
-                              0
+                              ''
                             );
                             handleInputChangeDetailInvoice(
                               props.rowIdx,
@@ -894,7 +906,7 @@ const FormEstimasiBiayaHeader = ({
                           handleInputChangeDetailInvoice(
                             props.rowIdx,
                             'link_id',
-                            0
+                            ''
                           );
                           handleInputChangeDetailInvoice(
                             props.rowIdx,
@@ -940,7 +952,7 @@ const FormEstimasiBiayaHeader = ({
                         handleInputChangeDetailInvoice(
                           props.rowIdx,
                           'link_id',
-                          id
+                          String(id ?? '')
                         ); // Use props.rowIdx to get the correct index
                       }}
                       onSelectRow={(val) =>
@@ -1073,15 +1085,45 @@ const FormEstimasiBiayaHeader = ({
   }, [openName]); // Tambahkan popOverDate sebagai dependen
 
   useEffect(() => {
+    const barisBiayaKosong = {
+      id: '0',
+      nobukti: '',
+      estimasibiaya_id: '',
+      link_id: '',
+      link_nama: '',
+      biayaemkl_id: '',
+      biayaemkl_nama: '',
+      nominal: '',
+      nilaiasuransi: '',
+      nominaldisc: '',
+      nominalsebelumdisc: '',
+      nominaltradoluar: '',
+      isNew: true
+    };
+
+    // Mode ADD: query detail mati (enabled: !!id), jadi seed TIDAK boleh
+    // menunggu hasilnya. Tanpa ini detailsbiaya terkirim [] dan zod menolak
+    // di .min(1) tanpa pesan — tidak ada FormMessage untuk array ini.
+    if (mode === 'add') {
+      const baruDibuka = popOver && !modalTerbukaBiayaRef.current;
+      modalTerbukaBiayaRef.current = popOver;
+      setRows((prev) =>
+        baruDibuka || prev.length === 0
+          ? [barisBiayaKosong, { isAddRow: true, id: 'add_row', isNew: false }]
+          : prev
+      );
+      return;
+    }
+
     if (allDataDetail) {
       if (allDataDetail?.data?.length > 0 && mode !== 'add') {
         const formattedRows = allDataDetail.data.map((item: any) => ({
-          id: Number(item.id),
+          id: String(item.id ?? ''),
           nobukti: item.nobukti ?? '',
-          estimasibiaya_id: Number(item.estimasibiaya_id),
-          link_id: Number(item.link_id),
+          estimasibiaya_id: String(item.estimasibiaya_id ?? ''),
+          link_id: String(item.link_id ?? ''),
           link_nama: item.link_nama ?? '',
-          biayaemkl_id: Number(item.biayaemkl_id) ?? 0,
+          biayaemkl_id: String(item.biayaemkl_id ?? ''),
           biayaemkl_nama: item.biayaemkl_nama ?? '',
           nominal: String(item.nominal) ?? '',
           nilaiasuransi: String(item.nilaiasuransi) ?? '',
@@ -1098,12 +1140,12 @@ const FormEstimasiBiayaHeader = ({
       } else {
         setRows([
           {
-            id: 0,
+            id: '0',
             nobukti: '',
-            estimasibiaya_id: 0,
-            link_id: 0,
+            estimasibiaya_id: '',
+            link_id: '',
             link_nama: '',
-            biayaemkl_id: 0,
+            biayaemkl_id: '',
             biayaemkl_nama: '',
             nominal: '',
             nilaiasuransi: '',
@@ -1119,15 +1161,41 @@ const FormEstimasiBiayaHeader = ({
   }, [allDataDetail, headerData?.id, mode, popOver]);
 
   useEffect(() => {
+    const barisInvoiceKosong = {
+      id: '0',
+      nobukti: '',
+      estimasibiaya_id: '',
+      link_id: '',
+      linkdetailinvoice_nama: '',
+      biayaemkl_id: '',
+      biayaemkldetailinvoice_nama: '',
+      nominal: '',
+      isNew: true
+    };
+
+    if (mode === 'add') {
+      const baruDibuka = popOver && !modalTerbukaInvoiceRef.current;
+      modalTerbukaInvoiceRef.current = popOver;
+      setRowsDetailInvoice((prev) =>
+        baruDibuka || prev.length === 0
+          ? [
+              barisInvoiceKosong,
+              { isAddRow: true, id: 'add_row', isNew: false }
+            ]
+          : prev
+      );
+      return;
+    }
+
     if (allDataDetailInvoice) {
       if (allDataDetailInvoice?.data?.length > 0 && mode !== 'add') {
         const formattedRows = allDataDetailInvoice.data.map((item: any) => ({
-          id: Number(item.id),
+          id: String(item.id ?? ''),
           nobukti: item.nobukti ?? '',
-          estimasibiaya_id: Number(item.estimasibiaya_id),
-          link_id: Number(item.link_id),
+          estimasibiaya_id: String(item.estimasibiaya_id ?? ''),
+          link_id: String(item.link_id ?? ''),
           linkdetailinvoice_nama: item.link_nama ?? '',
-          biayaemkl_id: Number(item.biayaemkl_id) ?? 0,
+          biayaemkl_id: String(item.biayaemkl_id ?? ''),
           biayaemkldetailinvoice_nama: item.biayaemkl_nama ?? '',
           nominal: String(item.nominal) ?? undefined,
           isNew: false
@@ -1140,12 +1208,12 @@ const FormEstimasiBiayaHeader = ({
       } else {
         setRowsDetailInvoice([
           {
-            id: 0,
+            id: '0',
             nobukti: '',
-            estimasibiaya_id: 0,
-            link_id: 0,
+            estimasibiaya_id: '',
+            link_id: '',
             linkdetailinvoice_nama: '',
-            biayaemkl_id: 0,
+            biayaemkl_id: '',
             biayaemkldetailinvoice_nama: '',
             nominal: '',
             isNew: true
@@ -1303,7 +1371,10 @@ const FormEstimasiBiayaHeader = ({
                               key={index}
                               {...props}
                               lookupValue={(value: any) => {
-                                forms.setValue('jenisorder_id', Number(value));
+                                forms.setValue(
+                                  'jenisorder_id',
+                                  String(value ?? '')
+                                );
                               }}
                               onSelectRow={(val) => {
                                 forms.setValue('jenisorder_nama', val?.nama);
@@ -1335,7 +1406,10 @@ const FormEstimasiBiayaHeader = ({
                               key={index}
                               {...props}
                               lookupValue={(value: any) => {
-                                forms.setValue('orderan_id', Number(value));
+                                forms.setValue(
+                                  'orderan_id',
+                                  String(value ?? '')
+                                );
                               }}
                               onSelectRow={(val) => {
                                 forms.setValue('orderan_nobukti', val?.nobukti);
@@ -1397,7 +1471,10 @@ const FormEstimasiBiayaHeader = ({
                               key={index}
                               {...props}
                               lookupValue={(value: any) => {
-                                forms.setValue('shipper_id', Number(value));
+                                forms.setValue(
+                                  'shipper_id',
+                                  String(value ?? '')
+                                );
                               }}
                               onSelectRow={(val) => {
                                 forms.setValue('shipper_nama', val?.nama);
@@ -1429,7 +1506,10 @@ const FormEstimasiBiayaHeader = ({
                               key={index}
                               {...props}
                               lookupValue={(value: any) => {
-                                forms.setValue('statusppn', Number(value));
+                                forms.setValue(
+                                  'statusppn',
+                                  String(value ?? '')
+                                );
                               }}
                               onSelectRow={(val) => {
                                 forms.setValue('statusppn_nama', val?.nama);
@@ -1456,23 +1536,24 @@ const FormEstimasiBiayaHeader = ({
                           ASURANSI
                         </FormLabel>
                         <div className="flex flex-col lg:w-[85%]">
-                          {lookupAsuransiTapiPakeTypeAkuntansiDulu.map(
-                            (props, index) => (
-                              <LookUp
-                                key={index}
-                                {...props}
-                                lookupValue={(value: any) => {
-                                  forms.setValue('asuransi_id', Number(value));
-                                }}
-                                onSelectRow={(val) => {
-                                  forms.setValue('asuransi_nama', val?.nama);
-                                }}
-                                name="asuransi_id"
-                                forms={forms}
-                                lookupNama={forms.getValues('asuransi_nama')}
-                              />
-                            )
-                          )}
+                          {lookupAsuransi.map((props, index) => (
+                            <LookUp
+                              key={index}
+                              {...props}
+                              lookupValue={(value: any) => {
+                                forms.setValue(
+                                  'asuransi_id',
+                                  String(value ?? '')
+                                );
+                              }}
+                              onSelectRow={(val) => {
+                                forms.setValue('asuransi_nama', val?.nama);
+                              }}
+                              name="asuransi_id"
+                              forms={forms}
+                              lookupNama={forms.getValues('asuransi_nama')}
+                            />
+                          ))}
                         </div>
                       </FormItem>
                     )}
@@ -1492,7 +1573,10 @@ const FormEstimasiBiayaHeader = ({
                               key={index}
                               {...props}
                               lookupValue={(value: any) => {
-                                forms.setValue('comodity_id', Number(value));
+                                forms.setValue(
+                                  'comodity_id',
+                                  String(value ?? '')
+                                );
                               }}
                               onSelectRow={(val) => {
                                 forms.setValue(
@@ -1524,7 +1608,10 @@ const FormEstimasiBiayaHeader = ({
                               key={index}
                               {...props}
                               lookupValue={(value: any) => {
-                                forms.setValue('consignee_id', Number(value));
+                                forms.setValue(
+                                  'consignee_id',
+                                  String(value ?? '')
+                                );
                               }}
                               onSelectRow={(val) => {
                                 forms.setValue(
