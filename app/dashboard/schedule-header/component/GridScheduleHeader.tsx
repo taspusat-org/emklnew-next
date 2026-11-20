@@ -266,153 +266,45 @@ const GridScheduleHeader = () => {
     reset,
     formState: { isSubmitSuccessful }
   } = forms;
-
-  const debouncedFilterUpdate = useRef(
-    debounce((colKey: string, value: string) => {
-      setFilters((prev) => ({
-        ...prev,
-        filters: { ...prev.filters, [colKey]: value },
-        page: 1
-      }));
-      setCheckedRows(new Set());
-      setIsAllSelected(false);
-      setRows([]);
-      setCurrentPage(1);
-      setSelectedRow(0);
-    }, 300) // Bisa dikurangi jadi 250-300ms
-  ).current;
-
-  const handleFilterInputChange = useCallback(
-    (colKey: string, value: string) => {
-      cancelPreviousRequest(abortControllerRef);
-      debouncedFilterUpdate(colKey, value);
+  const [filters, setFilters] = useState<Filter>({
+    page: 1,
+    limit: LIMIT,
+    filters: {
+      ...filterScheduleHeader,
+      tglDari: committed.tglDari,
+      tglSampai: committed.tglSampai
     },
-    []
+    isreload: true, // Set true untuk first load
+    search: '',
+    sortBy: 'nobukti',
+    sortDirection: 'asc'
+  });
+  const gridRef = useRef<DataGridHandle>(null);
+  const [prevFilters, setPrevFilters] = useState<Filter>(filters);
+  const effectiveLimit = shouldBulkFetch ? filters.limit * 5 : filters.limit;
+  const inputColRefs = useRef<{ [key: string]: HTMLInputElement | null }>({});
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const { data: allData, isLoading: isLoadingData } = useGetScheduleHeader(
+    {
+      ...filters,
+      page: shouldBulkFetch ? bulkStartPage : currentPage,
+      limit: effectiveLimit
+    },
+    abortControllerRef.current?.signal
   );
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    cancelPreviousRequest(abortControllerRef);
-    const searchValue = e.target.value;
-    setInputValue(searchValue);
-    setCurrentPage(1);
-    setFilters((prev) => ({
-      ...prev,
-      filters: {
-        ...filterScheduleHeader,
-        tglDari: selectedDate,
-        tglSampai: selectedDate2
-      },
-      search: searchValue,
-      page: 1
-    }));
-    setCheckedRows(new Set());
-    setIsAllSelected(false);
+  const currentMinPage =
+    visiblePages.length > 0 ? Math.min(...visiblePages) : 1;
+  const startRow = (currentMinPage - 1) * filters.limit + 1;
 
-    setTimeout(() => {
-      gridRef?.current?.selectCell({ rowIdx: 0, idx: 1 });
-    }, 100);
-
-    setTimeout(() => {
-      if (inputRef.current) {
-        inputRef.current.focus();
-      }
-    }, 200);
-
-    setSelectedRow(0);
-    setCurrentPage(1);
-    setRows([]);
-  };
-
-  const handleClearFilter = useCallback((colKey: string) => {
-    cancelPreviousRequest(abortControllerRef);
-    debouncedFilterUpdate.cancel(); // Cancel pending updates
-
-    setFilters((prev) => ({
-      ...prev,
-      filters: { ...prev.filters, [colKey]: '' },
-      page: 1
-    }));
-    setCheckedRows(new Set());
-    setIsAllSelected(false);
-    setRows([]);
-    setCurrentPage(1);
-  }, []);
-
-  const handleClearInput = () => {
-    setFilters((prev) => ({
-      ...prev,
-      filters: {
-        ...prev.filters
-      },
-      search: '',
-      page: 1
-    }));
-    setInputValue('');
-  };
-
-  const handleSort = (column: string) => {
-    cancelPreviousRequest(abortControllerRef);
-    const originalIndex = columns.findIndex((col) => col.key === column);
-
-    // 2. hitung index tampilan berdasar columnsOrder
-    //    jika belum ada reorder (columnsOrder kosong), fallback ke originalIndex
-    const displayIndex =
-      columnsOrder.length > 0
-        ? columnsOrder.findIndex((idx) => idx === originalIndex)
-        : originalIndex;
-
-    const newSortOrder =
-      filters.sortBy === column && filters.sortDirection === 'asc'
-        ? 'desc'
-        : 'asc';
-
-    setFilters((prevFilters) => ({
-      ...prevFilters,
-      sortBy: column,
-      sortDirection: newSortOrder,
-      page: 1
-    }));
-    setTimeout(() => {
-      gridRef?.current?.selectCell({ rowIdx: 0, idx: displayIndex });
-    }, 250);
-    setSelectedRow(0);
-    setCurrentPage(1);
-    setFetchedPages(new Set([1]));
-    setRows([]);
-  };
-
-  const handleRowSelect = (rowId: number) => {
-    setCheckedRows((prev) => {
-      const updated = new Set(prev);
-      if (updated.has(rowId)) {
-        updated.delete(rowId);
-      } else {
-        updated.add(rowId);
-      }
-
-      setIsAllSelected(updated.size === rows.length);
-      return updated;
-    });
-  };
-  console.log('dum', forms.getValues());
-
-  const handleSelectAll = () => {
-    if (isAllSelected) {
-      setCheckedRows(new Set());
-    } else {
-      const allIds = rows.map((row) => row.id);
-      setCheckedRows(new Set(allIds));
-    }
-    setIsAllSelected(!isAllSelected);
-  };
-
-  const handleFilterRows = (val: string) => {
-    setIsFilteringRows(true);
-    // setLocalSelectedValue(val);
-    // onChange?.(val);
-    setTimeout(() => {
-      setIsFilteringRows(false);
-    }, 1000);
+  const resetBufferingCache = () => {
+    setShouldBulkFetch(true);
+    setBulkStartPage(1);
+    setPageDataCache(new Map());
+    setVisiblePages([1, 2, 3, 4, 5]);
+    setIsFetching(false);
+    streamBufferRef.current = new Map();
+    prefetchingPagesRef.current = new Set();
   };
 
   const columns = useMemo((): Column<ScheduleHeader>[] => {

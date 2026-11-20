@@ -24,7 +24,6 @@ import { useDispatch } from 'react-redux';
 import { useTheme } from 'next-themes';
 import InputDateTimePicker from '@/components/custom-ui/InputDateTimePicker';
 import { EmptyRowsRenderer } from '@/components/EmptyRows';
-import { useShiftHorizontalScroll } from '@/hooks/use-shift-horizontal-scroll';
 
 // id 0 = penanda baris baru untuk backend. FK-nya sengaja string kosong, bukan
 // 0: kolomnya varchar UUID, dan '' yang membuat validasi "WAJIB DIISI" berbunyi.
@@ -65,10 +64,6 @@ const FormSchedule = ({
   const todayDate = new Date();
   const { theme, resolvedTheme } = useTheme();
   const isDark = theme === 'dark' || resolvedTheme === 'dark';
-  // Shift + scroll = geser horizontal. Grid ini lebih lebar dari modal dan
-  // react-remove-scroll bawaan Radix Dialog membatalkan wheel-nya.
-  useShiftHorizontalScroll();
-
   const [dataGridKey, setDataGridKey] = useState(0);
   const [editingRowId, setEditingRowId] = useState<number | null>(null); // Menyimpan ID baris yang sedang diedit
   const [checkedRows, setCheckedRows] = useState<Set<string>>(new Set());
