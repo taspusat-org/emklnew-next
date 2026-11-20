@@ -121,7 +121,15 @@ export const useGetShippingInstructionDetail = (
       // undefined sehingga query tetap jalan walau id kosong — request jadi
       // `/shippinginstructiondetail/0` dan backend 500 karena
       // shippinginstruction_id bertipe varchar (UUID) dibanding integer.
-      enabled: !!id && !signal?.aborted
+      //
+      // page < 1 juga tidak boleh jalan: grid memakai trik setCurrentPage(0)
+      // untuk memaksa refetch window walau halaman tujuan sama dengan halaman
+      // sekarang.
+      enabled: !!id && !signal?.aborted && (filters.page ?? 1) >= 1,
+      // staleTime/cacheTime 0: window pagination dikelola sendiri oleh grid
+      // (pageDataCache + streamBuffer), sama seperti useGetBiayaExtraMuatanDetail.
+      staleTime: 0,
+      cacheTime: 0
     }
   );
 };
@@ -151,7 +159,9 @@ export const useGetShippingInstructionDetailRincian = (
     ['shippinginstructiondetailrincian', id, filters],
     async () => await getShippingInstructionDetailRincianFn(id!, filters),
     {
-      enabled: !!id && !signal?.aborted
+      enabled: !!id && !signal?.aborted && (filters.page ?? 1) >= 1,
+      staleTime: 0,
+      cacheTime: 0
     }
   );
 };

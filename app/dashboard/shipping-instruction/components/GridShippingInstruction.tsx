@@ -207,7 +207,57 @@ const GridShippingInstruction = () => {
   // sebanyak filters.limit. Geser juga selectedRowRef supaya baris DATA yang
   // sama tetap ter-highlight; commit ke state ditunda ke Row Combiner agar
   // selectedRow & rows berubah di render yang sama (highlight tidak berkedip).
+  // Index KOLOM sel aktif — dicatat supaya re-anchor selectCell setelah
+  // window bergeser tidak melompat ke kolom lain.
+  const selectedCellIdxRef = useRef<number>(1);
+
+  // Menjaga navigasi keyboard tetap hidup saat window bergeser: mengembalikan
+  // DOM focus ke sel aktif yang BARU. Tanpa ini, baris pemegang focus
+  // ter-unmount bersama halaman yang dibuang, focus jatuh ke <body>, dan
+  // Arrow/PageUp/PageDown berhenti bekerja begitu user ada di halaman kedua
+  // atau lebih.
+  //
+  // Modalitas input terakhir: 'keyboard' (Arrow/Page) atau 'pointer' (wheel /
+  // drag scrollbar). Menentukan apakah sel aktif ikut digeser & di-re-anchor
+  // saat window bergeser — scroll pakai mouse TIDAK boleh memindahkan sel aktif.
+  const interactionModeRef = useRef<'keyboard' | 'pointer'>('pointer');
+  // Diset saat window benar-benar bergeser: menandai apakah pergeseran itu dari
+  // keyboard, supaya kompensasi scroll tahu perlu re-anchor selectCell atau tidak.
+  const reanchorFromKeyboardRef = useRef(false);
+  // Snapshot: apakah sel aktif memegang DOM focus TEPAT SEBELUM window bergeser.
+  // Harus direkam sebelum commit, karena setelahnya elemen selnya sudah hilang.
+  const gridCellHadFocusRef = useRef(false);
+
+  // Sel aktif react-data-grid selalu punya tabindex="0" (roving tabindex).
+  // Header memakai role="columnheader", jadi selector ini hanya kena sel data —
+  // input filter di header TIDAK ikut tertangkap.
+  const getSelectedGridCell = (): HTMLElement | null =>
+    gridRef.current?.element?.querySelector<HTMLElement>(
+      ':scope > [role="row"] > [role="gridcell"][tabindex="0"]'
+    ) ?? null;
+
+  const isSelectedGridCellFocused = () => {
+    const cell = getSelectedGridCell();
+    return cell !== null && cell === document.activeElement;
+  };
+
+  // Saat window bergeser, baris pemegang DOM focus ikut ter-unmount sehingga
+  // focus jatuh ke <body> dan Arrow/PageUp/PageDown berhenti sampai ke grid.
+  // Kembalikan focus TANPA menggeser scroll.
+  const restoreGridCellFocus = () => {
+    if (!gridCellHadFocusRef.current) return;
+    gridCellHadFocusRef.current = false;
+    getSelectedGridCell()?.focus({ preventScroll: true });
+  };
+
   const shiftSelectionForWindow = (deltaRows: number) => {
+    const fromKeyboard = interactionModeRef.current === 'keyboard';
+    reanchorFromKeyboardRef.current = fromKeyboard;
+    // Rekam SEKARANG, sebelum React meng-unmount baris halaman yang dibuang.
+    gridCellHadFocusRef.current = isSelectedGridCellFocused();
+
+    // Pointer: biarkan index apa adanya supaya tetap sinkron dgn sel aktif RDG.
+    if (!fromKeyboard) return;
     selectedRowRef.current = Math.max(0, selectedRowRef.current + deltaRows);
   };
 
@@ -2358,6 +2408,22 @@ const GridShippingInstruction = () => {
       lastScrollTopRef.current = container.scrollTop;
       hasAdjustedScrollRef.current = true;
       pendingScrollAdjustment.current = 0;
+
+      // Scroll sudah dikompensasi, jadi baris target ada di posisi visual yang
+      // sama -> selectCell di sini tidak memicu scroll tambahan. Re-anchor HANYA
+      // untuk keyboard; saat mouse scroll, sel aktif tidak boleh ikut pindah.
+      if (reanchorFromKeyboardRef.current) {
+        const idx =
+          selectedCellIdxRef.current >= 0 ? selectedCellIdxRef.current : 1;
+        gridRef.current?.selectCell?.({
+          rowIdx: selectedRowRef.current,
+          idx
+        });
+        gridCellHadFocusRef.current = false;
+      } else {
+        restoreGridCellFocus();
+      }
+      reanchorFromKeyboardRef.current = false;
     }
   }, [rows]);
 
@@ -2478,7 +2544,25 @@ const GridShippingInstruction = () => {
       // PageUp/PageDown ditangkap di pembungkus, bukan di <DataGrid>:
       // react-data-grid tidak meneruskan prop DOM sembarangan, dan input
       // filter/search menelan event keyboard-nya sendiri.
-      onKeyDownCapture={handleKeyDownCapture}
+      onKeyDownCapture={(event) => {
+        // Tandai modalitas dulu, baru navigasi baris. handleKeyDownCapture
+        // yang benar-benar memindah baris saat fokus di input filter/search.
+        if (
+          event.key === 'ArrowDown' ||
+          event.key === 'ArrowUp' ||
+          event.key === 'PageDown' ||
+          event.key === 'PageUp'
+        ) {
+          interactionModeRef.current = 'keyboard';
+        }
+        handleKeyDownCapture(event);
+      }}
+      onWheelCapture={() => {
+        interactionModeRef.current = 'pointer';
+      }}
+      onPointerDownCapture={() => {
+        interactionModeRef.current = 'pointer';
+      }}
       className={`flex h-[100%] w-full justify-center`}
     >
       <div className="flex h-[100%]  w-full flex-col rounded-sm border border-border bg-background">
@@ -2576,6 +2660,9 @@ const GridShippingInstruction = () => {
           onCellKeyDown={handleKeyDown}
           onScroll={handleScroll}
           onSelectedCellChange={(args) => {
+            selectedCellIdxRef.current = finalColumns.findIndex(
+              (c) => c.key === args.column.key
+            );
             handleCellClick({ row: args.row });
           }}
           renderers={{
