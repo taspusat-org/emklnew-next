@@ -1,18 +1,21 @@
 import { IMeta } from './error.type';
+
 export interface IGandengan {
-  id: string;
-  nama: string;
-  keterangan: string;
-  statusaktif: string; // id parameter status aktif (varchar UUID), bukan angka
-  statusaktif_text: string;
-  text?: string; // teks status aktif (par.text)
-  memo?: string; // memo status aktif (JSON) — dipakai render badge di grid
+  id: string; // Primary key (varchar(200))
+  nama: string; // Nama (varchar(100))
+  keterangan: string; // Keterangan (text)
 
-  modifiedby?: string;
-  created_at: string;
-  updated_at: string;
+  statusaktif?: string; // Status Aktif (id parameter varchar)
+  statusaktif_text?: string;
+  statusaktif_memo?: string;
+
+  info?: string; // Info (text)
+  modifiedby?: string; // Modified by (varchar(200))
+  editing_by?: string; // Editing by (varchar(200))
+  editing_at?: string; // Editing at (datetime)
+  created_at: string; // Created at (datetime)
+  updated_at: string; // Updated at (datetime)
 }
-
 export interface IAllGandengan {
   data: IGandengan[];
   type: string;

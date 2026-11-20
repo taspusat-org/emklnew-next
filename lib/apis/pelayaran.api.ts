@@ -1,17 +1,14 @@
 import { GetParams } from '../types/all.type';
-import { IAllPelayaran } from '../types/pelayaran.type';
+import { IAllPelayaran, IPelayaran } from '../types/pelayaran.type';
 import { buildQueryParams } from '../utils';
-import { api2 } from '../utils/AxiosInstance';
+import { api, api2 } from '../utils/AxiosInstance';
 import { PelayaranInput } from '../validations/pelayaran.validation';
 
-interface UpdatePelayaranParams {
+interface UpdateMenuParams {
   id: string;
   fields: PelayaranInput;
 }
-interface validationFields {
-  aksi: string;
-  value: number | string;
-}
+
 export const getPelayaranFn = async (
   filters: GetParams = {},
   signal?: AbortSignal
@@ -23,39 +20,29 @@ export const getPelayaranFn = async (
       params: queryParams,
       signal
     });
-
     return response.data;
   } catch (error) {
     if (signal?.aborted) {
       throw new Error('Request was cancelled');
     }
-    console.error('Error fetching Akun Pusat:', error);
-    throw new Error('Failed to fetch Akun Pusat');
+    console.error('Error fetching Pelayaran:', error);
+    throw new Error('Failed to fetch Pelayaran');
   }
+};
+export const deletePelayaranFn = async (id: string): Promise<unknown> => {
+  const response = await api2.delete(`/pelayaran/${id}`);
+  return response.data;
+};
+
+export const updatePelayaranFn = async ({ id, fields }: UpdateMenuParams) => {
+  const response = await api2.put(`/pelayaran/update/${id}`, fields);
+  return response.data;
 };
 
 export const storePelayaranFn = async (fields: PelayaranInput) => {
-  const response = await api2.post(`/pelayaran`, fields);
+  const response = await api2.post('/pelayaran', fields);
   return response.data;
 };
-
-export const deletePelayaranFn = async (id: string) => {
-  try {
-    const response = await api2.delete(`/pelayaran/${id}`);
-    return response.data; // Optionally return response data if needed
-  } catch (error) {
-    console.error('Error deleting order:', error);
-    throw error; // Re-throw the error if you want to handle it in the calling function
-  }
-};
-export const updatePelayaranFn = async ({
-  id,
-  fields
-}: UpdatePelayaranParams) => {
-  const response = await api2.put(`/pelayaran/${id}`, fields);
-  return response.data;
-};
-
 export const exportPelayaranFn = async (filters: any): Promise<any> => {
   try {
     const queryParams = buildQueryParams(filters);
@@ -69,10 +56,4 @@ export const exportPelayaranFn = async (filters: any): Promise<any> => {
     console.error('Error exporting data:', error);
     throw new Error('Failed to export data');
   }
-};
-
-export const checkValidationPelayaranFn = async (fields: validationFields) => {
-  const response = await api2.post(`/pelayaran/check-validation`, fields);
-
-  return response;
 };

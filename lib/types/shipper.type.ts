@@ -1,210 +1,91 @@
 import { IMeta } from './error.type';
 
 export interface IShipper {
-  id: string;
-  statusrelasi: string;
-  relasi_id: string;
-  nama: string;
-  keterangan: string | null;
-  contactperson: string | null;
-  alamat: string | null;
-  coa: string;
-  coa_text: string | null;
-  coapiutang: string;
-  coapiutang_text: string | null;
-  coahutang: string;
-  coahutang_text: string | null;
-  kota: string | null;
-  kodepos: string | null;
-  telp: string | null;
-  email: string | null;
-  fax: string | null;
-  web: string | null;
-  creditlimit: number;
-  creditterm: number;
-  credittermplus: number;
-  npwp: string;
-  coagiro: string;
-  coagiro_text: string | null;
-  ppn: string;
-  titipke: string | null;
-  ppnbatalmuat: string;
-  grup: string | null;
-  formatdeliveryreport: number | null;
-  comodity: string | null;
-  namashippercetak: string | null;
-  formatcetak: number | null;
-  marketing_id: string | null;
-  marketing_text: string | null;
-  blok: string | null;
-  nomor: string | null;
-  rt: string | null;
-  rw: string | null;
-  kelurahan: string | null;
-  kabupaten: string | null;
-  kecamatan: string | null;
-  propinsi: string | null;
-  isdpp10psn: string;
-  usertracing: string | null;
-  passwordtracing: string | null;
-  kodeprospek: string;
-  namashipperprospek: string;
-  emaildelay: string | null;
-  keterangan1barisinvoice: string | null;
-  nik: string | null;
-  namaparaf: string | null;
-  saldopiutang: string;
-  keteranganshipperjobminus: string | null;
-  tglemailshipperjobminus: string | null;
-  tgllahir: string;
-  idshipperasal: string | null;
-  shipperasal_text: string | null;
-  initial: string | null;
-  tipe: string | null;
-  idtipe: number | null;
-  idinitial: number | null;
-  nshipperprospek: string | null;
-  parentshipper_id: string | null;
-  parentshipper_text: string | null;
-  npwpnik: string | null;
-  nitku: string | null;
-  kodepajak: string | null;
-  statusaktif: string;
-  text: string | null;
-  info: string | null;
-  created_at: string;
-  updated_at: string;
-}
+  id: string; // Primary key (varchar(200))
 
+  statusrelasi?: string; // Statusrelasi (id parameter varchar)
+  statusrelasi_text?: string;
+
+  relasi_id?: string; // Relasi (id relasi varchar)
+  relasi_id_text?: string;
+  nama: string; // Nama (varchar(8000))
+  keterangan: string; // Keterangan (varchar(8000))
+  contactperson: string; // Contactperson (varchar(100))
+  alamat: string; // Alamat (varchar(250))
+  coa: string; // Coa (varchar(100))
+  coapiutang: string; // Coapiutang (varchar(100))
+  coahutang: string; // Coahutang (varchar(100))
+  kota: string; // Kota (varchar(50))
+  kodepos: string; // Kodepos (varchar(10))
+  telp: string; // Telp (varchar(30))
+  email: string; // Email (varchar(1000))
+  fax: string; // Fax (varchar(30))
+  web: string; // Web (varchar(30))
+  creditlimit: string; // Creditlimit (numeric(19,2))
+  creditterm: string; // Creditterm (integer)
+  credittermplus: string; // Credittermplus (integer)
+  npwp: string; // Npwp (varchar(30))
+  coagiro: string; // Coagiro (varchar(100))
+  ppn: string; // Ppn (numeric(19,2))
+  titipke: string; // Titipke (varchar(30))
+  ppnbatalmuat: string; // Ppnbatalmuat (numeric(19,2))
+  grup: string; // Grup (varchar(100))
+  formatdeliveryreport: string; // Formatdeliveryreport (integer)
+  comodity: string; // Comodity (varchar(100))
+  namashippercetak: string; // Namashippercetak (varchar(100))
+  formatcetak: string; // Formatcetak (integer)
+
+  marketing_id?: string; // Marketing (id marketing varchar)
+  marketing_id_text?: string;
+  blok: string; // Blok (varchar(100))
+  nomor: string; // Nomor (varchar(100))
+  rt: string; // Rt (varchar(100))
+  rw: string; // Rw (varchar(100))
+  kelurahan: string; // Kelurahan (varchar(100))
+  kabupaten: string; // Kabupaten (varchar(100))
+  kecamatan: string; // Kecamatan (varchar(100))
+  propinsi: string; // Propinsi (varchar(100))
+  isdpp10psn: string; // Isdpp10psn (numeric(19,2))
+  usertracing: string; // Usertracing (varchar(50))
+  passwordtracing: string; // Passwordtracing (varchar(50))
+  kodeprospek: string; // Kodeprospek (varchar(50))
+  namashipperprospek: string; // Namashipperprospek (varchar(200))
+  emaildelay: string; // Emaildelay (varchar(1000))
+  keterangan1barisinvoice: string; // Keterangan1barisinvoice (varchar(100))
+  nik: string; // Nik (varchar(30))
+  namaparaf: string; // Namaparaf (varchar(100))
+  saldopiutang: string; // Saldopiutang (numeric(19,2))
+  keteranganshipperjobminus: string; // Keteranganshipperjobminus (varchar(500))
+  tglemailshipperjobminus: string; // Tglemailshipperjobminus (dd-mm-yyyy)
+  tgllahir: string; // Tgllahir (dd-mm-yyyy)
+
+  idshipperasal?: string; // Idshipperasal (id shipper varchar)
+  idshipperasal_text?: string;
+  initial: string; // Initial (varchar(100))
+  tipe: string; // Tipe (varchar(100))
+  idtipe: string; // Idtipe (integer)
+  idinitial: string; // Idinitial (integer)
+  nshipperprospek: string; // Nshipperprospek (varchar(500))
+
+  parentshipper_id?: string; // Parentshipper (id shipper varchar)
+  parentshipper_id_text?: string;
+  npwpnik: string; // Npwpnik (varchar(16))
+  nitku: string; // Nitku (varchar(22))
+  kodepajak: string; // Kodepajak (varchar(10))
+
+  statusaktif?: string; // Statusaktif (id parameter varchar)
+  statusaktif_text?: string;
+  statusaktif_memo?: string;
+
+  info?: string; // Info (text)
+  modifiedby?: string; // Modified by (varchar(200))
+  editing_by?: string; // Editing by (varchar(200))
+  editing_at?: string; // Editing at (datetime)
+  created_at: string; // Created at (datetime)
+  updated_at: string; // Updated at (datetime)
+}
 export interface IAllShipper {
   data: IShipper[];
   type: string;
   pagination: IMeta;
 }
-
-export const filterShipper = {
-  nama: '',
-  keterangan: '',
-  contactperson: '',
-  alamat: '',
-  coa: '',
-  coa_text: '',
-  coapiutang: '',
-  coapiutang_text: '',
-  coahutang: '',
-  coahutang_text: '',
-  kota: '',
-  kodepos: '',
-  telp: '',
-  email: '',
-  fax: '',
-  web: '',
-  creditlimit: '',
-  creditterm: '',
-  credittermplus: '',
-  npwp: '',
-  coagiro: '',
-  coagiro_text: '',
-  ppn: '',
-  titipke: '',
-  ppnbatalmuat: '',
-  grup: '',
-  formatdeliveryreport: '',
-  comodity: '',
-  namashippercetak: '',
-  formatcetak: '',
-  marketing_id: '',
-  marketing_text: '',
-  blok: '',
-  nomor: '',
-  rt: '',
-  rw: '',
-  kelurahan: '',
-  kabupaten: '',
-  kecamatan: '',
-  propinsi: '',
-  isdpp10psn: '',
-  usertracing: '',
-  passwordtracing: '',
-  kodeprospek: '',
-  namashipperprospek: '',
-  emaildelay: '',
-  keterangan1barisinvoice: '',
-  nik: '',
-  namaparaf: '',
-  saldopiutang: '',
-  keteranganshipperjobminus: '',
-  tglemailshipperjobminus: '',
-  tgllahir: '',
-  idshipperasal: '',
-  shipperasal_text: '',
-  initial: '',
-  tipe: '',
-  idtipe: '',
-  idinitial: '',
-  nshipperprospek: '',
-  parentshipper_id: '',
-  parentshipper_text: '',
-  npwpnik: '',
-  nitku: '',
-  kodepajak: '',
-  statusaktif: '',
-  modifiedby: '',
-  created_at: '',
-  updated_at: '',
-  statustidakasuransi_nama: '',
-  asuransi_tas_nama: '',
-  top_field_nama: '',
-  open_field_nama: '',
-  bongkaran_nama: '',
-  delivery_report_nama: '',
-  final_asuransi_bulan_nama: '',
-  job_banyak_invoice_nama: '',
-  job_pajak_nama: '',
-  cetak_keterangan_shipper_nama: '',
-  fumigasi_nama: '',
-  adjust_tagih_warkat_nama: '',
-  job_non_ppn_nama: '',
-  approval_pajakp_pisah_ongkos_nama: '',
-  decimal_invoice_nama: '',
-  reimbursement_nama: '',
-  not_invoice_tambahan_nama: '',
-  invoice_jasa_pengurusan_transportasi_nama: '',
-  not_ucase_shipper_nama: '',
-  shipper_sttb_nama: '',
-  shipper_cabang_nama: '',
-  spk_nama: '',
-  ppn_warkat_eksport_nama: '',
-  ppn_11_nama: '',
-  non_prospek_nama: '',
-  info_delay_nama: '',
-  job_minus_nama: '',
-  shipper_sendiri_nama: '',
-  wajib_invoice_sebelum_biaya_nama: '',
-  tanpa_nik_npwp_nama: '',
-  pusat_nama: '',
-  app_saldo_piutang_nama: '',
-  nama_paraf_nama: '',
-  not_order_trucking_nama: '',
-  passport_nama: '',
-  ppn_kunci_nama: '',
-  approval_shipper_job_minus_nama: '',
-  approval_top_nama: '',
-  blacklist_shipper_nama: '',
-  non_lapor_pajak_nama: '',
-  shipper_potongan_nama: '',
-  shipper_tidak_tagih_invoice_utama_nama: '',
-  not_tampil_web_nama: '',
-  not_free_admin_nama: '',
-  non_reimbursement_nama: '',
-  app_cetak_invoice_lain_nama: '',
-  lewat_hitung_ulang_ppn_nama: '',
-  online_nama: '',
-  keterangan_buruh_nama: '',
-  edit_keterangan_invoice_utama_nama: '',
-  tampil_keterangan_tambahan_sttb_nama: '',
-  update_ppn_shiper_khusus_nama: '',
-  shipper_rincian_nama: '',
-  national_id_nama: '',
-  refdesc_po_nama: ''
-};

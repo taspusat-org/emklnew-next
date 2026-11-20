@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 import React, {
   useEffect,
   useMemo,
@@ -54,7 +54,7 @@ import {
   setClearLookup
 } from '@/lib/store/lookupSlice/lookupSlice';
 import { IEmkl } from '@/lib/types/emkl.type';
-import { EmklInput, emklSchema } from '@/lib/validations/emkl.validation';
+import { EmklInput, EmklSchema } from '@/lib/validations/emkl.validation';
 import {
   useCreateEmkl,
   useDeleteEmkl,
@@ -170,7 +170,7 @@ const GridEmkl = () => {
   const { alert } = useAlert();
   const { user, cabang_id } = useSelector((state: RootState) => state.auth);
   const forms = useForm<EmklInput>({
-    resolver: zodResolver(emklSchema),
+    resolver: zodResolver(EmklSchema),
     mode: 'onSubmit',
     defaultValues: {
       nama: '',
@@ -2766,6 +2766,8 @@ const GridEmkl = () => {
       forms.setValue('statustrado', rowData?.statustrado ?? '');
       forms.setValue('statustrado_text', rowData?.statustrado_text ?? '');
       forms.setValue('statusaktif', rowData?.statusaktif ?? '');
+      forms.setValue('relasi_id', rowData?.relasi_id ?? '');
+      forms.setValue('relasi_text', rowData?.relasi_text ?? '');
       forms.setValue('statusaktif_text', rowData?.statusaktif_text || '');
     }
     // JANGAN set/reset form saat mode 'add' di sini — resetAddForm() di handleAdd menanganinya
@@ -2916,7 +2918,7 @@ const GridEmkl = () => {
         />
         <div className="flex flex-row justify-between border border-x-0 border-b-0 border-border bg-background-grid-header p-2">
           <ActionButton
-            module="Emkl"
+            module="EMKL"
             onAdd={handleAdd}
             checkedRows={checkedRows}
             onDelete={handleDelete}

@@ -14,22 +14,7 @@ import {
   setDefault,
   setType
 } from '@/lib/store/lookupSlice/lookupSlice';
-import { getAkunpusatFn } from '@/lib/apis/akunpusat.api';
-import { getMarketingHeaderFn } from '@/lib/apis/marketingheader.api';
 import { IParameter } from '@/lib/types/parameter.type';
-import { getShipperFn } from '@/lib/apis/shipper.api';
-
-interface ApiResponse {
-  type: string;
-  data: any;
-}
-
-interface IAkunpusat {
-  id: number;
-  coa: number;
-  keterangancoa: string;
-  default?: number | string | null;
-}
 
 const Page = () => {
   const dispatch = useDispatch();
@@ -40,106 +25,40 @@ const Page = () => {
         const fieldLengthResult = await fieldLength('shipper');
         dispatch(setFieldLength(fieldLengthResult.data));
 
-        const [
-          getStatusAktifLookup,
-          getAkunpusatLookup,
-          getMarketingLookup
-          // getShipperLookup
-        ] = await Promise.all([
-          getParameterFn({ isLookUp: 'true' }),
-          getAkunpusatFn({ isLookUp: 'true' }),
-          getMarketingHeaderFn({ isLookUp: 'true' })
-          // getShipperFn({ isLookUp: 'true' })
+        const [getStatusAktifLookup] = await Promise.all([
+          getParameterFn({ isLookUp: 'true' })
         ]);
 
-        // Process Parameter lookup data dengan type safety
-        if (getStatusAktifLookup.type === 'local') {
+        if (
+          getStatusAktifLookup.type === 'local' &&
+          getStatusAktifLookup.data
+        ) {
           const grpsToFilter = ['STATUS AKTIF'];
 
           grpsToFilter.forEach((grp) => {
             const filteredData = getStatusAktifLookup.data.filter(
-              (item: any) => item.grp === grp
+              (item: IParameter) => item.grp === grp
             );
 
-            dispatch(setData({ key: grp, data: filteredData }));
-            dispatch(setType({ key: grp, type: getStatusAktifLookup.type }));
+            if (filteredData.length > 0) {
+              dispatch(setData({ key: grp, data: filteredData }));
+              dispatch(setType({ key: grp, type: getStatusAktifLookup.type }));
 
-            const defaultValue = filteredData
-              .map((item: any) => item.default)
-              .find((val: any) => val !== null || '');
+              // Set default value jika ada. Baris non-default menyimpan default
+              // sebagai string kosong (bukan null), jadi `!== null` salah memilih
+              // baris pertama. Pilih baris yang benar-benar bertanda default 'YA'.
+              const defaultItem = filteredData.find(
+                (item: IParameter) => item.default === 'YA'
+              );
 
-            dispatch(setDefault({ key: grp, isdefault: String(defaultValue) }));
+              const defaultValue = defaultItem
+                ? String(defaultItem.default)
+                : '';
+
+              dispatch(setDefault({ key: grp, isdefault: defaultValue }));
+            }
           });
         }
-
-        if (getAkunpusatLookup.type === 'local') {
-          // COA
-          dispatch(setData({ key: 'coa', data: getAkunpusatLookup.data }));
-          const defaultCOA =
-            getAkunpusatLookup.data
-              .map((item: any) => item.default)
-              .find((val: any) => val !== null) || '';
-          dispatch(setDefault({ key: 'coa', isdefault: defaultCOA }));
-
-          // COA PIUTANG
-          dispatch(
-            setData({ key: 'coapiutang', data: getAkunpusatLookup.data })
-          );
-          const defaultPiutang =
-            getAkunpusatLookup.data
-              .map((item: any) => item.defaultPiutang)
-              .find((val: any) => val !== null) || '';
-          dispatch(
-            setDefault({ key: 'coapiutang', isdefault: defaultPiutang })
-          );
-
-          // COA HUTANG
-          dispatch(
-            setData({ key: 'coahutang', data: getAkunpusatLookup.data })
-          );
-          const defaultHutang =
-            getAkunpusatLookup.data
-              .map((item: any) => item.defaultHutang)
-              .find((val: any) => val !== null) || '';
-          dispatch(setDefault({ key: 'coahutang', isdefault: defaultHutang }));
-
-          // COA GIRO
-          dispatch(setData({ key: 'coagiro', data: getAkunpusatLookup.data }));
-          const defaultGiro =
-            getAkunpusatLookup.data
-              .map((item: any) => item.defaultGiro)
-              .find((val: any) => val !== null) || '';
-          dispatch(setDefault({ key: 'coagiro', isdefault: defaultGiro }));
-        }
-
-        dispatch(setType({ key: 'coa', type: getAkunpusatLookup.type }));
-        dispatch(setType({ key: 'coapiutang', type: getAkunpusatLookup.type }));
-        dispatch(setType({ key: 'coahutang', type: getAkunpusatLookup.type }));
-        dispatch(setType({ key: 'coagiro', type: getAkunpusatLookup.type }));
-
-        if (getMarketingLookup.type === 'local') {
-          dispatch(
-            setData({ key: 'MARKETING', data: getMarketingLookup.data })
-          );
-          const defaultValue =
-            getMarketingLookup.data
-              .map((item: any) => item.default)
-              .find((val: any) => val !== null) || '';
-
-          dispatch(setDefault({ key: 'MARKETING', isdefault: defaultValue }));
-        }
-        dispatch(setType({ key: 'MARKETING', type: getMarketingLookup.type }));
-
-        // if (getShipperLookup.type === 'local') {
-        //   dispatch(setData({ key: 'SHIPPER', data: getShipperLookup.data }));
-        //   const defaultValue =
-        //     getShipperLookup.data
-        //       .map((item: any) => item.default)
-        //       .find((val: any) => val !== null) || '';
-
-        //   dispatch(setDefault({ key: 'SHIPPER', isdefault: defaultValue }));
-        // }
-        // dispatch(setType({ key: 'SHIPPER', type: getShipperLookup.type }));
       } catch (err) {
         console.error('Error fetching lookup data:', err);
       }

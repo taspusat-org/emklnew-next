@@ -341,7 +341,7 @@ const DialogApproval: React.FC = ({}) => {
             filteredPermission.some(
               (filteredItem: any) =>
                 filteredItem.subject === item.subgrp &&
-                Number(filteredItem.id) === Number(item.role_ya)
+                String(filteredItem.id) === String(item.role_ya)
             )
           );
           setDataParameter(filteredData);
@@ -352,7 +352,7 @@ const DialogApproval: React.FC = ({}) => {
           const filteredData = data.data.filter((item: any) =>
             filteredPermission.some(
               (filteredItem: any) =>
-                Number(filteredItem.id) === Number(item.role_tidak)
+                String(filteredItem.id) === String(item.role_tidak)
             )
           );
           setDataParameter(filteredData);

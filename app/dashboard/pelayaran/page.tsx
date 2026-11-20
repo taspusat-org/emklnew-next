@@ -1,17 +1,20 @@
 'use client';
 
 import PageContainer from '@/components/layout/page-container';
-import { fieldLength } from '@/lib/apis/field-length.api';
-import { setFieldLength } from '@/lib/store/field-length/fieldLengthSlice';
-import { useEffect } from 'react';
-import { useDispatch } from 'react-redux';
+import { Tabs, TabsContent } from '@/components/ui/tabs';
 import GridPelayaran from './components/GridPelayaran';
+import { fieldLength } from '@/lib/apis/field-length.api';
+
+import React, { useEffect } from 'react';
+import { useDispatch } from 'react-redux';
+import { setFieldLength } from '@/lib/store/field-length/fieldLengthSlice';
 import { getParameterFn } from '@/lib/apis/parameter.api';
 import {
   setData,
   setDefault,
   setType
 } from '@/lib/store/lookupSlice/lookupSlice';
+import { IParameter } from '@/lib/types/parameter.type';
 
 const Page = () => {
   const dispatch = useDispatch();
@@ -19,43 +22,55 @@ const Page = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const result = await fieldLength('pelayaran');
-        dispatch(setFieldLength(result.data));
+        const fieldLengthResult = await fieldLength('pelayaran');
+        dispatch(setFieldLength(fieldLengthResult.data));
 
         const [getStatusAktifLookup] = await Promise.all([
           getParameterFn({ isLookUp: 'true' })
         ]);
 
-        if (getStatusAktifLookup.type === 'local') {
+        if (
+          getStatusAktifLookup.type === 'local' &&
+          getStatusAktifLookup.data
+        ) {
           const grpsToFilter = ['STATUS AKTIF'];
 
           grpsToFilter.forEach((grp) => {
             const filteredData = getStatusAktifLookup.data.filter(
-              (item: any) => item.grp === grp
+              (item: IParameter) => item.grp === grp
             );
-            //
 
-            dispatch(setData({ key: grp, data: filteredData }));
-            dispatch(setType({ key: grp, type: getStatusAktifLookup.type }));
+            if (filteredData.length > 0) {
+              dispatch(setData({ key: grp, data: filteredData }));
+              dispatch(setType({ key: grp, type: getStatusAktifLookup.type }));
 
-            const defaultValue = filteredData
-              .map((item: any) => item.default)
-              .find((val: any) => val !== null || '');
+              // Set default value jika ada. Baris non-default menyimpan default
+              // sebagai string kosong (bukan null), jadi `!== null` salah memilih
+              // baris pertama. Pilih baris yang benar-benar bertanda default 'YA'.
+              const defaultItem = filteredData.find(
+                (item: IParameter) => item.default === 'YA'
+              );
 
-            dispatch(setDefault({ key: grp, isdefault: String(defaultValue) }));
+              const defaultValue = defaultItem
+                ? String(defaultItem.default)
+                : '';
+
+              dispatch(setDefault({ key: grp, isdefault: defaultValue }));
+            }
           });
         }
       } catch (err) {
-        console.error('Error fetching data:', err);
+        console.error('Error fetching lookup data:', err);
       }
     };
 
     fetchData();
   }, [dispatch]);
+
   return (
     <PageContainer scrollable>
       <div className="grid h-fit grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-7">
-        <div className="col-span-10 h-[500px]">
+        <div className="col-span-7 h-[500px]">
           <GridPelayaran />
         </div>
       </div>

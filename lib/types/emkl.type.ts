@@ -2,6 +2,8 @@ import { IMeta } from './error.type';
 export interface IEmkl {
   id: string;
   nama: string;
+  relasi_id: string;
+  relasi_text: string;
   contactperson: string;
   alamat: string;
   coagiro: string;
