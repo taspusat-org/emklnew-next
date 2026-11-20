@@ -12,6 +12,11 @@ import { Input } from '@/components/ui/input';
 import { RootState } from '@/lib/store/store';
 import { Button } from '@/components/ui/button';
 import { api2 } from '@/lib/utils/AxiosInstance';
+import { useReportPdfContext } from '@/hooks/ReportPdfProvider';
+import {
+  generateBookingOrderanExportFn,
+  generateBookingOrderanReportFn
+} from '@/lib/apis/report.api';
 import { Checkbox } from '@/components/ui/checkbox';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useAlert } from '@/lib/store/client/useAlert';
@@ -25,7 +30,14 @@ import ActionButton from '@/components/custom-ui/ActionButton';
 import FilterOptions from '@/components/custom-ui/FilterOptions';
 import { useLainnyaDialog } from '@/lib/store/client/useDialogLainnya';
 import { useApprovalDialog } from '@/lib/store/client/useDialogApproval';
-import { FaPrint, FaSort, FaSortDown, FaSortUp, FaTimes } from 'react-icons/fa';
+import {
+  FaPrint,
+  FaFileExport,
+  FaSort,
+  FaSortDown,
+  FaSortUp,
+  FaTimes
+} from 'react-icons/fa';
 import React, {
   useCallback,
   useEffect,
@@ -123,6 +135,7 @@ const GridBookingMuatan = () => {
   const { closeDialog } = useLainnyaDialog();
   const { theme, resolvedTheme } = useTheme();
   const { successApproved } = useApprovalDialog();
+  const { generateReport, generateExport } = useReportPdfContext();
   const isDark = theme === 'dark' || resolvedTheme === 'dark';
   const { user } = useSelector((state: RootState) => state.auth);
   const {
@@ -222,6 +235,9 @@ const GridBookingMuatan = () => {
   const jumpToFirstRef = useRef(false);
   const pendingSelectIdxRef = useRef<number>(1);
   const selectedRowRef = useRef<number>(0);
+  // Menahan data-effect memproses hasil refetch pasca-mutasi sampai window
+  // settle, supaya fokus by-id tidak tertimpa (pola sama dengan panjar/SI).
+  const suppressRefetchRef = useRef(false);
   const lastDispatchedId = useRef<string | null>(null);
   const pendingInitialFocusRef = useRef(true);
   const headerClearedRef = useRef(false);
@@ -335,6 +351,87 @@ const GridBookingMuatan = () => {
     mode: 'onSubmit'
   });
 
+  // Id JENIS ORDERAN "MUATAN" hasil resolve dari tabel parameter. Disimpan di
+  // ref, BUKAN cuma didorong ke form: form di-reset tiap kali Tambah / Tutup /
+  // "simpan & tambah lagi", jadi nilainya harus bisa dipasang ulang.
+  const jenisOrderMuatanIdRef = useRef<string>('');
+
+  /**
+   * Nilai default form saat TAMBAH.
+   *
+   * Dulu handleAdd/handleClose/onSuccess memanggil `forms.reset()` polos, yang
+   * mengembalikan form ke `defaultValues` — dan defaultValues-nya cuma
+   * `{ nobukti: '' }`. Akibatnya jenisorder_id/jenisorder_nama yang sudah
+   * diisi effect di bawah ikut TERHAPUS, sehingga lookup JENIS ORDER tampil
+   * kosong tiap kali user menekan Tambah.
+   *
+   * Semua field disebut eksplisit (pola yang sama dengan GridBiayaExtraHeader)
+   * supaya reset selalu menghasilkan bentuk yang utuh dan terdefinisi, bukan
+   * campuran antara field yang ikut ter-reset dan yang tertinggal dari isian
+   * sebelumnya.
+   */
+  const nilaiDefaultTambah = useCallback(
+    (): bookingOrderanMuatanInput =>
+      ({
+        nobukti: '',
+        tglbukti: '',
+        jenisorder_id: jenisOrderMuatanIdRef.current,
+        jenisorder_nama: jenisOrderMuatanIdRef.current
+          ? JENISORDERMUATANNAMA
+          : '',
+        container_id: '',
+        container_nama: '',
+        shipper_id: '',
+        shipper_nama: '',
+        tujuankapal_id: '',
+        tujuankapal_nama: '',
+        marketing_id: '',
+        marketing_nama: '',
+        keterangan: '',
+        schedule_id: '',
+        schedule_nama: '',
+        pelayarancontainer_id: '',
+        pelayarancontainer_nama: '',
+        jenismuatan_id: '',
+        jenismuatan_nama: '',
+        sandarkapal_id: '',
+        sandarkapal_nama: '',
+        tradoluar: '',
+        tradoluar_nama: '',
+        nopolisi: '',
+        nosp: '',
+        nocontainer: '',
+        noseal: '',
+        lokasistuffing: '',
+        lokasistuffing_nama: '',
+        nominalstuffing: '',
+        emkl_id: '',
+        emkllain_nama: '',
+        asalmuatan: '',
+        daftarbl_id: '',
+        daftarbl_nama: '',
+        comodity: '',
+        gandengan: '',
+        pisahbl: '',
+        pisahbl_nama: '',
+        jobptd: '',
+        jobptd_nama: '',
+        transit: '',
+        transit_nama: '',
+        stuffingdepo: '',
+        stuffingdepo_nama: '',
+        opendoor: '',
+        opendoor_nama: '',
+        batalmuat: '',
+        batalmuat_nama: '',
+        soc: '',
+        soc_nama: '',
+        pengurusandoorekspedisilain: '',
+        pengurusandoorekspedisilain_nama: ''
+      }) as bookingOrderanMuatanInput,
+    []
+  );
+
   useEffect(() => {
     const ambilIdJenisOrderanMuatan = async () => {
       try {
@@ -349,6 +446,8 @@ const GridBookingMuatan = () => {
         );
 
         if (!muatan?.id) return;
+
+        jenisOrderMuatanIdRef.current = String(muatan.id);
 
         forms.reset({
           ...forms.getValues(),
@@ -3531,7 +3630,10 @@ const GridBookingMuatan = () => {
   const handleAdd = async () => {
     setMode('add');
     setPopOver(true);
-    forms.reset();
+    // reset KE nilai default tambah, bukan reset() polos — lihat catatan di
+    // nilaiDefaultTambah: reset polos menghapus jenisorder_id yang sudah
+    // di-resolve, sehingga lookup JENIS ORDER tampil kosong.
+    forms.reset(nilaiDefaultTambah());
   };
 
   const handleEdit = async () => {
@@ -3711,11 +3813,37 @@ const GridBookingMuatan = () => {
     setMode('');
     clearError();
     closeDialog();
-    forms.reset();
+    forms.reset(nilaiDefaultTambah());
     formsJobParty.reset();
     setReloadForm(false);
   };
 
+  const handleExportExcel = async (exportFilters?: any) => {
+    const { page, limit, ...filtersWithoutLimit } = filters;
+    const activeFilters = exportFilters ?? filtersWithoutLimit;
+
+    await generateExport({
+      label: 'Export Booking Orderan Muatan',
+      payload: {
+        search: activeFilters.search,
+        filters: activeFilters.filters,
+        sortBy: activeFilters.sortBy,
+        sortDirection: activeFilters.sortDirection
+      },
+      apiFn: generateBookingOrderanExportFn
+    });
+  };
+
+  // Cetak laporan dijalankan di BACKEND (background job + socket), sama seperti
+  // shipping-instruction. Frontend hanya mengirim id baris yang dicentang dan
+  // nama template .mrt-nya; progres render muncul di toast dan PDF diambil
+  // setelah selesai.
+  //
+  // Versi lama merender Stimulsoft DI BROWSER: seluruh engine report diunduh ke
+  // klien, dan template yang dimuat adalah milik modul lain
+  // ('/reports/LaporanPengeluaranKasEmklHeader.mrt') lalu hasilnya dibuka di
+  // '/reports/pengeluaranemklheader' — itu sebabnya cetakannya berbentuk
+  // laporan pengeluaran, bukan booking orderan.
   const handleReport = async () => {
     if (checkedRows.size === 0) {
       alert({
@@ -3723,7 +3851,7 @@ const GridBookingMuatan = () => {
         variant: 'danger',
         submitText: 'OK'
       });
-      return; // Stop execution if no rows are selected
+      return;
     }
     if (checkedRows.size > 1) {
       alert({
@@ -3731,97 +3859,24 @@ const GridBookingMuatan = () => {
         variant: 'danger',
         submitText: 'OK'
       });
-      return; // Stop execution if no rows are selected
+      return;
     }
 
-    try {
-      dispatch(setProcessing());
-      const rowId = Array.from(checkedRows)[0];
-      const selectedRowNobukti = rows.find((r) => r.id === rowId)?.nobukti;
+    const rowId = Array.from(checkedRows)[0];
+    const { page, limit, ...filtersWithoutLimit } = filters;
 
-      const response = await getBookingOrderanMuatanByIdFn(rowId);
-      // const responseDetail = await getPengeluaranEmklDetailFn({
-      //   filters: { nobukti: selectedRowNobukti }
-      // });
-      // const totalNominal = responseDetail.data.reduce(
-      //   (sum: number, i: any) => sum + Number(i.nominal || 0),
-      //   0
-      // );
-
-      if (response.data === null || response.data.length === 0) {
-        alert({
-          title: 'TERJADI KESALAHAN SAAT MEMBUAT LAPORAN!',
-          variant: 'danger',
-          submitText: 'OK'
-        });
-        return;
-      }
-      const reportRows = response.data.map((row) => ({
-        ...row,
-        judullaporan: 'Laporan booking Orderan Muatan',
-        usercetak: user.username,
-        tglcetak: new Date().toLocaleDateString(),
-        // terbilang: numberToTerbilang(totalNominal),
-        judul: 'PT.TRANSPORINDO AGUNG SEJAHTERA'
-      }));
-      sessionStorage.setItem('dataId', rowId as unknown as string);
-      import('stimulsoft-reports-js/Scripts/stimulsoft.blockly.editor')
-        .then((module) => {
-          const { Stimulsoft } = module;
-          Stimulsoft.Base.StiFontCollection.addOpentypeFontFile(
-            '/fonts/tahomabd.ttf',
-            'TahomaBD'
-          );
-          Stimulsoft.Base.StiFontCollection.addOpentypeFontFile(
-            '/fonts/tahoma.ttf',
-            'Tahoma'
-          );
-          Stimulsoft.Base.StiLicense.Key =
-            '6vJhGtLLLz2GNviWmUTrhSqnOItdDwjBylQzQcAOiHksEid1Z5nN/hHQewjPL/4/AvyNDbkXgG4Am2U6dyA8Ksinqp' +
-            '6agGqoHp+1KM7oJE6CKQoPaV4cFbxKeYmKyyqjF1F1hZPDg4RXFcnEaYAPj/QLdRHR5ScQUcgxpDkBVw8XpueaSFBs' +
-            'JVQs/daqfpFiipF1qfM9mtX96dlxid+K/2bKp+e5f5hJ8s2CZvvZYXJAGoeRd6iZfota7blbsgoLTeY/sMtPR2yutv' +
-            'gE9TafuTEhj0aszGipI9PgH+A/i5GfSPAQel9kPQaIQiLw4fNblFZTXvcrTUjxsx0oyGYhXslAAogi3PILS/DpymQQ' +
-            '0XskLbikFsk1hxoN5w9X+tq8WR6+T9giI03Wiqey+h8LNz6K35P2NJQ3WLn71mqOEb9YEUoKDReTzMLCA1yJoKia6Y' +
-            'JuDgUf1qamN7rRICPVd0wQpinqLYjPpgNPiVqrkGW0CQPZ2SE2tN4uFRIWw45/IITQl0v9ClCkO/gwUtwtuugegrqs' +
-            'e0EZ5j2V4a1XDmVuJaS33pAVLoUgK0M8RG72';
-
-          const report = new Stimulsoft.Report.StiReport();
-          const dataSet = new Stimulsoft.System.Data.DataSet('Data');
-
-          // Load the report template (MRT file)
-          report.loadFile('/reports/LaporanPengeluaranKasEmklHeader.mrt');
-          report.dictionary.dataSources.clear();
-          dataSet.readJson({ data: reportRows });
-          // dataSet.readJson({ detail: responseDetail.data });
-          report.regData(dataSet.dataSetName, '', dataSet);
-          report.dictionary.synchronize();
-
-          // Render the report asynchronously
-
-          report.renderAsync(() => {
-            // Export the report to PDF asynchronously
-            report.exportDocumentAsync((pdfData: any) => {
-              const pdfBlob = new Blob([new Uint8Array(pdfData)], {
-                type: 'application/pdf'
-              });
-              const pdfUrl = URL.createObjectURL(pdfBlob);
-
-              // Store the Blob URL in sessionStorage
-              sessionStorage.setItem('pdfUrl', pdfUrl);
-
-              // Navigate to the report page
-              window.open('/reports/pengeluaranemklheader', '_blank');
-            }, Stimulsoft.Report.StiExportFormat.Pdf);
-          });
-        })
-        .catch((error) => {
-          console.error('Failed to load Stimulsoft:', error);
-        });
-    } catch (error) {
-      console.error('Error generating report:', error);
-    } finally {
-      dispatch(setProcessed());
-    }
+    await generateReport({
+      label: 'Booking Orderan Muatan',
+      payload: {
+        mrtName: 'LaporanBookingOrderanMuatan.mrt',
+        id: rowId,
+        judullaporan: 'PT. TRANSPORINDO AGUNG SEJAHTERA'
+      },
+      apiFn: generateBookingOrderanReportFn,
+      // Tombol Export di toolbar viewer memakai filter yang sama dengan laporan
+      // yang sedang dibuka.
+      onExport: () => handleExportExcel(filtersWithoutLimit)
+    });
   };
 
   // const handleReport = async () => {
@@ -3951,65 +4006,112 @@ const GridBookingMuatan = () => {
   // };
 
   const onSuccess = async (
-    indexOnPage: any,
-    pageNumber: any,
-    keepOpenModal: any = false,
-    savedId?: any
+    indexOnPage: number,
+    fetchedPages: number[],
+    pagedData: Record<string, BookingOrderanMuatan[]>,
+    pageNumber: number,
+    keepOpenModal = false,
+    focusId: string | null = null
   ) => {
     dispatch(setClearLookup(true));
     clearError();
     closeDialog();
+    setIsFetchingManually(true);
+    // Tandai baris hasil simpan agar Row Combiner memfokuskannya BY-ID setelah
+    // data window settle. Lebih andal daripada selectCell by-index yang meleset
+    // saat window bergeser.
+    pendingFocusIdRef.current = focusId != null ? String(focusId) : null;
 
     try {
       if (keepOpenModal) {
-        forms.reset();
+        // "Simpan & tambah lagi": form berikutnya harus tetap membawa default,
+        // termasuk jenisorder_id.
+        forms.reset(nilaiDefaultTambah());
         setPopOver(true);
       } else {
-        forms.reset();
+        forms.reset(nilaiDefaultTambah());
         setPopOver(false);
+      }
 
-        if (mode !== 'delete') {
-          // Bangun ulang window dari halaman tempat baris hasil simpan berada.
-          //
-          // `indexOnPage` sebenarnya dataIndex dari backend: index ABSOLUT di
-          // seluruh daftar terfilter, BUKAN index di dalam halaman.
-          const absoluteIndex = Math.max(0, Number(indexOnPage) || 0);
-          const pageOfRow = Math.max(1, Number(pageNumber) || 1);
+      if (mode !== 'delete') {
+        // Blokir data-effect memproses ulang hasil refetch pasca-mutasi selama
+        // window settle, agar fokus by-id tidak tertimpa.
+        suppressRefetchRef.current = true;
 
-          // Window dibuat BERAKHIR di halaman baris tersebut supaya baris yang
-          // jatuh di halaman terakhir tidak menghasilkan window berisi satu
-          // baris (dan tanpa scrollbar, tidak bisa scroll balik ke atas).
-          const logicalStartPage = Math.max(1, pageOfRow - WINDOW_SIZE + 1);
-          const rowIdxInWindow = Math.max(
-            0,
-            absoluteIndex - (logicalStartPage - 1) * filters.limit
+        const response = await api2.get(
+          `/redis/get/bookingorderanmuatan-page-${pageNumber}`
+        );
+        const loadedRows: BookingOrderanMuatan[] = Array.isArray(response.data)
+          ? response.data
+          : [];
+
+        // Fokus BERDASARKAN ID baris, bukan indexOnPage dari backend. Setelah
+        // edit, posisi baris di window yang dimuat bisa berbeda dari hitungan
+        // index backend sehingga fokus meleset — inilah gejala "selected id
+        // sudah pindah tapi select cell-nya belum". Fallback ke indexOnPage
+        // bila id tak ketemu.
+        const focusIdx =
+          focusId != null
+            ? loadedRows.findIndex((r) => String(r.id) === String(focusId))
+            : -1;
+        const targetIndex = focusIdx >= 0 ? focusIdx : indexOnPage;
+
+        setIsDataUpdated(true);
+        setShouldBulkFetch(false);
+        setRows([]);
+        setRows(loadedRows);
+        setVisiblePages(fetchedPages);
+        setSelectedRow(targetIndex);
+        selectedRowRef.current = targetIndex;
+        setPageDataCache(
+          new Map(
+            Object.entries(pagedData).map(([key, value]) => [
+              Number(key),
+              value as BookingOrderanMuatan[]
+            ])
+          )
+        );
+        setCurrentPage(pageNumber);
+
+        const updatedBuffer = new Map(streamBufferRef.current);
+        Object.entries(pagedData).forEach(([key, value]) => {
+          updatedBuffer.set(Number(key), value as BookingOrderanMuatan[]);
+        });
+        streamBufferRef.current = updatedBuffer;
+
+        setTimeout(() => {
+          gridRef?.current?.selectCell({ rowIdx: targetIndex, idx: 1 });
+        }, 200);
+
+        // Penahan fokus pasca-mutasi. setCurrentPage(pageNumber) memicu refetch
+        // yang menjalankan Row Combiner lagi; karena pendingFocusIdRef sudah
+        // dikonsumsi pada run pertama, cabang else-nya men-scroll ke baris 0
+        // (gejala "edit selalu balik ke baris 1"). Re-assert id fokus beberapa
+        // kali selama window settle lalu bersihkan.
+        if (focusId != null) {
+          [120, 320, 620].forEach((d) =>
+            setTimeout(() => {
+              pendingFocusIdRef.current = String(focusId);
+            }, d)
           );
-
-          // Fokus dikunci BY-ID: sampai data baru tiba, `rows` masih window
-          // lama, jadi index yang sama menunjuk baris milik booking lain.
-          pendingFocusIdRef.current = savedId != null ? String(savedId) : null;
-
-          setCurrentPage(pageOfRow);
-          resetBufferingCache(logicalStartPage);
-          setSelectedRow(rowIdxInWindow);
-          selectedRowRef.current = rowIdxInWindow;
-
           setTimeout(() => {
-            gridRef?.current?.scrollToCell?.({
-              rowIdx: rowIdxInWindow,
-              idx: 1
-            });
-            gridRef?.current?.selectCell({ rowIdx: rowIdxInWindow, idx: 1 });
-          }, 200);
+            if (String(pendingFocusIdRef.current) === String(focusId)) {
+              pendingFocusIdRef.current = null;
+            }
+          }, 950);
         }
 
-        setIsDataUpdated(false);
+        setTimeout(() => {
+          suppressRefetchRef.current = false;
+        }, 1000);
       }
+
+      setIsDataUpdated(false);
     } catch (error) {
       console.error('Error during onSuccess:', error);
       setIsDataUpdated(false);
     } finally {
-      // dispatch(setClearLookup(false));
+      setIsFetchingManually(false);
       setIsDataUpdated(false);
     }
   };
@@ -4017,24 +4119,19 @@ const GridBookingMuatan = () => {
   // Tanpa ini, gagal validasi zod = tombol SIMPAN diam saja. Error pada field
   // tersembunyi atau pada baris detail yang sedang tidak terlihat tidak pernah
   // sampai ke user. Dipakai bersama untuk form booking biasa & form JOB PARTY.
+  // Tanpa ini, gagal validasi zod = tombol SIMPAN diam saja.
+  //
+  // Daftarnya TIDAK dilempar ke alert modal: pesannya hilang begitu alert
+  // ditutup, padahal field yang harus diperbaiki ada di form di belakangnya.
+  // Sekarang dirender sebagai panel di dalam form (ringkasan-validasi-booking,
+  // lihat FormBookingOrderanMuatan) dan cukup di-scroll ke posisinya.
   const onInvalid = (errors: any) => {
-    const kumpulkan = (obj: any, jalur: string[] = []): string[] => {
-      if (!obj || typeof obj !== 'object') return [];
-      if (typeof obj.message === 'string') {
-        return [`${jalur.join('.')}: ${obj.message}`];
-      }
-      return Object.entries(obj).flatMap(([kunci, nilai]) =>
-        kumpulkan(nilai, [...jalur, kunci])
-      );
-    };
+    console.warn('[BOOKING ORDERAN] validasi gagal:', errors);
 
-    const daftar = kumpulkan(errors);
-    console.warn('[BOOKING ORDERAN] validasi gagal:', daftar);
-
-    alert({
-      title: daftar.length > 0 ? daftar.join('\n') : 'DATA BELUM LENGKAP',
-      variant: 'danger',
-      submitText: 'OK'
+    requestAnimationFrame(() => {
+      document
+        .getElementById('ringkasan-validasi-booking')
+        ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     });
   };
 
@@ -4120,7 +4217,14 @@ const GridBookingMuatan = () => {
           },
           {
             onSuccess: (data) =>
-              onSuccess(data.dataIndex, data.pageNumber, keepOpenModal)
+              onSuccess(
+                data.itemIndex,
+                data.fetchedPages,
+                data.pagedData,
+                data.pageNumber,
+                keepOpenModal,
+                data.id
+              )
           }
         );
 
@@ -4135,7 +4239,17 @@ const GridBookingMuatan = () => {
             id: selectedRowHeaderId as unknown as string,
             fields: { ...values, ...filters }
           },
-          { onSuccess: (data) => onSuccess(data.dataIndex, data.pageNumber) }
+          {
+            onSuccess: (data) =>
+              onSuccess(
+                data.itemIndex,
+                data.fetchedPages,
+                data.pagedData,
+                data.pageNumber,
+                false,
+                data.id
+              )
+          }
         );
         queryClient.invalidateQueries('bookingorderan');
       }
@@ -4158,7 +4272,15 @@ const GridBookingMuatan = () => {
           ...filters // Kirim filter ke body/payload
         },
         {
-          onSuccess: (data) => onSuccess(data.dataIndex, data.pageNumber)
+          onSuccess: (data) =>
+            onSuccess(
+              data.itemIndex,
+              data.fetchedPages,
+              data.pagedData,
+              data.pageNumber,
+              false,
+              data.id
+            )
         }
       );
 
@@ -4558,7 +4680,16 @@ const GridBookingMuatan = () => {
 
   // 1. Bulk Fetch — sekali ambil WINDOW_SIZE halaman, lalu dipecah ke cache.
   useEffect(() => {
-    if (!shouldBulkFetch || !allDataBookingMuatan || isDataUpdated) return;
+    if (
+      !shouldBulkFetch ||
+      !allDataBookingMuatan ||
+      isDataUpdated ||
+      // Selama settle pasca-mutasi (add/edit), jangan biarkan hasil refetch
+      // membangun ulang cache — kalau tidak, Row Combiner jalan lagi setelah
+      // pendingFocusIdRef dikonsumsi & fokus loncat ke baris 1.
+      suppressRefetchRef.current
+    )
+      return;
 
     const bulkData = allDataBookingMuatan.data || [];
     if (bulkData.length === 0) {
@@ -4621,7 +4752,13 @@ const GridBookingMuatan = () => {
   // 2. Pagination Fetch — hasil fetch satu halaman (buffer miss) masuk cache
   //    dan window digeser satu langkah.
   useEffect(() => {
-    if (shouldBulkFetch || isDataUpdated || isFetchingManually) return;
+    if (
+      shouldBulkFetch ||
+      isDataUpdated ||
+      isFetchingManually ||
+      suppressRefetchRef.current
+    )
+      return;
     if (!allDataBookingMuatan) return;
 
     const newRows = allDataBookingMuatan.data || [];
@@ -4992,15 +5129,48 @@ const GridBookingMuatan = () => {
 
   useEffect(() => {
     if (successApproved) {
-      setIsFirstLoad(true);
+      // Approval TIDAK mengubah urutan baris — cuma kolom statusnya. Versi lama
+      // memaksa setCurrentPage(1) + filters.page = 1, jadi grid selalu mental ke
+      // atas dan user kehilangan baris yang barusan di-approve.
+      //
+      // Cache window tetap dibuang (status approval di halaman lain sudah basi),
+      // tapi window-nya dibangun ulang dari halaman yang SEDANG dibuka, dan
+      // kursornya dijangkar BY-ID memakai pendingFocusIdRef — mekanisme fokus
+      // yang sama dengan onSuccess pasca-simpan.
+      const idJangkar =
+        Array.from(checkedRows)[0] ??
+        rows[selectedRowRef.current]?.id ??
+        rows[selectedRow]?.id ??
+        null;
+
+      const halamanSekarang = Math.max(1, currentPage);
+      const awalWindow = Math.max(1, halamanSekarang - WINDOW_SIZE + 1);
+
       setCheckedRows(new Set());
-      setCurrentPage(1);
       setHasMore(true);
-      resetBufferingCache();
+      resetBufferingCache(awalWindow);
+      setCurrentPage(halamanSekarang);
       setFilters((prevFilters) => ({
         ...prevFilters,
-        page: 1
+        page: halamanSekarang
       }));
+
+      if (idJangkar != null) {
+        pendingFocusIdRef.current = String(idJangkar);
+        // Row Combiner mengonsumsi pendingFocusIdRef sekali lalu membuangnya;
+        // refetch pasca-approval menjalankannya lagi, jadi id-nya di-assert
+        // ulang selama window settle lalu dibersihkan.
+        [120, 320, 620].forEach((d) =>
+          setTimeout(() => {
+            pendingFocusIdRef.current = String(idJangkar);
+          }, d)
+        );
+        setTimeout(() => {
+          if (String(pendingFocusIdRef.current) === String(idJangkar)) {
+            pendingFocusIdRef.current = null;
+          }
+        }, 950);
+      }
     }
   }, [successApproved]);
 
@@ -5131,6 +5301,12 @@ const GridBookingMuatan = () => {
                 icon: <FaPrint />,
                 onClick: () => handleReport(),
                 className: 'bg-cyan-500 hover:bg-cyan-700'
+              },
+              {
+                label: 'Export',
+                icon: <FaFileExport />,
+                onClick: () => handleExportExcel(),
+                className: 'bg-green-600 hover:bg-green-700'
               }
               // {
               //   label: 'Lainnya',
