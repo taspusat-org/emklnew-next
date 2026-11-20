@@ -1,5 +1,5 @@
 import { type ClassValue, clsx } from 'clsx';
-import { format } from 'date-fns';
+import { format, parse } from 'date-fns';
 import { twMerge } from 'tailwind-merge';
 import { GetParams } from './types/all.type';
 import { REQUIRED_FIELD } from '@/constants/validation';
@@ -83,6 +83,31 @@ export function formatDateToDDMMYYYY(dateString: any) {
 export const formatDateCalendar = (date: Date) => {
   return format(date, 'dd-MM-yyyy'); // Mengubah format menjadi yyyy-mm-dd
 };
+// Teks "dd-MM-yyyy" → Date untuk <Calendar>. Isian mask yang belum lengkap
+// (mis. "12-MM-YYYY" / "12-__-____") atau tanggal mustahil → undefined.
+// Jangan oper Invalid Date ke `defaultMonth`: kalendernya tampil kosong.
+export function parseCalendarDate(value?: string | null): Date | undefined {
+  if (!value || !/^\d{2}-\d{2}-\d{4}$/.test(value)) return undefined;
+  const parsed = parse(value, 'dd-MM-yyyy', new Date());
+  return isNaN(parsed.getTime()) ? undefined : parsed;
+}
+// Tahun 2 digit hasil ketikan diperluas ke 4 digit: 20 → 2020, 90 → 1990.
+// Pivot tetap di 50 (tidak bergantung tahun sekarang): 00–49 → 20xx (abad 21),
+// 50–99 → 19xx (abad 20).
+const TWO_DIGIT_YEAR_PIVOT = 50;
+
+// Teks "dd-MM-yy" (sisa mask "YY"/"yy"/"__" boleh menempel) → "dd-MM-yyyy".
+// undefined bila tahunnya belum tepat 2 digit, atau tanggal hasilnya mustahil
+// (mis. 29-02-90 → 1990 bukan kabisat) — biarkan isian apa adanya agar
+// validasi form yang menolaknya, jangan ditebak.
+export function expandTwoDigitYear(value?: string | null): string | undefined {
+  const match = value?.match(/^(\d{2}-\d{2}-)(\d{2})(?:yy|__)?$/i);
+  if (!match) return undefined;
+  const yy = Number(match[2]);
+  const year = (yy < TWO_DIGIT_YEAR_PIVOT ? 2000 : 1900) + yy;
+  const expanded = `${match[1]}${year}`;
+  return parseCalendarDate(expanded) ? expanded : undefined;
+}
 export function parseDateFromDDMMYYYY(str: string) {
   // str = "dd-mm-yyyy"
   const [day, month, year] = str.split('-');
