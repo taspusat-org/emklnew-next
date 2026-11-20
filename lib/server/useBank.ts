@@ -9,30 +9,16 @@ import {
 } from '../apis/bank.api';
 import { useAlert } from '../store/client/useAlert';
 import { useFormError } from '../hooks/formErrorContext';
+import { filterBank } from '../types/bank.type';
 
 export const useGetBank = (
   filters: {
-    filters?: {
-      nama?: string;
-      keterangan?: string;
-      keterangancoa?: string;
-      keterangancoagantung?: string;
-      textbank?: string;
-      text?: string;
-      formatpenerimaantext?: string;
-      formatpenerimaangantungtext?: string;
-      formatpengeluarangantungtext?: string;
-      formatpencairantext?: string;
-      formatrekappenerimaantext?: string;
-      formatrekappengeluarantext?: string;
-      created_at?: string;
-      updated_at?: string;
-    };
+    filters?: Partial<typeof filterBank>;
     page?: number;
     sortBy?: string;
     sortDirection?: string;
     limit?: number;
-    search?: string; // Kata kunci pencarian
+    search?: string;
   } = {},
   signal?: AbortSignal
 ) => {
@@ -40,9 +26,6 @@ export const useGetBank = (
     ['bank', filters],
     async () => await getBankFn(filters, signal),
     {
-      // Jangan fetch saat page < 1 (trik setCurrentPage(0) untuk paksa refetch
-      // saat scroll ke atas). Backend menolak page 0. cacheTime:0 menjamin
-      // refetch saat page kembali valid (windowed pagination).
       enabled: !signal?.aborted && (filters.page ?? 1) >= 1,
       staleTime: 0,
       cacheTime: 0
@@ -52,38 +35,54 @@ export const useGetBank = (
 
 export const useCreateBank = () => {
   const { setError } = useFormError();
-  const queryClient = useQueryClient();
   const { alert } = useAlert();
 
   return useMutation(storeBankFn, {
-    onSuccess: () => {
-      void queryClient.invalidateQueries('bank');
-      // toast({
-      //   title: 'Proses Berhasil',
-      //   description: 'Data Berhasil Ditambahkan'
-      // });
-    },
     onError: (error: AxiosError) => {
       const errorResponse = error.response?.data as IErrorResponse;
 
       if (errorResponse !== undefined) {
-        if (errorResponse.statusCode === 400) {
-          // Normalisasi pesan error agar konsisten array
+        const errorFields = errorResponse.message || [];
 
-          const messages = Array.isArray(errorResponse.message)
-            ? errorResponse.message
-            : [{ path: ['form'], message: errorResponse.message }];
-
-          messages.forEach((err) => {
-            const path = err.path?.[0] ?? 'form';
+        if (errorResponse.statusCode === 400 && Array.isArray(errorFields)) {
+          errorFields?.forEach((err: { path: string[]; message: string }) => {
+            const path = err.path[0];
             setError(path, err.message);
           });
         } else {
-          // toast({
-          //   variant: 'destructive',
-          //   title: errorResponse.message ?? 'Gagal',
-          //   description: 'Terjadi masalah dengan permintaan Anda'
-          // });
+          alert({
+            title: errorResponse.message ?? 'Gagal',
+            variant: 'danger',
+            submitText: 'OK'
+          });
+        }
+      }
+    }
+  });
+};
+
+export const useUpdateBank = () => {
+  const { setError } = useFormError();
+  const { alert } = useAlert();
+
+  return useMutation(updateBankFn, {
+    onError: (error: AxiosError) => {
+      const errorResponse = error.response?.data as IErrorResponse;
+
+      if (errorResponse !== undefined) {
+        const errorFields = errorResponse.message || [];
+
+        if (errorResponse.statusCode === 400 && Array.isArray(errorFields)) {
+          errorFields?.forEach((err: { path: string[]; message: string }) => {
+            const path = err.path[0];
+            setError(path, err.message);
+          });
+        } else {
+          alert({
+            title: errorResponse.message ?? 'Gagal',
+            variant: 'danger',
+            submitText: 'OK'
+          });
         }
       }
     }
@@ -93,68 +92,29 @@ export const useCreateBank = () => {
 export const useDeleteBank = () => {
   const { setError } = useFormError();
   const queryClient = useQueryClient();
+  const { alert } = useAlert();
 
   return useMutation(deleteBankFn, {
     onSuccess: () => {
       void queryClient.invalidateQueries('bank');
-      // toast({
-      //   title: 'Proses Berhasil.',
-      //   description: 'Data Berhasil Dihapus.'
-      // });
     },
     onError: (error: AxiosError) => {
       const errorResponse = error.response?.data as IErrorResponse;
+
       if (errorResponse !== undefined) {
         const errorFields = errorResponse.message || [];
+
         if (errorResponse.statusCode === 400 && Array.isArray(errorFields)) {
           errorFields?.forEach((err: { path: string[]; message: string }) => {
-            const path = err.path[0]; // Ambil path error pertama (misalnya 'nama', 'akuntansi_id')
-
-            setError(path, err.message); // Update error di context
-          });
-        } else {
-          // toast({
-          //   variant: 'destructive',
-          //   title: errorResponse.message ?? 'Gagal',
-          //   description: 'Terjadi masalah dengan permintaan Anda.'
-          // });
-        }
-      }
-    }
-  });
-};
-export const useUpdateBank = () => {
-  const { setError } = useFormError();
-  const queryClient = useQueryClient();
-
-  return useMutation(updateBankFn, {
-    onSuccess: () => {
-      void queryClient.invalidateQueries('bank');
-      // toast({
-      //   title: 'Proses Berhasil.',
-      //   description: 'Data Berhasil Diubah.'
-      // });
-    },
-    onError: (error: AxiosError) => {
-      const errorResponse = error.response?.data as IErrorResponse;
-
-      if (errorResponse !== undefined) {
-        if (errorResponse.statusCode === 400) {
-          // Normalisasi pesan error agar konsisten array
-          const messages = Array.isArray(errorResponse.message)
-            ? errorResponse.message
-            : [{ path: ['form'], message: errorResponse.message }];
-
-          messages.forEach((err) => {
-            const path = err.path?.[0] ?? 'form';
+            const path = err.path[0];
             setError(path, err.message);
           });
         } else {
-          // toast({
-          //   variant: 'destructive',
-          //   title: errorResponse.message ?? 'Gagal',
-          //   description: 'Terjadi masalah dengan permintaan Anda'
-          // });
+          alert({
+            title: errorResponse.message ?? 'Gagal',
+            variant: 'danger',
+            submitText: 'OK'
+          });
         }
       }
     }
