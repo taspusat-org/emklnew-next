@@ -31,7 +31,10 @@ const ALL_VALUE = '__ALL__';
 // ── Module-level cache: TIDAK reset saat komponen remount ──
 const configCache: { data: Record<string, any> | null } = { data: null };
 const optionsCache: Record<string, { value: string; label: string }[]> = {};
-// Simpan apakah default sudah pernah di-apply per columnKey (bertahan lintas remount)
+// Simpan apakah default sudah pernah di-apply per halaman+kolom (bertahan lintas
+// remount). Kuncinya WAJIB ikut slug: daftarbl, divisi dan jenisorderan sama-sama
+// memakai columnKey 'statusaktif', kalau hanya columnKey maka modul yang dibuka
+// belakangan ikut tertandai sudah apply dan default-nya tidak pernah terpasang.
 const appliedKeys: Record<string, boolean> = {};
 
 const FilterOptions: React.FC<SelectOptionProps> = ({
@@ -46,6 +49,7 @@ const FilterOptions: React.FC<SelectOptionProps> = ({
 }) => {
   const pathname = usePathname();
   const slug = pathname.split('/').pop() ?? '';
+  const appliedKey = `${slug}__${columnKey}`;
   const cacheKey = `${endpoint}__${JSON.stringify(
     filterBy
   )}__${valueKey}__${labelKey}`;
@@ -68,12 +72,12 @@ const FilterOptions: React.FC<SelectOptionProps> = ({
     onChangeRef.current = onChange;
   }, [onChange]);
 
-  // ── Apply default (hanya sekali per columnKey, tahan remount) ──
+  // ── Apply default (hanya sekali per halaman+kolom, tahan remount) ──
   const tryApplyDefault = (
     currentOptions: { value: string; label: string }[],
     defaultVal: string
   ) => {
-    if (appliedKeys[columnKey]) return; // sudah pernah apply → skip
+    if (appliedKeys[appliedKey]) return; // sudah pernah apply → skip
     if (selectedValue !== undefined) return; // parent controlled → skip
     if (!defaultVal || !currentOptions.length) return;
 
@@ -88,7 +92,7 @@ const FilterOptions: React.FC<SelectOptionProps> = ({
       );
 
     if (match) {
-      appliedKeys[columnKey] = true; // tandai sudah apply
+      appliedKeys[appliedKey] = true; // tandai sudah apply
       setLocalSelectedValue(match.value);
       onChangeRef.current(match.value); // emit value asli ke parent (bukan sentinel)
     }
@@ -190,7 +194,6 @@ const FilterOptions: React.FC<SelectOptionProps> = ({
       ? 'ALL'
       : options.find((o) => o.value === localSelectedValue)?.label ??
         localSelectedValue;
-  console.log('options selectedLabel', options, selectedLabel, endpoint);
   return (
     <Select value={localSelectedValue} onValueChange={handleChange}>
       <SelectTrigger className="filter-select z-[999999] mr-1 h-8 w-full cursor-pointer overflow-hidden rounded-none border border-input-border bg-background-input p-1 text-xs font-thin ">

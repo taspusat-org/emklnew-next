@@ -1,0 +1,17 @@
+{
+  "daftarbl": {
+    "statusaktif": "AKTIF"
+  },
+  "divisi": {
+    "statusaktif": "AKTIF"
+  },
+  "jenisorderan": {
+    "statusaktif": "AKTIF"
+  },
+  "bl-header": {
+    "statuspisahbl": ""
+  },
+  "estimasi-biaya-header": {
+    "statusppn": ""
+  }
+}
