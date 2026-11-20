@@ -3,7 +3,6 @@ import { Metadata } from 'next';
 import { headers } from 'next/headers';
 import { ReportProgressProvider } from '@/components/custom-ui/ReportProgressProvider';
 import { ReportPdfProvider } from '@/hooks/ReportPdfProvider';
-import Providers from '@/components/layout/providers';
 
 // Define metadata for the page
 export const metadata: Metadata = {
@@ -44,9 +43,7 @@ export default async function DashboardLayout({
   return (
     <AppSidebar ip={ip} initialDateTime={`${formattedDate} ${formattedTime}`}>
       <ReportProgressProvider>
-        <ReportPdfProvider>
-          <Providers>{children}</Providers>
-        </ReportPdfProvider>
+        <ReportPdfProvider>{children}</ReportPdfProvider>
       </ReportProgressProvider>
     </AppSidebar>
   );
