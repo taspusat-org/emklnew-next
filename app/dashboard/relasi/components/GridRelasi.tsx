@@ -123,6 +123,7 @@ const GridRelasi = () => {
   const [columnsWidth, setColumnsWidth] = useState<{ [key: string]: number }>(
     {}
   );
+  console.log('test');
   const [mode, setMode] = useState<string>('');
 
   const [dataGridKey, setDataGridKey] = useState(0);
