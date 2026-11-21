@@ -283,18 +283,7 @@ const GridTrado = () => {
 
             <div
               className="flex h-[50%] w-full cursor-pointer items-center justify-center"
-              onClick={() => {
-                discardPendingFilterUpdates();
-                setFilters({
-                  ...filters,
-                  search: '',
-                  filters: { ...emptyFilters }
-                }),
-                  setInputValue('');
-                setTimeout(() => {
-                  gridRef?.current?.selectCell({ rowIdx: 0, idx: 1 });
-                }, 0);
-              }}
+              onClick={() => handleClearAllFilters()}
             >
               <FaTimes className="bg-red-500 text-white" />
             </div>
@@ -835,8 +824,37 @@ const GridTrado = () => {
     setIsAllSelected(false);
     setRows([]);
     setCurrentPage(1);
+    setSelectedRow(0);
     resetBufferingCache();
   }, []);
+  // Tombol silang di header kolom NO: kosongkan SEMUA filter kolom + search
+  // global dan kembalikan grid ke keadaan awal load (window bulk 5 halaman,
+  // baris pertama terpilih). Wajib ikut resetBufferingCache/setRows/
+  // setCurrentPage: kalau hanya setFilters, shouldBulkFetch tetap false -> hanya
+  // 1 halaman (1-50) yang di-fetch, halaman 2-5 di cache masih berisi data
+  // hasil filter lama, dan tampilan filter (mis. opsi status) sudah kembali ALL
+  // padahal datanya belum.
+  const handleClearAllFilters = () => {
+    cancelPreviousRequest(abortControllerRef);
+    discardPendingFilterUpdates();
+    activeFilterInputRef.current = null;
+    pendingSelectIdxRef.current = 1;
+    setFilters((prev) => ({
+      ...prev,
+      search: '',
+      page: 1,
+      filters: { ...emptyFilters }
+    }));
+    setInputValue('');
+    setCheckedRows(new Set());
+    setIsAllSelected(false);
+    setRows([]);
+    setCurrentPage(1);
+    setSelectedRow(0);
+    selectedRowRef.current = 0;
+    setFetchedPages(new Set([1]));
+    resetBufferingCache();
+  };
 
   const { clearError } = useFormError();
 
@@ -1632,6 +1650,8 @@ const GridTrado = () => {
 
   const handleEdit = () => {
     if (selectedRow !== null) {
+      dispatch(setClearLookup(false));
+      fillFormFromRow(rows[selectedRow]);
       setPopOver(true);
       setMode('edit');
     }
@@ -1639,12 +1659,16 @@ const GridTrado = () => {
   const handleDelete = () => {
     if (selectedRow !== null) {
       setMode('delete');
+      dispatch(setClearLookup(false));
+      fillFormFromRow(rows[selectedRow]);
       setPopOver(true);
     }
   };
   const handleView = () => {
     if (selectedRow !== null) {
       setMode('view');
+      dispatch(setClearLookup(false));
+      fillFormFromRow(rows[selectedRow]);
       setPopOver(true);
     }
   };
@@ -2157,14 +2181,23 @@ const GridTrado = () => {
     }
   }, [isTransitioning, isFetching]);
 
+  // Isi form dari baris terpilih. Dipanggil SINKRON sebelum modal dibuka (bukan
+  // hanya lewat effect): LookUp membaca `lookupNama` (forms.getValues) saat
+  // mount, sedangkan effect baru jalan SETELAH commit dan forms.setValue tidak
+  // memicu re-render. Setelah Add, mode tetap 'add' sehingga effect melewati
+  // pengisian -> Edit langsung sesudah Add membuka LookUp dengan teks kosong.
+  const fillFormFromRow = (rowData?: ITrado) => {
+    if (!rowData) return;
+    forms.setValue('id', rowData?.id ?? '');
+    forms.setValue('nama', rowData?.nama);
+    forms.setValue('keterangan', rowData?.keterangan);
+    forms.setValue('statusaktif', String(rowData?.statusaktif ?? ''));
+    forms.setValue('statusaktif_text', rowData?.statusaktif_text ?? '');
+  };
+
   useEffect(() => {
-    const rowData = rows[selectedRow];
     if (selectedRow !== null && rows.length > 0 && mode !== 'add') {
-      forms.setValue('id', rowData?.id ?? '');
-      forms.setValue('nama', rowData?.nama);
-      forms.setValue('keterangan', rowData?.keterangan);
-      forms.setValue('statusaktif', String(rowData?.statusaktif ?? ''));
-      forms.setValue('statusaktif_text', rowData?.statusaktif_text ?? '');
+      fillFormFromRow(rows[selectedRow]);
     }
     // JANGAN forms.reset() saat mode 'add' di sini — effect ikut ter-trigger
     // saat `rows` di-update background fetch selama modal Add terbuka, dan akan
