@@ -2556,6 +2556,8 @@ const GridBank = () => {
   const handleEdit = () => {
     if (selectedRow !== null) {
       const rowData = rows[selectedRow];
+      dispatch(setClearLookup(false));
+      fillFormFromRow(rows[selectedRow]);
       setPopOver(true);
       setMode('edit');
     }
@@ -2563,12 +2565,16 @@ const GridBank = () => {
   const handleDelete = () => {
     if (selectedRow !== null) {
       setMode('delete');
+      dispatch(setClearLookup(false));
+      fillFormFromRow(rows[selectedRow]);
       setPopOver(true);
     }
   };
   const handleView = () => {
     if (selectedRow !== null) {
       setMode('view');
+      dispatch(setClearLookup(false));
+      fillFormFromRow(rows[selectedRow]);
       setPopOver(true);
     }
   };
@@ -3188,78 +3194,84 @@ const GridBank = () => {
     }
   }, [isTransitioning, isFetching]);
 
+  // Isi form dari baris terpilih. Dipanggil SINKRON sebelum modal dibuka (bukan
+  // hanya lewat effect): LookUp membaca `lookupNama` (forms.getValues) saat
+  // mount, sedangkan effect baru jalan SETELAH commit dan forms.setValue tidak
+  // memicu re-render. Setelah Add, mode tetap 'add' sehingga effect melewati
+  // pengisian -> Edit langsung sesudah Add membuka LookUp dengan teks kosong.
+  const fillFormFromRow = (rowData?: IBank) => {
+    if (!rowData) return;
+    forms.setValue('id', String(rowData?.id ?? ''));
+    forms.setValue('nama', rowData?.nama);
+    forms.setValue('keterangan', rowData?.keterangan);
+
+    forms.setValue('coa', rowData?.coa);
+    forms.setValue('keterangancoa', rowData?.keterangancoa);
+
+    forms.setValue('coagantung', rowData?.coagantung);
+    forms.setValue('keterangancoagantung', rowData?.keterangancoagantung);
+
+    forms.setValue('statusbank', rowData?.statusbank ?? '');
+    forms.setValue('statusbank_text', rowData?.statusbank_text);
+
+    forms.setValue('statusaktif', rowData?.statusaktif ?? '');
+    forms.setValue('text', rowData?.text);
+
+    forms.setValue('statusdefault', rowData?.statusdefault ?? '');
+    forms.setValue('statusdefault_text', rowData?.statusdefault_text);
+
+    forms.setValue('formatpenerimaan', String(rowData?.formatpenerimaan ?? ''));
+    forms.setValue('formatpenerimaantext', rowData?.formatpenerimaantext);
+
+    forms.setValue(
+      'formatpengeluaran',
+      String(rowData?.formatpengeluaran ?? '')
+    );
+    forms.setValue('formatpengeluarantext', rowData?.formatpengeluarantext);
+
+    forms.setValue(
+      'formatpenerimaangantung',
+      String(rowData?.formatpenerimaangantung ?? '')
+    );
+    forms.setValue(
+      'formatpenerimaangantungtext',
+      rowData?.formatpenerimaangantungtext
+    );
+
+    forms.setValue(
+      'formatpengeluarangantung',
+      String(rowData?.formatpengeluarangantung ?? '')
+    );
+    forms.setValue(
+      'formatpengeluarangantungtext',
+      rowData?.formatpengeluarangantungtext
+    );
+
+    forms.setValue('formatpencairan', String(rowData?.formatpencairan ?? ''));
+    forms.setValue('formatpencairantext', rowData?.formatpencairantext);
+
+    forms.setValue(
+      'formatrekappenerimaan',
+      String(rowData?.formatrekappenerimaan ?? '')
+    );
+    forms.setValue(
+      'formatrekappenerimaantext',
+      rowData?.formatrekappenerimaantext
+    );
+
+    forms.setValue(
+      'formatrekappengeluaran',
+      String(rowData?.formatrekappengeluaran ?? '')
+    );
+    forms.setValue(
+      'formatrekappengeluarantext',
+      rowData?.formatrekappengeluarantext
+    );
+  };
+
   useEffect(() => {
-    const rowData = rows[selectedRow];
     if (selectedRow !== null && rows.length > 0 && mode !== 'add') {
-      forms.setValue('id', String(rowData?.id ?? ''));
-      forms.setValue('nama', rowData?.nama);
-      forms.setValue('keterangan', rowData?.keterangan);
-
-      forms.setValue('coa', rowData?.coa);
-      forms.setValue('keterangancoa', rowData?.keterangancoa);
-
-      forms.setValue('coagantung', rowData?.coagantung);
-      forms.setValue('keterangancoagantung', rowData?.keterangancoagantung);
-
-      forms.setValue('statusbank', rowData?.statusbank ?? '');
-      forms.setValue('statusbank_text', rowData?.statusbank_text);
-
-      forms.setValue('statusaktif', rowData?.statusaktif ?? '');
-      forms.setValue('text', rowData?.text);
-
-      forms.setValue('statusdefault', rowData?.statusdefault ?? '');
-      forms.setValue('statusdefault_text', rowData?.statusdefault_text);
-
-      forms.setValue(
-        'formatpenerimaan',
-        String(rowData?.formatpenerimaan ?? '')
-      );
-      forms.setValue('formatpenerimaantext', rowData?.formatpenerimaantext);
-
-      forms.setValue(
-        'formatpengeluaran',
-        String(rowData?.formatpengeluaran ?? '')
-      );
-      forms.setValue('formatpengeluarantext', rowData?.formatpengeluarantext);
-
-      forms.setValue(
-        'formatpenerimaangantung',
-        String(rowData?.formatpenerimaangantung ?? '')
-      );
-      forms.setValue(
-        'formatpenerimaangantungtext',
-        rowData?.formatpenerimaangantungtext
-      );
-
-      forms.setValue(
-        'formatpengeluarangantung',
-        String(rowData?.formatpengeluarangantung ?? '')
-      );
-      forms.setValue(
-        'formatpengeluarangantungtext',
-        rowData?.formatpengeluarangantungtext
-      );
-
-      forms.setValue('formatpencairan', String(rowData?.formatpencairan ?? ''));
-      forms.setValue('formatpencairantext', rowData?.formatpencairantext);
-
-      forms.setValue(
-        'formatrekappenerimaan',
-        String(rowData?.formatrekappenerimaan ?? '')
-      );
-      forms.setValue(
-        'formatrekappenerimaantext',
-        rowData?.formatrekappenerimaantext
-      );
-
-      forms.setValue(
-        'formatrekappengeluaran',
-        String(rowData?.formatrekappengeluaran ?? '')
-      );
-      forms.setValue(
-        'formatrekappengeluarantext',
-        rowData?.formatrekappengeluarantext
-      );
+      fillFormFromRow(rows[selectedRow]);
     }
   }, [forms, selectedRow, rows, mode]);
 

@@ -6051,6 +6051,8 @@ const GridShipper = () => {
   const handleEdit = () => {
     if (selectedRow !== null) {
       const rowData = rows[selectedRow];
+      dispatch(setClearLookup(false));
+      fillFormFromRow(rows[selectedRow]);
       setPopOver(true);
       setMode('edit');
     }
@@ -6058,12 +6060,16 @@ const GridShipper = () => {
   const handleDelete = () => {
     if (selectedRow !== null) {
       setMode('delete');
+      dispatch(setClearLookup(false));
+      fillFormFromRow(rows[selectedRow]);
       setPopOver(true);
     }
   };
   const handleView = () => {
     if (selectedRow !== null) {
       setMode('view');
+      dispatch(setClearLookup(false));
+      fillFormFromRow(rows[selectedRow]);
       setPopOver(true);
     }
   };
@@ -6636,98 +6642,98 @@ const GridShipper = () => {
     }
   }, [isTransitioning, isFetching]);
 
+  // Isi form dari baris terpilih. Dipanggil SINKRON sebelum modal dibuka (bukan
+  // hanya lewat effect): LookUp membaca `lookupNama` (forms.getValues) saat
+  // mount, sedangkan effect baru jalan SETELAH commit dan forms.setValue tidak
+  // memicu re-render. Setelah Add, mode tetap 'add' sehingga effect melewati
+  // pengisian -> Edit langsung sesudah Add membuka LookUp dengan teks kosong.
+  const fillFormFromRow = (rowData?: IShipper) => {
+    if (!rowData) return;
+    forms.setValue('id', rowData?.id ?? '');
+
+    forms.setValue('statusrelasi', String(rowData?.statusrelasi ?? ''));
+    forms.setValue('statusrelasi_text', rowData?.statusrelasi_text);
+
+    forms.setValue('relasi_id', String(rowData?.relasi_id ?? ''));
+    forms.setValue('relasi_id_text', rowData?.relasi_id_text);
+    forms.setValue('nama', rowData?.nama);
+    forms.setValue('keterangan', rowData?.keterangan);
+    forms.setValue('contactperson', rowData?.contactperson);
+    forms.setValue('alamat', rowData?.alamat);
+    forms.setValue('coa', rowData?.coa);
+    forms.setValue('coapiutang', rowData?.coapiutang);
+    forms.setValue('coahutang', rowData?.coahutang);
+    forms.setValue('kota', rowData?.kota);
+    forms.setValue('kodepos', rowData?.kodepos);
+    forms.setValue('telp', rowData?.telp);
+    forms.setValue('email', rowData?.email);
+    forms.setValue('fax', rowData?.fax);
+    forms.setValue('web', rowData?.web);
+    forms.setValue('creditlimit', rowData?.creditlimit ?? '');
+    forms.setValue('creditterm', rowData?.creditterm ?? '');
+    forms.setValue('credittermplus', rowData?.credittermplus ?? '');
+    forms.setValue('npwp', rowData?.npwp);
+    forms.setValue('coagiro', rowData?.coagiro);
+    forms.setValue('ppn', rowData?.ppn ?? '');
+    forms.setValue('titipke', rowData?.titipke);
+    forms.setValue('ppnbatalmuat', rowData?.ppnbatalmuat ?? '');
+    forms.setValue('grup', rowData?.grup);
+    forms.setValue('formatdeliveryreport', rowData?.formatdeliveryreport ?? '');
+    forms.setValue('comodity', rowData?.comodity);
+    forms.setValue('namashippercetak', rowData?.namashippercetak);
+    forms.setValue('formatcetak', rowData?.formatcetak ?? '');
+
+    forms.setValue('marketing_id', String(rowData?.marketing_id ?? ''));
+    forms.setValue('marketing_id_text', rowData?.marketing_id_text);
+    forms.setValue('blok', rowData?.blok);
+    forms.setValue('nomor', rowData?.nomor);
+    forms.setValue('rt', rowData?.rt);
+    forms.setValue('rw', rowData?.rw);
+    forms.setValue('kelurahan', rowData?.kelurahan);
+    forms.setValue('kabupaten', rowData?.kabupaten);
+    forms.setValue('kecamatan', rowData?.kecamatan);
+    forms.setValue('propinsi', rowData?.propinsi);
+    forms.setValue('isdpp10psn', rowData?.isdpp10psn ?? '');
+    forms.setValue('usertracing', rowData?.usertracing);
+    forms.setValue('passwordtracing', rowData?.passwordtracing);
+    forms.setValue('kodeprospek', rowData?.kodeprospek);
+    forms.setValue('namashipperprospek', rowData?.namashipperprospek);
+    forms.setValue('emaildelay', rowData?.emaildelay);
+    forms.setValue('keterangan1barisinvoice', rowData?.keterangan1barisinvoice);
+    forms.setValue('nik', rowData?.nik);
+    forms.setValue('namaparaf', rowData?.namaparaf);
+    forms.setValue('saldopiutang', rowData?.saldopiutang ?? '');
+    forms.setValue(
+      'keteranganshipperjobminus',
+      rowData?.keteranganshipperjobminus
+    );
+    forms.setValue(
+      'tglemailshipperjobminus',
+      rowData?.tglemailshipperjobminus ?? ''
+    );
+    forms.setValue('tgllahir', rowData?.tgllahir ?? '');
+
+    forms.setValue('idshipperasal', String(rowData?.idshipperasal ?? ''));
+    forms.setValue('idshipperasal_text', rowData?.idshipperasal_text);
+    forms.setValue('initial', rowData?.initial);
+    forms.setValue('tipe', rowData?.tipe);
+    forms.setValue('idtipe', rowData?.idtipe ?? '');
+    forms.setValue('idinitial', rowData?.idinitial ?? '');
+    forms.setValue('nshipperprospek', rowData?.nshipperprospek);
+
+    forms.setValue('parentshipper_id', String(rowData?.parentshipper_id ?? ''));
+    forms.setValue('parentshipper_id_text', rowData?.parentshipper_id_text);
+    forms.setValue('npwpnik', rowData?.npwpnik);
+    forms.setValue('nitku', rowData?.nitku);
+    forms.setValue('kodepajak', rowData?.kodepajak);
+
+    forms.setValue('statusaktif', String(rowData?.statusaktif ?? ''));
+    forms.setValue('statusaktif_text', rowData?.statusaktif_text);
+  };
+
   useEffect(() => {
-    const rowData = rows[selectedRow];
     if (selectedRow !== null && rows.length > 0 && mode !== 'add') {
-      forms.setValue('id', rowData?.id ?? '');
-
-      forms.setValue('statusrelasi', String(rowData?.statusrelasi ?? ''));
-      forms.setValue('statusrelasi_text', rowData?.statusrelasi_text);
-
-      forms.setValue('relasi_id', String(rowData?.relasi_id ?? ''));
-      forms.setValue('relasi_id_text', rowData?.relasi_id_text);
-      forms.setValue('nama', rowData?.nama);
-      forms.setValue('keterangan', rowData?.keterangan);
-      forms.setValue('contactperson', rowData?.contactperson);
-      forms.setValue('alamat', rowData?.alamat);
-      forms.setValue('coa', rowData?.coa);
-      forms.setValue('coapiutang', rowData?.coapiutang);
-      forms.setValue('coahutang', rowData?.coahutang);
-      forms.setValue('kota', rowData?.kota);
-      forms.setValue('kodepos', rowData?.kodepos);
-      forms.setValue('telp', rowData?.telp);
-      forms.setValue('email', rowData?.email);
-      forms.setValue('fax', rowData?.fax);
-      forms.setValue('web', rowData?.web);
-      forms.setValue('creditlimit', rowData?.creditlimit ?? '');
-      forms.setValue('creditterm', rowData?.creditterm ?? '');
-      forms.setValue('credittermplus', rowData?.credittermplus ?? '');
-      forms.setValue('npwp', rowData?.npwp);
-      forms.setValue('coagiro', rowData?.coagiro);
-      forms.setValue('ppn', rowData?.ppn ?? '');
-      forms.setValue('titipke', rowData?.titipke);
-      forms.setValue('ppnbatalmuat', rowData?.ppnbatalmuat ?? '');
-      forms.setValue('grup', rowData?.grup);
-      forms.setValue(
-        'formatdeliveryreport',
-        rowData?.formatdeliveryreport ?? ''
-      );
-      forms.setValue('comodity', rowData?.comodity);
-      forms.setValue('namashippercetak', rowData?.namashippercetak);
-      forms.setValue('formatcetak', rowData?.formatcetak ?? '');
-
-      forms.setValue('marketing_id', String(rowData?.marketing_id ?? ''));
-      forms.setValue('marketing_id_text', rowData?.marketing_id_text);
-      forms.setValue('blok', rowData?.blok);
-      forms.setValue('nomor', rowData?.nomor);
-      forms.setValue('rt', rowData?.rt);
-      forms.setValue('rw', rowData?.rw);
-      forms.setValue('kelurahan', rowData?.kelurahan);
-      forms.setValue('kabupaten', rowData?.kabupaten);
-      forms.setValue('kecamatan', rowData?.kecamatan);
-      forms.setValue('propinsi', rowData?.propinsi);
-      forms.setValue('isdpp10psn', rowData?.isdpp10psn ?? '');
-      forms.setValue('usertracing', rowData?.usertracing);
-      forms.setValue('passwordtracing', rowData?.passwordtracing);
-      forms.setValue('kodeprospek', rowData?.kodeprospek);
-      forms.setValue('namashipperprospek', rowData?.namashipperprospek);
-      forms.setValue('emaildelay', rowData?.emaildelay);
-      forms.setValue(
-        'keterangan1barisinvoice',
-        rowData?.keterangan1barisinvoice
-      );
-      forms.setValue('nik', rowData?.nik);
-      forms.setValue('namaparaf', rowData?.namaparaf);
-      forms.setValue('saldopiutang', rowData?.saldopiutang ?? '');
-      forms.setValue(
-        'keteranganshipperjobminus',
-        rowData?.keteranganshipperjobminus
-      );
-      forms.setValue(
-        'tglemailshipperjobminus',
-        rowData?.tglemailshipperjobminus ?? ''
-      );
-      forms.setValue('tgllahir', rowData?.tgllahir ?? '');
-
-      forms.setValue('idshipperasal', String(rowData?.idshipperasal ?? ''));
-      forms.setValue('idshipperasal_text', rowData?.idshipperasal_text);
-      forms.setValue('initial', rowData?.initial);
-      forms.setValue('tipe', rowData?.tipe);
-      forms.setValue('idtipe', rowData?.idtipe ?? '');
-      forms.setValue('idinitial', rowData?.idinitial ?? '');
-      forms.setValue('nshipperprospek', rowData?.nshipperprospek);
-
-      forms.setValue(
-        'parentshipper_id',
-        String(rowData?.parentshipper_id ?? '')
-      );
-      forms.setValue('parentshipper_id_text', rowData?.parentshipper_id_text);
-      forms.setValue('npwpnik', rowData?.npwpnik);
-      forms.setValue('nitku', rowData?.nitku);
-      forms.setValue('kodepajak', rowData?.kodepajak);
-
-      forms.setValue('statusaktif', String(rowData?.statusaktif ?? ''));
-      forms.setValue('statusaktif_text', rowData?.statusaktif_text);
+      fillFormFromRow(rows[selectedRow]);
     }
     // JANGAN forms.reset() saat mode 'add' di sini. Effect ini ikut ter-trigger
     // setiap kali `rows` di-update background fetch (bulk/prefetch) selama modal

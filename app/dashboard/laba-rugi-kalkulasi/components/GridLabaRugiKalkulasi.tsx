@@ -321,20 +321,7 @@ const GridLabaRugiKalkulasi = () => {
               </div>
               <div
                 className="flex cursor-pointer items-center justify-center"
-                onClick={() => {
-                  discardPendingFilterUpdates();
-                  setFilters({
-                    ...filters,
-                    search: '',
-                    filters: {
-                      ...filterLabaRugiKalkulasi
-                    }
-                  }),
-                    setInputValue('');
-                  setTimeout(() => {
-                    gridRef?.current?.selectCell({ rowIdx: 0, idx: 1 });
-                  }, 0);
-                }}
+                onClick={() => handleClearAllFilters()}
               >
                 <FaTimes className="bg-red-500 text-white" />
               </div>
@@ -1608,8 +1595,39 @@ const GridLabaRugiKalkulasi = () => {
     setIsAllSelected(false);
     setRows([]);
     setCurrentPage(1);
+    setSelectedRow(0);
     resetBufferingCache();
   }, []);
+  // Tombol silang di header kolom NO: kosongkan SEMUA filter kolom + search
+  // global dan kembalikan grid ke keadaan awal load (window bulk 5 halaman,
+  // baris pertama terpilih). Wajib ikut resetBufferingCache/setRows/
+  // setCurrentPage: kalau hanya setFilters, shouldBulkFetch tetap false -> hanya
+  // 1 halaman (1-50) yang di-fetch, halaman 2-5 di cache masih berisi data
+  // hasil filter lama, dan tampilan filter (mis. opsi status) sudah kembali ALL
+  // padahal datanya belum.
+  const handleClearAllFilters = () => {
+    cancelPreviousRequest(abortControllerRef);
+    discardPendingFilterUpdates();
+    activeFilterInputRef.current = null;
+    pendingSelectIdxRef.current = 1;
+    setFilters((prev) => ({
+      ...prev,
+      search: '',
+      page: 1,
+      filters: {
+        ...filterLabaRugiKalkulasi
+      }
+    }));
+    setInputValue('');
+    setCheckedRows(new Set());
+    setIsAllSelected(false);
+    setRows([]);
+    setCurrentPage(1);
+    setSelectedRow(0);
+    selectedRowRef.current = 0;
+    setFetchedPages(new Set([1]));
+    resetBufferingCache();
+  };
 
   const { clearError } = useFormError();
 
@@ -2491,6 +2509,8 @@ const GridLabaRugiKalkulasi = () => {
   const handleEdit = () => {
     if (selectedRow !== null) {
       const rowData = rows[selectedRow];
+      dispatch(setClearLookup(false));
+      fillFormFromRow(rows[selectedRow]);
       setPopOver(true);
       setMode('edit');
     }
@@ -2498,12 +2518,16 @@ const GridLabaRugiKalkulasi = () => {
   const handleDelete = () => {
     if (selectedRow !== null) {
       setMode('delete');
+      dispatch(setClearLookup(false));
+      fillFormFromRow(rows[selectedRow]);
       setPopOver(true);
     }
   };
   const handleView = () => {
     if (selectedRow !== null) {
       setMode('view');
+      dispatch(setClearLookup(false));
+      fillFormFromRow(rows[selectedRow]);
       setPopOver(true);
     }
   };
@@ -3120,43 +3144,52 @@ const GridLabaRugiKalkulasi = () => {
     }
   }, [isTransitioning, isFetching]);
 
+  // Isi form dari baris terpilih. Dipanggil SINKRON sebelum modal dibuka (bukan
+  // hanya lewat effect): LookUp membaca `lookupNama` (forms.getValues) saat
+  // mount, sedangkan effect baru jalan SETELAH commit dan forms.setValue tidak
+  // memicu re-render. Setelah Add, mode tetap 'add' sehingga effect melewati
+  // pengisian -> Edit langsung sesudah Add membuka LookUp dengan teks kosong.
+  const fillFormFromRow = (rowData?: ILabaRugiKalkulasi) => {
+    if (!rowData) return;
+    // forms.setValue('id', rowData?.id ?? '');
+    forms.setValue('periode', rowData?.periode || '');
+    forms.setValue('estkomisimarketing', rowData?.estkomisimarketing || '');
+    forms.setValue('komisimarketing', rowData?.komisimarketing || '');
+    forms.setValue('biayakantorpusat', rowData?.biayakantorpusat || '');
+    forms.setValue('biayatour', rowData?.biayatour || '');
+    forms.setValue('gajidireksi', rowData?.gajidireksi || '');
+    forms.setValue('estkomisikacab', rowData?.estkomisikacab || '');
+    forms.setValue('biayabonustriwulan', rowData?.biayabonustriwulan || '');
+    forms.setValue('estkomisimarketing2', rowData?.estkomisimarketing2 || '');
+    forms.setValue(
+      'estkomisikacabcabang1',
+      rowData?.estkomisikacabcabang1 || ''
+    );
+    forms.setValue(
+      'estkomisikacabcabang2',
+      rowData?.estkomisikacabcabang2 || ''
+    );
+    forms.setValue(
+      'statusfinalkomisimarketing',
+      rowData?.statusfinalkomisimarketing || ''
+    );
+    forms.setValue(
+      'statusfinalkomisimarketing_text',
+      rowData?.statusfinalkomisimarketing_text || ''
+    );
+    forms.setValue(
+      'statusfinalbonustriwulan',
+      rowData?.statusfinalbonustriwulan || ''
+    );
+    forms.setValue(
+      'statusfinalbonustriwulan_text',
+      rowData?.statusfinalbonustriwulan_text || ''
+    );
+  };
+
   useEffect(() => {
-    const rowData = rows[selectedRow];
     if (selectedRow !== null && rows.length > 0 && mode !== 'add') {
-      // forms.setValue('id', rowData?.id ?? '');
-      forms.setValue('periode', rowData?.periode || '');
-      forms.setValue('estkomisimarketing', rowData?.estkomisimarketing || '');
-      forms.setValue('komisimarketing', rowData?.komisimarketing || '');
-      forms.setValue('biayakantorpusat', rowData?.biayakantorpusat || '');
-      forms.setValue('biayatour', rowData?.biayatour || '');
-      forms.setValue('gajidireksi', rowData?.gajidireksi || '');
-      forms.setValue('estkomisikacab', rowData?.estkomisikacab || '');
-      forms.setValue('biayabonustriwulan', rowData?.biayabonustriwulan || '');
-      forms.setValue('estkomisimarketing2', rowData?.estkomisimarketing2 || '');
-      forms.setValue(
-        'estkomisikacabcabang1',
-        rowData?.estkomisikacabcabang1 || ''
-      );
-      forms.setValue(
-        'estkomisikacabcabang2',
-        rowData?.estkomisikacabcabang2 || ''
-      );
-      forms.setValue(
-        'statusfinalkomisimarketing',
-        rowData?.statusfinalkomisimarketing || ''
-      );
-      forms.setValue(
-        'statusfinalkomisimarketing_text',
-        rowData?.statusfinalkomisimarketing_text || ''
-      );
-      forms.setValue(
-        'statusfinalbonustriwulan',
-        rowData?.statusfinalbonustriwulan || ''
-      );
-      forms.setValue(
-        'statusfinalbonustriwulan_text',
-        rowData?.statusfinalbonustriwulan_text || ''
-      );
+      fillFormFromRow(rows[selectedRow]);
     }
   }, [forms, selectedRow, rows, mode]);
 

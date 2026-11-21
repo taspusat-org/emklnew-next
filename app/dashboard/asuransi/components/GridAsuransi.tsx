@@ -3156,6 +3156,8 @@ const GridAsuransi = () => {
   const handleEdit = () => {
     if (selectedRow !== null) {
       const rowData = rows[selectedRow];
+      dispatch(setClearLookup(false));
+      fillFormFromRow(rows[selectedRow]);
       setPopOver(true);
       setMode('edit');
     }
@@ -3163,12 +3165,16 @@ const GridAsuransi = () => {
   const handleDelete = () => {
     if (selectedRow !== null) {
       setMode('delete');
+      dispatch(setClearLookup(false));
+      fillFormFromRow(rows[selectedRow]);
       setPopOver(true);
     }
   };
   const handleView = () => {
     if (selectedRow !== null) {
       setMode('view');
+      dispatch(setClearLookup(false));
+      fillFormFromRow(rows[selectedRow]);
       setPopOver(true);
     }
   };
@@ -3788,36 +3794,45 @@ const GridAsuransi = () => {
     }
   }, [isTransitioning, isFetching]);
 
-  useEffect(() => {
-    const rowData = rows[selectedRow];
-    if (selectedRow !== null && rows.length > 0 && mode !== 'add') {
-      forms.setValue('id', rowData?.id ?? '');
-      forms.setValue('nama', rowData?.nama);
-      forms.setValue('keterangan', rowData?.keterangan);
-      forms.setValue('contactperson', rowData?.contactperson);
-      forms.setValue('alamat', rowData?.alamat);
-      forms.setValue('kota', rowData?.kota);
-      forms.setValue('kodepos', rowData?.kodepos);
-      forms.setValue('telp', rowData?.telp);
-      forms.setValue('email', rowData?.email);
-      forms.setValue('fax', rowData?.fax);
-      forms.setValue('web', rowData?.web);
-      forms.setValue('ratemodal', rowData?.ratemodal);
-      forms.setValue('ratejual', rowData?.ratejual);
-      forms.setValue('npwp', rowData?.npwp);
-      forms.setValue('nominalasuransi', rowData?.nominalasuransi);
-      forms.setValue('rateopendoor', rowData?.rateopendoor);
-      forms.setValue('adminbiaya', rowData?.adminbiaya);
-      forms.setValue('admintagih', rowData?.admintagih);
-      forms.setValue('batas1', rowData?.batas1);
-      forms.setValue('batas2', rowData?.batas2);
-      forms.setValue('batas3', rowData?.batas3);
-      forms.setValue('materai1', rowData?.materai1);
-      forms.setValue('materai2', rowData?.materai2);
-      forms.setValue('materai3', rowData?.materai3);
+  // Isi form dari baris terpilih. Dipanggil SINKRON sebelum modal dibuka (bukan
+  // hanya lewat effect): LookUp membaca `lookupNama` (forms.getValues) saat
+  // mount, sedangkan effect baru jalan SETELAH commit dan forms.setValue tidak
+  // memicu re-render. Setelah Add, mode tetap 'add' sehingga effect melewati
+  // pengisian -> Edit langsung sesudah Add membuka LookUp dengan teks kosong.
+  const fillFormFromRow = (rowData?: IAsuransi) => {
+    if (!rowData) return;
+    forms.setValue('id', rowData?.id ?? '');
+    forms.setValue('nama', rowData?.nama);
+    forms.setValue('keterangan', rowData?.keterangan);
+    forms.setValue('contactperson', rowData?.contactperson);
+    forms.setValue('alamat', rowData?.alamat);
+    forms.setValue('kota', rowData?.kota);
+    forms.setValue('kodepos', rowData?.kodepos);
+    forms.setValue('telp', rowData?.telp);
+    forms.setValue('email', rowData?.email);
+    forms.setValue('fax', rowData?.fax);
+    forms.setValue('web', rowData?.web);
+    forms.setValue('ratemodal', rowData?.ratemodal);
+    forms.setValue('ratejual', rowData?.ratejual);
+    forms.setValue('npwp', rowData?.npwp);
+    forms.setValue('nominalasuransi', rowData?.nominalasuransi);
+    forms.setValue('rateopendoor', rowData?.rateopendoor);
+    forms.setValue('adminbiaya', rowData?.adminbiaya);
+    forms.setValue('admintagih', rowData?.admintagih);
+    forms.setValue('batas1', rowData?.batas1);
+    forms.setValue('batas2', rowData?.batas2);
+    forms.setValue('batas3', rowData?.batas3);
+    forms.setValue('materai1', rowData?.materai1);
+    forms.setValue('materai2', rowData?.materai2);
+    forms.setValue('materai3', rowData?.materai3);
 
-      forms.setValue('statusaktif', rowData?.statusaktif ?? '');
-      forms.setValue('text', rowData?.text ?? '');
+    forms.setValue('statusaktif', rowData?.statusaktif ?? '');
+    forms.setValue('text', rowData?.text ?? '');
+  };
+
+  useEffect(() => {
+    if (selectedRow !== null && rows.length > 0 && mode !== 'add') {
+      fillFormFromRow(rows[selectedRow]);
     }
   }, [forms, selectedRow, rows, mode]);
 

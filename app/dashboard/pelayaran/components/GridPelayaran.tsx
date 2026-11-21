@@ -340,26 +340,7 @@ const GridPelayaran = () => {
 
             <div
               className="flex h-[50%] w-full cursor-pointer items-center justify-center"
-              onClick={() => {
-                discardPendingFilterUpdates();
-                setFilters({
-                  ...filters,
-                  search: '',
-                  filters: {
-                    relasi_id_text: '',
-                    nama: '',
-                    keterangan: '',
-                    created_at: '',
-                    updated_at: '',
-                    statusaktif: '',
-                    modifiedby: ''
-                  }
-                }),
-                  setInputValue('');
-                setTimeout(() => {
-                  gridRef?.current?.selectCell({ rowIdx: 0, idx: 1 });
-                }, 0);
-              }}
+              onClick={() => handleClearAllFilters()}
             >
               <FaTimes className="bg-red-500 text-white" />
             </div>
@@ -979,8 +960,47 @@ const GridPelayaran = () => {
     setIsAllSelected(false);
     setRows([]);
     setCurrentPage(1);
+    setSelectedRow(0);
+    setFetchedPages(new Set([1]));
     resetBufferingCache();
   }, []);
+
+  // Tombol silang di header kolom NO: kosongkan SEMUA filter kolom + search
+  // global dan kembalikan grid ke keadaan awal load (window bulk 5 halaman,
+  // baris pertama terpilih). Sebelumnya handler ini hanya setFilters tanpa
+  // resetBufferingCache/setRows/setCurrentPage, sehingga shouldBulkFetch tetap
+  // false: hanya 1 halaman (1-50) yang di-fetch, halaman 2-5 di cache masih
+  // berisi data hasil filter lama, dan tampilan filter (mis. opsi status) sudah
+  // kembali ALL padahal datanya belum.
+  const handleClearAllFilters = () => {
+    cancelPreviousRequest(abortControllerRef);
+    discardPendingFilterUpdates();
+    activeFilterInputRef.current = null;
+    pendingSelectIdxRef.current = 1;
+    setFilters((prev) => ({
+      ...prev,
+      search: '',
+      page: 1,
+      filters: {
+        relasi_id_text: '',
+        nama: '',
+        keterangan: '',
+        created_at: '',
+        updated_at: '',
+        statusaktif: '',
+        modifiedby: ''
+      }
+    }));
+    setInputValue('');
+    setCheckedRows(new Set());
+    setIsAllSelected(false);
+    setRows([]);
+    setCurrentPage(1);
+    setSelectedRow(0);
+    selectedRowRef.current = 0;
+    setFetchedPages(new Set([1]));
+    resetBufferingCache();
+  };
 
   const { clearError } = useFormError();
 
@@ -1868,25 +1888,38 @@ const GridPelayaran = () => {
     }
   };
 
-  const handleEdit = () => {
-    if (selectedRow !== null) {
-      const rowData = rows[selectedRow];
-      setPopOver(true);
-      setMode('edit');
-    }
+  // Isi form dari baris terpilih. Dipanggil SINKRON sebelum modal dibuka (bukan
+  // hanya lewat effect): LookUp membaca `lookupNama` (forms.getValues) saat
+  // mount, sedangkan effect baru jalan SETELAH commit dan forms.setValue tidak
+  // memicu re-render. Setelah Add mode tetap 'add' sehingga effect melewati
+  // pengisian -> Edit langsung sesudah Add membuka LookUp dengan teks kosong.
+  const fillFormFromRow = (rowData?: IPelayaran) => {
+    if (!rowData) return;
+    forms.setValue('id', rowData.id ?? '');
+
+    forms.setValue('relasi_id', String(rowData.relasi_id ?? ''));
+    forms.setValue('relasi_id_text', rowData.relasi_id_text ?? '');
+    forms.setValue('nama', rowData.nama);
+    forms.setValue('keterangan', rowData.keterangan);
+
+    forms.setValue('statusaktif', String(rowData.statusaktif ?? ''));
+    forms.setValue('statusaktif_text', rowData.statusaktif_text ?? '');
   };
-  const handleDelete = () => {
-    if (selectedRow !== null) {
-      setMode('delete');
-      setPopOver(true);
-    }
+
+  const openWithRow = (nextMode: 'edit' | 'delete' | 'view') => {
+    if (selectedRow === null || !rows[selectedRow]) return;
+    // onSuccess (Add) men-dispatch setClearLookup(true) lalu menutup modal. Bila
+    // LookUp sudah ter-unmount sebelum effect-nya sempat mereset flag, flag
+    // tertinggal `true` di redux dan LookUp berikutnya yang mount (Edit) langsung
+    // mengosongkan teksnya. Pastikan bersih sebelum modal dibuka.
+    dispatch(setClearLookup(false));
+    fillFormFromRow(rows[selectedRow]);
+    setMode(nextMode);
+    setPopOver(true);
   };
-  const handleView = () => {
-    if (selectedRow !== null) {
-      setMode('view');
-      setPopOver(true);
-    }
-  };
+  const handleEdit = () => openWithRow('edit');
+  const handleDelete = () => openWithRow('delete');
+  const handleView = () => openWithRow('view');
 
   /**
    * Export Excel dijalankan di BACKEND (background job + socket), sama seperti
@@ -1969,6 +2002,8 @@ const GridPelayaran = () => {
   const handleAdd = async () => {
     try {
       setMode('add');
+      // Flag clearLookup basi (lihat openWithRow) akan menghapus teks default.
+      dispatch(setClearLookup(false));
       // Fetch nilai default lalu reset SEBELUM buka modal, supaya lookupNama
       // (non-reaktif) sudah terisi saat LookUp pertama kali mount.
       await resetAddForm();
@@ -2457,17 +2492,8 @@ const GridPelayaran = () => {
   }, [isTransitioning, isFetching]);
 
   useEffect(() => {
-    const rowData = rows[selectedRow];
     if (selectedRow !== null && rows.length > 0 && mode !== 'add') {
-      forms.setValue('id', rowData?.id ?? '');
-
-      forms.setValue('relasi_id', String(rowData?.relasi_id ?? ''));
-      forms.setValue('relasi_id_text', rowData?.relasi_id_text);
-      forms.setValue('nama', rowData?.nama);
-      forms.setValue('keterangan', rowData?.keterangan);
-
-      forms.setValue('statusaktif', String(rowData?.statusaktif ?? ''));
-      forms.setValue('statusaktif_text', rowData?.statusaktif_text);
+      fillFormFromRow(rows[selectedRow]);
     }
     // JANGAN forms.reset() saat mode 'add' di sini. Effect ini ikut ter-trigger
     // setiap kali `rows` di-update background fetch (bulk/prefetch) selama modal
