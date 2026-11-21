@@ -15,6 +15,7 @@ import DataGrid, {
   Column,
   DataGridHandle
 } from 'react-data-grid';
+// Untuk types, import langsung (types tidak affect runtime)
 
 import { ImSpinner2 } from 'react-icons/im';
 import ActionButton from '@/components/custom-ui/ActionButton';
@@ -36,10 +37,16 @@ import {
 
 import { useSelector } from 'react-redux';
 import { RootState } from '@/lib/store/store';
-import { FaPrint, FaSort, FaSortDown, FaSortUp, FaTimes } from 'react-icons/fa';
+import {
+  FaFileExport,
+  FaPrint,
+  FaSort,
+  FaSortDown,
+  FaSortUp,
+  FaTimes
+} from 'react-icons/fa';
 import { Input } from '@/components/ui/input';
 import { api2 } from '@/lib/utils/AxiosInstance';
-import { useRouter } from 'next/navigation';
 import {
   Select,
   SelectContent,
@@ -57,6 +64,7 @@ import { useAlert } from '@/lib/store/client/useAlert';
 import { Button } from '@/components/ui/button';
 import Image from 'next/image';
 import IcClose from '@/public/image/x.svg';
+import { setHeaderData } from '@/lib/store/headerSlice/headerSlice';
 import { IJenisOrderan } from '@/lib/types/jenisorderan.type';
 import {
   clearOpenName,
@@ -79,6 +87,10 @@ import {
 } from '@/lib/utils';
 
 import { getJenisOrderanFn } from '@/lib/apis/jenisorderan.api';
+import { useReportProgress } from '@/components/custom-ui/ReportProgressProvider';
+import { loadStimulsoftScript } from '@/lib/loadStimulsoft';
+import { useReportPdfContext } from '@/hooks/ReportPdfProvider';
+import { generateJenisOrderanExportFn } from '@/lib/apis/report.api';
 
 interface Filter {
   page: number;
@@ -88,25 +100,16 @@ interface Filter {
   filters: {
     nama: string;
     keterangan: string;
-    statusaktif: string;
-    format_nama: string;
-    modifiedby: string;
     created_at: string;
     updated_at: string;
+
+    format_nama?: string;
+    statusaktif?: string;
+    modifiedby?: string;
   };
   sortBy: string;
   sortDirection: 'asc' | 'desc';
 }
-
-const emptyFilters = {
-  nama: '',
-  keterangan: '',
-  statusaktif: '',
-  format_nama: '',
-  modifiedby: '',
-  created_at: '',
-  updated_at: ''
-};
 
 const GridJenisOrderan = () => {
   const { theme, resolvedTheme } = useTheme();
@@ -118,7 +121,9 @@ const GridJenisOrderan = () => {
   const [totalPages, setTotalPages] = useState(1);
   const [popOver, setPopOver] = useState<boolean>(false);
   // Dinaikkan setiap "Save & Add" untuk me-remount form (Dialog) agar semua
-  // LookUp re-init dari nilai form hasil resetAddForm.
+  // LookUp re-init dari nilai form hasil resetAddForm -> STATUS AKTIF kembali
+  // ke "AKTIF" dan field lain kosong. Tanpa ini, modal yang tetap terbuka
+  // membuat LookUp memakai state lama (tampilan status aktif kosong).
   const [addFormKey, setAddFormKey] = useState<number>(0);
 
   const [isTransitioning, setIsTransitioning] = useState(false);
@@ -132,14 +137,20 @@ const GridJenisOrderan = () => {
   const [isFetching, setIsFetching] = useState(false);
   const [isScrolling, setIsScrolling] = useState(false);
   // Versi ref dari isScrolling: di-set sinkron agar pengecekan di dalam
-  // handleScroll yang sama langsung melihat nilai terbaru.
+  // handleScroll yang sama langsung melihat nilai terbaru. State `isScrolling`
+  // bersifat async, sehingga pada navigasi keyboard (hanya 1 event scroll per
+  // tekan PageUp/PageDown) closure-nya masih `false` dan pemicu fetch halaman
+  // berikutnya tidak pernah jalan. Ref ini mencegah masalah tsb.
   const isScrollingRef = useRef(false);
   const [scrollDirection, setScrollDirection] = useState<'up' | 'down' | null>(
     null
   );
+  // Tambah ref baru di dekat ref lainnya
   const pendingSelectIdxRef = useRef<number>(1); // default ke idx 1 (skip nomor/select)
   const suppressScrollRef = useRef(false);
   const isPageTransitionRef = useRef(false);
+  const { start } = useReportProgress();
+  const { generateExport } = useReportPdfContext();
 
   const lastScrollTopRef = useRef<number>(0);
   const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -161,7 +172,7 @@ const GridJenisOrderan = () => {
   const [inputValue, setInputValue] = useState<string>('');
   const [hasMore, setHasMore] = useState(true);
   const inputRef = useRef<HTMLInputElement | null>(null);
-  const lastDispatchedId = useRef<string | null>(null);
+  const lastDispatchedId = useRef<number | null>(null);
   const { mutateAsync: deleteJenisOrderan, isLoading: isLoadingDelete } =
     useDeleteJenisOrderan();
   const [columnsOrder, setColumnsOrder] = useState<readonly number[]>([]);
@@ -184,7 +195,7 @@ const GridJenisOrderan = () => {
   const [isFetchingManually, setIsFetchingManually] = useState(false);
   const [rows, setRows] = useState<IJenisOrderan[]>([]);
   const [isDataUpdated, setIsDataUpdated] = useState(false);
-  const resizeDebounceTimeout = useRef<NodeJS.Timeout | null>(null);
+  const resizeDebounceTimeout = useRef<NodeJS.Timeout | null>(null); // Timer debounce untuk resize
   const prevPageRef = useRef(currentPage);
   const dispatch = useDispatch();
   const [checkedRows, setCheckedRows] = useState<Set<string>>(new Set());
@@ -198,8 +209,14 @@ const GridJenisOrderan = () => {
   }, [selectedRow]);
   // ID baris yang baru disimpan (add/edit). Dipakai Row Combiner untuk
   // memfokuskan baris itu BERDASARKAN ID (bukan index) setelah data window
-  // settle -- index bisa meleset karena window pagination ikut bergeser.
+  // settle -- index bisa meleset karena window pagination ikut bergeser saat
+  // re-render. Selama ref ini ter-set, Combiner TIDAK menjalankan scroll-ke-
+  // row-0 (cabang else) yang memicu handleScroll menggeser window.
   const pendingFocusIdRef = useRef<string | null>(null);
+  // Diset true selama window settle pasca-mutasi (add/edit) untuk memblokir
+  // data-effect memproses ulang hasil refetch (yang menimpa fokus ke baris 0).
+  // Ref (bukan state) supaya reset-nya TIDAK memicu ulang effect.
+  const suppressRefetchRef = useRef(false);
   const activeFilterInputRef = useRef<HTMLElement | null>(null);
   const [selectedCellKey, setSelectedCellKey] = useState<string>('nomor');
   const streamBufferRef = useRef<Map<number, IJenisOrderan[]>>(new Map());
@@ -209,13 +226,26 @@ const GridJenisOrderan = () => {
   const ROW_HEIGHT = 27;
   const jumpToLastRef = useRef(false);
   const jumpToFirstRef = useRef(false);
-  // Modalitas input terakhir: 'keyboard' (Arrow/Page) atau 'pointer' (wheel/drag).
+  // Modalitas input terakhir: 'keyboard' (Arrow/Page) atau 'pointer' (wheel/drag
+  // scrollbar). Dipakai utk menentukan apakah selectCell harus di-re-anchor
+  // ke baris data yg sama setelah window-shift.
   const interactionModeRef = useRef<'keyboard' | 'pointer'>('pointer');
+  // Diset saat window benar-benar bergeser (shiftSelectionForWindow). Menandai
+  // apakah pergeseran itu dari keyboard, sehingga useLayoutEffect tahu apakah
+  // perlu re-anchor selectCell. Mouse scroll TIDAK boleh memindahkan sel aktif.
   const reanchorFromKeyboardRef = useRef(false);
 
-  // Saat window pagination bergeser, index setiap baris di array `rows` ikut
-  // bergeser sebanyak filters.limit. Fungsi ini menjaga agar baris DATA yang
-  // sama tetap ter-select dengan HANYA menggeser index (selectedRowRef).
+  // Saat window pagination bergeser (halaman atas/bawah keluar dari window),
+  // index setiap baris di array `rows` ikut bergeser sebanyak filters.limit.
+  // Fungsi ini menjaga agar baris DATA yang sama tetap ter-select dengan HANYA
+  // menggeser index (selectedRowRef) -- highlight digambar via getRowClass.
+  // Posisi visual dijaga oleh kompensasi scrollTop (pendingScrollAdjustment),
+  // jadi kita TIDAK memanggil selectCell/scrollToCell di sini agar grid tidak
+  // dipaksa scroll ke baris tsb.
+  // CATATAN: setSelectedRow TIDAK dipanggil di sini -- ditunda ke Row Combiner
+  // agar commit bersamaan dengan setRows. Jika selectedRow di-update sekarang,
+  // akan ada 1 frame di mana selectedRow sudah bergeser tapi `rows` belum
+  // -> highlight kuning "berkedip".
   const shiftSelectionForWindow = (deltaRows: number) => {
     const next = Math.max(0, selectedRowRef.current + deltaRows);
     selectedRowRef.current = next;
@@ -229,9 +259,8 @@ const GridJenisOrderan = () => {
       nama: '',
       keterangan: '',
       statusaktif: '',
-      statusaktif_text: '',
-      statusformat: '',
-      statusformat_nama: ''
+
+      text: ''
     }
   });
   const {
@@ -239,12 +268,19 @@ const GridJenisOrderan = () => {
     reset,
     formState: { isSubmitSuccessful }
   } = forms;
-  const router = useRouter();
   const [filters, setFilters] = useState<Filter>({
     page: 1,
     limit: 50,
     search: '',
-    filters: { ...emptyFilters },
+    filters: {
+      nama: '',
+      keterangan: '',
+      format_nama: '',
+      created_at: '',
+      updated_at: '',
+      statusaktif: '',
+      modifiedby: ''
+    },
     sortBy: 'nama',
     sortDirection: 'asc'
   });
@@ -283,7 +319,7 @@ const GridJenisOrderan = () => {
         name: 'NO',
         width: 50,
         headerCellClass: 'column-headers',
-        renderHeaderCell: () => (
+        renderHeaderCell: (column: any) => (
           <div className="flex h-full flex-col items-center gap-1">
             <div className="headers-cell h-[50%] items-center justify-center text-center">
               <p className="text-sm font-normal">No.</p>
@@ -291,7 +327,26 @@ const GridJenisOrderan = () => {
 
             <div
               className="flex h-[50%] w-full cursor-pointer items-center justify-center"
-              onClick={() => handleClearAllFilters()}
+              onClick={() => {
+                discardPendingFilterUpdates();
+                setFilters({
+                  ...filters,
+                  search: '',
+                  filters: {
+                    nama: '',
+                    keterangan: '',
+                    format_nama: '',
+                    created_at: '',
+                    updated_at: '',
+                    statusaktif: '',
+                    modifiedby: ''
+                  }
+                }),
+                  setInputValue('');
+                setTimeout(() => {
+                  gridRef?.current?.selectCell({ rowIdx: 0, idx: 1 });
+                }, 0);
+              }}
             >
               <FaTimes className="bg-red-500 text-white" />
             </div>
@@ -315,7 +370,7 @@ const GridJenisOrderan = () => {
         name: '',
         width: 50,
         headerCellClass: 'column-headers',
-        renderHeaderCell: () => (
+        renderHeaderCell: (column: any) => (
           <div className="flex h-full cursor-pointer flex-col items-center gap-1">
             <div className="headers-cell h-[50%]"></div>
             <div className="flex h-[50%] w-full items-center justify-center">
@@ -339,13 +394,100 @@ const GridJenisOrderan = () => {
         )
       },
       {
+        key: 'statusaktif',
+        name: 'Status Aktif',
+        resizable: true,
+        draggable: true,
+        width: 70,
+        headerCellClass: 'column-headers',
+        renderHeaderCell: (column: any) => (
+          <div
+            title="STATUS AKTIF"
+            className="flex h-full cursor-pointer flex-col items-center gap-1"
+          >
+            <div
+              className="headers-cell h-[50%] px-8"
+              onClick={() => handleSort('statusaktif')}
+              onContextMenu={(event) =>
+                setContextMenu(handleContextMenu(event))
+              }
+            >
+              <p
+                className={`text-sm ${
+                  filters.sortBy === 'statusaktif' ? 'font-bold' : 'font-normal'
+                }`}
+              >
+                Status Aktif
+              </p>
+              <div className="ml-2">
+                {filters.sortBy === 'statusaktif' &&
+                filters.sortDirection === 'asc' ? (
+                  <FaSortUp className="font-bold" />
+                ) : filters.sortBy === 'statusaktif' &&
+                  filters.sortDirection === 'desc' ? (
+                  <FaSortDown className="font-bold" />
+                ) : (
+                  <FaSort className="text-zinc-400" />
+                )}
+              </div>
+            </div>
+            <div className="relative h-[50%] w-full px-1">
+              <FilterOptions
+                columnKey={column.column.key}
+                endpoint="parameter"
+                value="id"
+                label="text"
+                filterBy={{ grp: 'STATUS AKTIF', subgrp: 'STATUS AKTIF' }}
+                selectedValue={filters.filters.statusaktif}
+                onChange={(value) =>
+                  handleFilterInputChange('statusaktif', value)
+                } // Menangani perubahan nilai di parent
+              />
+            </div>
+          </div>
+        ),
+        renderCell: (props: any) => {
+          const memoData = props.row.memo ? JSON.parse(props.row.memo) : null;
+          if (memoData) {
+            return (
+              <div
+                title={memoData.MEMO}
+                className="flex h-full w-full items-center justify-center py-1"
+              >
+                <div
+                  className="m-0 flex h-full w-fit cursor-pointer items-center justify-center p-0"
+                  style={{
+                    backgroundColor: memoData.WARNA,
+                    color: memoData.WARNATULISAN,
+                    padding: '2px 6px',
+                    borderRadius: '2px',
+                    textAlign: 'left',
+                    fontWeight: '600'
+                  }}
+                >
+                  <p style={{ fontSize: '13px', color: memoData.WARNATULISAN }}>
+                    {memoData.SINGKATAN}
+                  </p>
+                </div>
+              </div>
+            );
+          }
+
+          return (
+            <div title="N/A" className="text-xs text-gray-500">
+              N/A
+            </div>
+          ); // Tampilkan 'N/A' jika memo tidak tersedia
+        }
+      },
+      {
         key: 'nama',
         name: 'Nama',
         resizable: true,
         draggable: true,
-        width: 300,
+        width: 200,
         headerCellClass: 'column-headers',
-        renderHeaderCell: () => (
+        renderHeaderCell: (column: any) => (
           <div
             title="NAMA"
             className="flex h-full cursor-pointer flex-col items-center gap-1"
@@ -409,7 +551,7 @@ const GridJenisOrderan = () => {
         draggable: true,
         width: 300,
         headerCellClass: 'column-headers',
-        renderHeaderCell: () => (
+        renderHeaderCell: (column: any) => (
           <div
             title="KETERANGAN"
             className="flex h-full cursor-pointer flex-col items-center gap-1"
@@ -469,100 +611,13 @@ const GridJenisOrderan = () => {
         }
       },
       {
-        key: 'statusaktif',
-        name: 'Status Aktif',
-        resizable: true,
-        draggable: true,
-        width: 100,
-        headerCellClass: 'column-headers',
-        renderHeaderCell: (column: any) => (
-          <div
-            title="STATUS AKTIF"
-            className="flex h-full cursor-pointer flex-col items-center gap-1"
-          >
-            <div
-              className="headers-cell h-[50%] px-8"
-              onClick={() => handleSort('statusaktif')}
-              onContextMenu={(event) =>
-                setContextMenu(handleContextMenu(event))
-              }
-            >
-              <p
-                className={`text-sm ${
-                  filters.sortBy === 'statusaktif' ? 'font-bold' : 'font-normal'
-                }`}
-              >
-                Status Aktif
-              </p>
-              <div className="ml-2">
-                {filters.sortBy === 'statusaktif' &&
-                filters.sortDirection === 'asc' ? (
-                  <FaSortUp className="font-bold" />
-                ) : filters.sortBy === 'statusaktif' &&
-                  filters.sortDirection === 'desc' ? (
-                  <FaSortDown className="font-bold" />
-                ) : (
-                  <FaSort className="text-zinc-400" />
-                )}
-              </div>
-            </div>
-            <div className="relative h-[50%] w-full px-1">
-              <FilterOptions
-                columnKey={column.column.key}
-                endpoint="parameter"
-                value="id"
-                label="text"
-                filterBy={{ grp: 'STATUS AKTIF', subgrp: 'STATUS AKTIF' }}
-                selectedValue={filters.filters.statusaktif}
-                onChange={(value) =>
-                  handleFilterInputChange('statusaktif', value)
-                }
-              />
-            </div>
-          </div>
-        ),
-        renderCell: (props: any) => {
-          const memoData = props.row.memo ? JSON.parse(props.row.memo) : null;
-          if (memoData) {
-            return (
-              <div
-                title={memoData.MEMO}
-                className="flex h-full w-full items-center justify-center py-1"
-              >
-                <div
-                  className="m-0 flex h-full w-fit cursor-pointer items-center justify-center p-0"
-                  style={{
-                    backgroundColor: memoData.WARNA,
-                    color: memoData.WARNATULISAN,
-                    padding: '2px 6px',
-                    borderRadius: '2px',
-                    textAlign: 'left',
-                    fontWeight: '600'
-                  }}
-                >
-                  <p style={{ fontSize: '13px', color: memoData.WARNATULISAN }}>
-                    {memoData.SINGKATAN}
-                  </p>
-                </div>
-              </div>
-            );
-          }
-
-          return (
-            <div title="N/A" className="text-xs text-gray-500">
-              N/A
-            </div>
-          );
-        }
-      },
-      {
-        key: 'format',
+        key: 'format_nama',
         name: 'Format',
         resizable: true,
         draggable: true,
-        width: 250,
+        width: 200,
         headerCellClass: 'column-headers',
-        renderHeaderCell: () => (
+        renderHeaderCell: (column: any) => (
           <div
             title="FORMAT"
             className="flex h-full cursor-pointer flex-col items-center gap-1"
@@ -626,9 +681,11 @@ const GridJenisOrderan = () => {
         name: 'Modified By',
         resizable: true,
         draggable: true,
+
         headerCellClass: 'column-headers',
-        width: 150,
-        renderHeaderCell: () => (
+
+        width: 100,
+        renderHeaderCell: (column: any) => (
           <div
             title="MODIFIED BY"
             className="flex h-full cursor-pointer flex-col items-center gap-1"
@@ -695,7 +752,7 @@ const GridJenisOrderan = () => {
         draggable: true,
         headerCellClass: 'column-headers',
         width: 170,
-        renderHeaderCell: () => (
+        renderHeaderCell: (column: any) => (
           <div
             title="CREATED AT"
             className="flex h-full cursor-pointer flex-col items-center gap-1"
@@ -755,14 +812,17 @@ const GridJenisOrderan = () => {
           );
         }
       },
+
       {
         key: 'updated_at',
         name: 'Updated At',
         resizable: true,
         draggable: true,
+
         headerCellClass: 'column-headers',
+
         width: 170,
-        renderHeaderCell: () => (
+        renderHeaderCell: (column: any) => (
           <div
             title="UPDATED AT"
             className="flex h-full cursor-pointer flex-col items-center gap-1"
@@ -834,6 +894,7 @@ const GridJenisOrderan = () => {
       setFilters((prev) => ({
         ...prev,
         filters: { ...prev.filters, ...updates },
+        search: '',
         page: 1
       }));
       setCheckedRows(new Set());
@@ -842,6 +903,7 @@ const GridJenisOrderan = () => {
       setCurrentPage(1);
       setSelectedRow(0);
       resetBufferingCache();
+      // gridRef?.current?.scrollToCell?.({ rowIdx: 0, idx: 0 });
     }, 300)
   ).current;
 
@@ -852,15 +914,17 @@ const GridJenisOrderan = () => {
 
   const handleFilterInputChange = useCallback(
     (colKey: string, value: string) => {
+      setInputValue(''); // Reset global search input saat filter kolom diubah
       cancelPreviousRequest(abortControllerRef);
       pendingUpdates.current[colKey] = value;
 
+      // ✅ Hanya track jika activeElement memang filter input kolom ini
       const active = document.activeElement as HTMLElement | null;
       if (
         active &&
         (active.classList.contains('filter-input') ||
           active.tagName === 'INPUT') &&
-        active !== inputRef.current
+        active !== inputRef.current // bukan global search
       ) {
         activeFilterInputRef.current = active;
       }
@@ -880,6 +944,7 @@ const GridJenisOrderan = () => {
     cancelPreviousRequest(abortControllerRef);
     debouncedFilterUpdate.flush();
 
+    // ✅ Arahkan ke kolom yang di-clear
     const originalIndex = columns.findIndex((col) => col.key === colKey);
     const displayIndex =
       columnsOrder.length > 0
@@ -935,6 +1000,7 @@ const GridJenisOrderan = () => {
     discardPendingFilterUpdates();
     const searchValue = e.target.value;
 
+    // ✅ Track global search input agar focus bisa di-restore
     activeFilterInputRef.current = inputRef.current;
     pendingSelectIdxRef.current = 1;
 
@@ -942,7 +1008,15 @@ const GridJenisOrderan = () => {
     setCurrentPage(1);
     setFilters((prev) => ({
       ...prev,
-      filters: { ...emptyFilters },
+      filters: {
+        nama: '',
+        keterangan: '',
+        format_nama: '',
+        created_at: '',
+        updated_at: '',
+        statusaktif: '',
+        modifiedby: ''
+      },
       search: searchValue,
       page: 1
     }));
@@ -963,7 +1037,7 @@ const GridJenisOrderan = () => {
         ? columnsOrder.findIndex((idx) => idx === originalIndex)
         : originalIndex;
 
-    activeFilterInputRef.current = null;
+    activeFilterInputRef.current = null; // ✅ Sort bukan dari input, tidak perlu restore focus
     pendingSelectIdxRef.current = displayIndex >= 0 ? displayIndex : 1;
 
     const newSortOrder =
@@ -987,7 +1061,7 @@ const GridJenisOrderan = () => {
     setRows([]);
   };
 
-  const handleRowSelect = (rowId: string) => {
+  const handleRowSelect = (rowId: number) => {
     setCheckedRows((prev) => {
       const updated = new Set(prev);
       if (updated.has(rowId)) {
@@ -1012,6 +1086,8 @@ const GridJenisOrderan = () => {
 
   const handleFilterRows = (val: string) => {
     setIsFilteringRows(true);
+    // setLocalSelectedValue(val);
+    // onChange?.(val);
     setTimeout(() => {
       setIsFilteringRows(false);
     }, 1000);
@@ -1021,10 +1097,12 @@ const GridJenisOrderan = () => {
     cancelPreviousRequest(abortControllerRef);
     discardPendingFilterUpdates();
     activeFilterInputRef.current = null;
-    pendingSelectIdxRef.current = 1;
+    pendingSelectIdxRef.current = 1; // ✅ Reset ke default idx 1
     setFilters((prev) => ({
       ...prev,
-      filters: { ...prev.filters },
+      filters: {
+        ...prev.filters
+      },
       search: '',
       page: 1
     }));
@@ -1038,18 +1116,23 @@ const GridJenisOrderan = () => {
   };
 
   const onColumnResize = (index: number, width: number) => {
+    // 1) Dapatkan key kolom yang di-resize
     const columnKey = columns[columnsOrder[index]].key;
 
+    // 2) Update state width seketika (biar kolom langsung responsif)
     const newWidthMap = { ...columnsWidth, [columnKey]: width };
     setColumnsWidth(newWidthMap);
 
+    // 3) Bersihkan timeout sebelumnya agar tidak menumpuk
     if (resizeDebounceTimeout.current) {
       clearTimeout(resizeDebounceTimeout.current);
     }
 
+    // 4) Set ulang timer: hanya ketika 300ms sejak resize terakhir berlalu,
+    //    saveGridConfig akan dipanggil
     resizeDebounceTimeout.current = setTimeout(() => {
       saveGridConfig(
-        String(user.id),
+        String(user?.id),
         'GridJenisOrderan',
         [...columnsOrder],
         newWidthMap
@@ -1069,7 +1152,7 @@ const GridJenisOrderan = () => {
       newOrder.splice(targetIndex, 0, newOrder.splice(sourceIndex, 1)[0]);
 
       saveGridConfig(
-        String(user.id),
+        String(user?.id),
         'GridJenisOrderan',
         [...newOrder],
         columnsWidth
@@ -1113,7 +1196,7 @@ const GridJenisOrderan = () => {
     scrollPositionRef.current = scrollTop;
     scrollContainerRef.current = currentTarget;
 
-    const rowHeight = ROW_HEIGHT;
+    const rowHeight = 27; // Mengikuti rowHeight grid prospek
     const firstVisibleRow = Math.floor(scrollTop / rowHeight);
     const lastVisibleRow = Math.floor((scrollTop + clientHeight) / rowHeight);
 
@@ -1128,21 +1211,25 @@ const GridJenisOrderan = () => {
 
       if (nextPage <= totalPages && !isFetching && isScrollingRef.current) {
         if (streamBufferRef.current.has(nextPage)) {
+          // ✅ DATA ADA DI BUFFER — langsung masuk tanpa loading!
           setIsFetching(true);
           setIsTransitioning(true);
           hasAdjustedScrollRef.current = false;
 
           const bufferedData = streamBufferRef.current.get(nextPage)!;
 
+          // Pindahkan dari buffer ke pageDataCache
           setPageDataCache((prev) => {
             const updated = new Map(prev);
             updated.set(nextPage, bufferedData);
             return updated;
           });
 
+          // Hapus dari buffer (sudah masuk ke visible cache)
           streamBufferRef.current = new Map(streamBufferRef.current);
           streamBufferRef.current.delete(nextPage);
 
+          // Update visiblePages (geser window)
           isPageTransitionRef.current = true;
           pendingScrollAdjustment.current = -(filters.limit * ROW_HEIGHT);
           shiftSelectionForWindow(-filters.limit);
@@ -1152,24 +1239,29 @@ const GridJenisOrderan = () => {
 
             setPageDataCache((prev) => {
               const updated = new Map(prev);
-              updated.delete(removedPage);
+              updated.delete(removedPage); // Langsung hapus total dari memori
               return updated;
             });
 
             return newPages;
           });
 
+          // Update totalPages jika perlu (dari cache tidak ada pagination data,
+          // jadi kita biarkan dari fetch terakhir)
+
           setTimeout(() => {
             setIsTransitioning(false);
             setIsFetching(false);
-          }, 50);
+          }, 50); // Lebih cepat karena tidak ada network latency
 
+          // Prefetch page berikutnya di background
           const pagesToPrefetch = Array.from(
             { length: STREAM_BUFFER_SIZE },
             (_, i) => nextPage + 1 + i
           );
           prefetchPages(pagesToPrefetch);
         } else if (!pageDataCache.has(nextPage)) {
+          // ⚠️ Buffer miss — fallback ke fetch normal
           setIsFetching(true);
           setIsTransitioning(true);
           hasAdjustedScrollRef.current = false;
@@ -1185,6 +1277,7 @@ const GridJenisOrderan = () => {
 
       if (prevPage >= 1 && !isFetching && isScrollingRef.current) {
         if (streamBufferRef.current.has(prevPage)) {
+          // ✅ DATA ADA DI BUFFER — langsung masuk tanpa loading!
           setIsFetching(true);
           setIsTransitioning(true);
           hasAdjustedScrollRef.current = false;
@@ -1209,7 +1302,7 @@ const GridJenisOrderan = () => {
 
             setPageDataCache((prev) => {
               const updated = new Map(prev);
-              updated.delete(removedPage);
+              updated.delete(removedPage); // Langsung hapus total dari memori
               return updated;
             });
 
@@ -1221,15 +1314,19 @@ const GridJenisOrderan = () => {
             setIsFetching(false);
           }, 50);
 
+          // Prefetch page sebelumnya di background
           const pagesToPrefetch = Array.from(
             { length: STREAM_BUFFER_SIZE },
             (_, i) => prevPage - 1 - i
           ).filter((p) => p >= 1);
           prefetchPages(pagesToPrefetch);
         } else if (!pageDataCache.has(prevPage)) {
+          // ⚠️ Buffer miss — fallback ke fetch normal
           setIsFetching(true);
           setIsTransitioning(true);
           hasAdjustedScrollRef.current = false;
+          // Reset ke 0 dulu agar setCurrentPage(prevPage) pasti trigger re-fetch
+          // even jika prevPage == currentPage (stale value)
           setCurrentPage(0);
           setTimeout(() => setCurrentPage(prevPage), 0);
         }
@@ -1263,6 +1360,7 @@ const GridJenisOrderan = () => {
     (delta: number, focusBackTo?: HTMLElement | null) => {
       if (rows.length === 0) return;
 
+      // Navigasi via input filter/search = modalitas keyboard.
       interactionModeRef.current = 'keyboard';
 
       const nextRow = Math.min(
@@ -1276,6 +1374,7 @@ const GridJenisOrderan = () => {
       );
       const idx = idxFromKey >= 0 ? idxFromKey : 0;
 
+      // Pindahkan selected cell bawaan grid (untuk ArrowLeft/ArrowRight) + tetap jaga input tetap fokus
       gridRef.current?.scrollToCell?.({ rowIdx: nextRow, idx });
       gridRef.current?.selectCell?.({ rowIdx: nextRow, idx });
 
@@ -1411,11 +1510,17 @@ const GridJenisOrderan = () => {
     jumpToLastRef.current = true;
     setRows([]);
 
+    // Jika total halaman <= WINDOW_SIZE, semua halaman muat di satu bulk window
+    // pertama — pakai bulk-fetch normal (lebih efisien: 1 request).
     if (totalPages <= WINDOW_SIZE) {
       resetBufferingCache();
       return;
     }
 
+    // Kasus umum: WINDOW_SIZE halaman terakhir TIDAK selalu sejajar dengan
+    // batas bulk block (mis. totalPages=23, WINDOW_SIZE=5 -> butuh halaman
+    // 19..23, sementara bulk block hanya {1-5,6-10,11-15,16-20,21-25}). Jadi
+    // fetch tiap halaman terakhir secara langsung lalu rakit cache & window.
     setIsFetching(true);
     setShouldBulkFetch(false);
     setBulkStartPage(1);
@@ -1486,6 +1591,7 @@ const GridJenisOrderan = () => {
       const isGlobalSearchInput =
         !!inputRef.current && target === inputRef.current;
 
+      // Hanya handle key navigation dari input filter column & input search global
       if (!isFilterInput && !isGlobalSearchInput) return;
 
       const visibleRowCount = 8;
@@ -1532,13 +1638,14 @@ const GridJenisOrderan = () => {
       handleGoToLastPage
     ]
   );
-
   // Cache default STATUS AKTIF ("AKTIF") supaya tidak fetch berulang.
   const statusAktifDefaultRef = useRef<{ id: string; text: string } | null>(
     null
   );
 
   // Reset form mode "add" sekaligus set default STATUS AKTIF = "AKTIF".
+  // Auto-default LookUp tidak reliabel untuk field ini, jadi di-set eksplisit
+  // dari data parameter (id berupa varchar, jadi disimpan sebagai string).
   const resetAddForm = async () => {
     let aktif = statusAktifDefaultRef.current;
     if (!aktif) {
@@ -1563,9 +1670,7 @@ const GridJenisOrderan = () => {
       nama: '',
       keterangan: '',
       statusaktif: aktif.id,
-      statusaktif_text: aktif.text,
-      statusformat: '',
-      statusformat_nama: ''
+      text: aktif.text
     });
   };
 
@@ -1579,9 +1684,17 @@ const GridJenisOrderan = () => {
   ) => {
     clearError();
     setIsFetchingManually(true);
+    // Tandai baris baru agar Row Combiner memfokuskannya by-id setelah data
+    // window settle (lihat pendingFocusIdRef). Lebih andal daripada selectCell
+    // by-index yang bisa meleset saat window bergeser.
     pendingFocusIdRef.current = focusId ?? null;
     try {
       if (keepOpenModal) {
+        // SAVE & ADD: reset form (set default STATUS AKTIF = "AKTIF") lalu
+        // remount modal via addFormKey agar semua LookUp re-init dari nilai
+        // form. JANGAN dispatch setClearLookup di sini: pada mount, effect
+        // clearLookup berjalan SETELAH init sehingga malah mengosongkan
+        // tampilan status aktif yang baru di-set.
         await resetAddForm();
         setAddFormKey((k) => k + 1);
         setPopOver(true);
@@ -1591,14 +1704,32 @@ const GridJenisOrderan = () => {
         setPopOver(false);
       }
       if (mode !== 'delete') {
+        // Blokir data-effect memproses ulang hasil refetch pasca-mutasi selama
+        // window settle, agar fokus by-id tidak tertimpa (fokus "lompat ke
+        // baris 1"). Dibuka lagi via setTimeout di bawah.
+        suppressRefetchRef.current = true;
         const response = await api2.get(
-          `/redis/get/jenisorderan-page-${pageNumber}`
+          `/redis/get/jenisorder-page-${pageNumber}`
         );
         setRows([]);
         setRows(response.data);
+        // Fokus BERDASARKAN ID baris, bukan indexOnPage dari backend. Setelah
+        // edit, posisi baris di data window yang dimuat bisa berbeda dari
+        // hitungan index backend (mis. tie-break urutan nama) sehingga fokus
+        // meleset. Cari index baris (add: newItem.id, edit: updatedItem.id)
+        // langsung di data yang dimuat -> selalu tepat. Fallback ke indexOnPage
+        // bila id tak ketemu.
+        const loadedRows: IJenisOrderan[] = Array.isArray(response.data)
+          ? response.data
+          : [];
+        const focusIdx =
+          focusId != null
+            ? loadedRows.findIndex((r) => String(r.id) === String(focusId))
+            : -1;
+        const targetIndex = focusIdx >= 0 ? focusIdx : indexOnPage;
         setIsDataUpdated(true);
         setVisiblePages(fetchedPages);
-        setSelectedRow(indexOnPage);
+        setSelectedRow(targetIndex);
         setPageDataCache(
           new Map(
             Object.entries(pagedData).map(([key, value]) => [
@@ -1617,10 +1748,36 @@ const GridJenisOrderan = () => {
 
         setTimeout(() => {
           gridRef?.current?.selectCell({
-            rowIdx: indexOnPage,
+            rowIdx: targetIndex,
             idx: 1
           });
         }, 200);
+
+        // Penahan fokus pasca-mutasi. setCurrentPage(pageNumber) memicu refetch
+        // yang menjalankan Row Combiner lagi; karena pendingFocusIdRef sudah
+        // dikonsumsi pada run pertama, cabang else-nya men-scroll ke baris 0
+        // (gejala "edit selalu ke baris 1"). Re-assert id fokus beberapa kali
+        // selama window settle agar SETIAP run Row Combiner (termasuk akibat
+        // refetch) memfokuskan ulang baris yang benar by-id, lalu bersihkan
+        // supaya tidak mengganggu navigasi berikutnya.
+        if (focusId != null) {
+          [120, 320, 620].forEach((d) =>
+            setTimeout(() => {
+              pendingFocusIdRef.current = String(focusId);
+            }, d)
+          );
+          setTimeout(() => {
+            if (String(pendingFocusIdRef.current) === String(focusId)) {
+              pendingFocusIdRef.current = null;
+            }
+          }, 950);
+        }
+
+        // Buka blokir refetch setelah window settle. Karena ref, reset ini TIDAK
+        // memicu ulang data-effect -> tidak ada clobber saat dibuka.
+        setTimeout(() => {
+          suppressRefetchRef.current = false;
+        }, 1000);
       }
 
       setIsDataUpdated(false);
@@ -1641,10 +1798,12 @@ const GridJenisOrderan = () => {
             onSuccess: () => {
               setPopOver(false);
 
+              // 1. Remove from visible rows
               setRows((prevRows) =>
                 prevRows.filter((row) => row.id !== selectedRowId)
               );
 
+              // 2. Remove from pageDataCache (all pages)
               setPageDataCache((prevCache) => {
                 const updated = new Map(prevCache);
                 updated.forEach((pageRows, pageNum) => {
@@ -1658,6 +1817,7 @@ const GridJenisOrderan = () => {
                 return updated;
               });
 
+              // 3. Remove from streamBuffer
               const newBuffer = new Map(streamBufferRef.current);
               newBuffer.forEach((pageRows, pageNum) => {
                 const filtered = pageRows.filter(
@@ -1669,11 +1829,20 @@ const GridJenisOrderan = () => {
               });
               streamBufferRef.current = newBuffer;
 
+              // 4. Fokus baris BERIKUTNYA (by-id). Setelah baris dihapus,
+              // baris tepat di bawahnya naik mengisi slot yang sama -> itulah
+              // yang difokuskan. Jika yang dihapus baris paling bawah window,
+              // jatuh ke baris di atasnya. Pemfokusan dilakukan via
+              // pendingFocusIdRef (BY-ID), bukan selectCell by-index: Row
+              // Combiner jalan ulang setelah cache di-update, dan tanpa
+              // pendingFocusIdRef cabang else-nya men-scroll & men-select balik
+              // ke row 0 (lihat onSuccess add/edit yang memakai pola sama).
               const nextFocusRow =
                 rows[selectedRow + 1] ?? rows[selectedRow - 1];
               if (nextFocusRow) {
                 pendingFocusIdRef.current = String(nextFocusRow.id);
               } else {
+                // Tidak ada baris tersisa pada window ini.
                 setSelectedRow(0);
                 selectedRowRef.current = 0;
               }
@@ -1686,7 +1855,7 @@ const GridJenisOrderan = () => {
         const newOrder = await createJenisOrderan(
           {
             ...values,
-            ...filters
+            ...filters // Kirim filter ke body/payload
           },
           {
             onSuccess: (data) =>
@@ -1723,7 +1892,6 @@ const GridJenisOrderan = () => {
               )
           }
         );
-        queryClient.invalidateQueries('jenisorderans');
       }
     } catch (error: any) {
       if (error?.response?.status !== 400) {
@@ -1759,9 +1927,33 @@ const GridJenisOrderan = () => {
     }
   };
 
+  /**
+   * Export Excel dijalankan di BACKEND (background job + socket), sama seperti
+   * alur cetak laporan. Frontend hanya mengirim filter yang sedang aktif di
+   * grid — filter kolom, search global, dan sort — lalu progresnya muncul di
+   * toast. Setelah selesai, toast menampilkan tombol Download untuk menyimpan
+   * file xlsx-nya.
+   */
+  const handleExportExcel = async () => {
+    const { page, limit, ...filtersWithoutLimit } = filters;
+
+    await generateExport({
+      label: 'Export Jenis Orderan',
+      payload: {
+        search: filtersWithoutLimit.search,
+        filters: filtersWithoutLimit.filters,
+        sortBy: filtersWithoutLimit.sortBy,
+        sortDirection: filtersWithoutLimit.sortDirection
+      },
+      apiFn: generateJenisOrderanExportFn
+    });
+  };
+
   const handleReport = async () => {
+    const job = start('Jenis Orderan', 'pdf');
+
     try {
-      dispatch(setProcessing());
+      job.fetching();
       const now = new Date();
       const pad = (n: any) => n.toString().padStart(2, '0');
       const tglcetak = `${pad(now.getDate())}-${pad(
@@ -1769,69 +1961,71 @@ const GridJenisOrderan = () => {
       )}-${now.getFullYear()} ${pad(now.getHours())}:${pad(
         now.getMinutes()
       )}:${pad(now.getSeconds())}`;
-      const { page, limit, ...filtersWithoutLimit } = filters;
 
+      const { page, limit, ...filtersWithoutLimit } = filters;
       const response = await getJenisOrderanFn(filtersWithoutLimit);
+
       const reportRows = response.data.map((row) => ({
         ...row,
         judullaporan: 'Laporan Jenis Orderan',
         usercetak: user.username,
-        tglcetak: tglcetak,
+        tglcetak,
         judul: 'PT.TRANSPORINDO AGUNG SEJAHTERA'
       }));
       sessionStorage.setItem(
         'filtersWithoutLimit',
         JSON.stringify(filtersWithoutLimit)
       );
-      import('stimulsoft-reports-js/Scripts/stimulsoft.blockly.editor')
-        .then((module) => {
-          const { Stimulsoft } = module;
-          Stimulsoft.Base.StiFontCollection.addOpentypeFontFile(
-            '/fonts/tahoma.ttf',
-            'Tahoma'
-          );
-          Stimulsoft.Base.StiFontCollection.addOpentypeFontFile(
-            '/fonts/tahomabd.ttf',
-            'Tahoma'
-          );
-          Stimulsoft.Base.StiLicense.Key =
-            '6vJhGtLLLz2GNviWmUTrhSqnOItdDwjBylQzQcAOiHksEid1Z5nN/hHQewjPL/4/AvyNDbkXgG4Am2U6dyA8Ksinqp' +
-            '6agGqoHp+1KM7oJE6CKQoPaV4cFbxKeYmKyyqjF1F1hZPDg4RXFcnEaYAPj/QLdRHR5ScQUcgxpDkBVw8XpueaSFBs' +
-            'JVQs/daqfpFiipF1qfM9mtX96dlxid+K/2bKp+e5f5hJ8s2CZvvZYXJAGoeRd6iZfota7blbsgoLTeY/sMtPR2yutv' +
-            'gE9TafuTEhj0aszGipI9PgH+A/i5GfSPAQel9kPQaIQiLw4fNblFZTXvcrTUjxsx0oyGYhXslAAogi3PILS/DpymQQ' +
-            '0XskLbikFsk1hxoN5w9X+tq8WR6+T9giI03Wiqey+h8LNz6K35P2NJQ3WLn71mqOEb9YEUoKDReTzMLCA1yJoKia6Y' +
-            'JuDgUf1qamN7rRICPVd0wQpinqLYjPpgNPiVqrkGW0CQPZ2SE2tN4uFRIWw45/IITQl0v9ClCkO/gwUtwtuugegrqs' +
-            'e0EZ5j2V4a1XDmVuJaS33pAVLoUgK0M8RG72';
 
-          const report = new Stimulsoft.Report.StiReport();
-          const dataSet = new Stimulsoft.System.Data.DataSet('Data');
+      job.rendering();
+      await loadStimulsoftScript();
+      const Stimulsoft = (window as any).Stimulsoft;
+      Stimulsoft.Base.StiFontCollection.addOpentypeFontFile(
+        '/fonts/tahoma.ttf',
+        'Tahoma'
+      );
 
-          report.loadFile('/reports/LaporanJenisorderan.mrt');
-          report.dictionary.dataSources.clear();
-          dataSet.readJson({ data: reportRows });
-          report.regData(dataSet.dataSetName, '', dataSet);
-          report.dictionary.synchronize();
+      Stimulsoft.Base.StiFontCollection.addOpentypeFontFile(
+        '/fonts/tahomabd.ttf',
+        'Tahoma'
+      );
+      Stimulsoft.Base.StiLicense.Key =
+        '6vJhGtLLLz2GNviWmUTrhSqnOItdDwjBylQzQcAOiHksEid1Z5nN/hHQewjPL/4/AvyNDbkXgG4Am2U6dyA8Ksinqp' +
+        '6agGqoHp+1KM7oJE6CKQoPaV4cFbxKeYmKyyqjF1F1hZPDg4RXFcnEaYAPj/QLdRHR5ScQUcgxpDkBVw8XpueaSFBs' +
+        'JVQs/daqfpFiipF1qfM9mtX96dlxid+K/2bKp+e5f5hJ8s2CZvvZYXJAGoeRd6iZfota7blbsgoLTeY/sMtPR2yutv' +
+        'gE9TafuTEhj0aszGipI9PgH+A/i5GfSPAQel9kPQaIQiLw4fNblFZTXvcrTUjxsx0oyGYhXslAAogi3PILS/DpymQQ' +
+        '0XskLbikFsk1hxoN5w9X+tq8WR6+T9giI03Wiqey+h8LNz6K35P2NJQ3WLn71mqOEb9YEUoKDReTzMLCA1yJoKia6Y' +
+        'JuDgUf1qamN7rRICPVd0wQpinqLYjPpgNPiVqrkGW0CQPZ2SE2tN4uFRIWw45/IITQl0v9ClCkO/gwUtwtuugegrqs' +
+        'e0EZ5j2V4a1XDmVuJaS33pAVLoUgK0M8RG72';
 
-          report.renderAsync(() => {
-            report.exportDocumentAsync((pdfData: any) => {
-              const pdfBlob = new Blob([new Uint8Array(pdfData)], {
+      const report = new Stimulsoft.Report.StiReport();
+      const dataSet = new Stimulsoft.System.Data.DataSet('Data');
+      report.loadFile('/reports/LaporanJenisorderan.mrt');
+      report.dictionary.dataSources.clear();
+      dataSet.readJson({ data: reportRows });
+      report.regData(dataSet.dataSetName, '', dataSet);
+      report.dictionary.synchronize();
+
+      await new Promise<void>((resolve, reject) => {
+        report.renderAsync(() => {
+          job.exporting();
+          report.exportDocumentAsync((pdfData: any) => {
+            try {
+              const blob = new Blob([new Uint8Array(pdfData)], {
                 type: 'application/pdf'
               });
-              const pdfUrl = URL.createObjectURL(pdfBlob);
-
-              sessionStorage.setItem('pdfUrl', pdfUrl);
-
-              window.open('/reports/jenisorderan', '_blank');
-            }, Stimulsoft.Report.StiExportFormat.Pdf);
-          });
-        })
-        .catch((error) => {
-          console.error('Failed to load Stimulsoft:', error);
+              sessionStorage.setItem('pdfUrl', URL.createObjectURL(blob));
+              job.finish(() => window.open('/reports/jenisorderan', '_blank'));
+              resolve();
+            } catch (err) {
+              reject(err);
+            }
+          }, Stimulsoft.Report.StiExportFormat.Pdf);
         });
-    } catch (error) {
-      dispatch(setProcessed());
-    } finally {
-      dispatch(setProcessed());
+      });
+    } catch (err) {
+      job.fail('Gagal membuat laporan PDF');
+      console.error('[handleReport PDF]', err);
     }
   };
 
@@ -1873,6 +2067,8 @@ const GridJenisOrderan = () => {
   const handleAdd = async () => {
     try {
       setMode('add');
+      // Fetch default AKTIF lalu reset SEBELUM buka modal, supaya lookupNama
+      // (non-reaktif) sudah terisi saat LookUp pertama kali mount.
       await resetAddForm();
       setPopOver(true);
     } catch (error) {
@@ -1887,7 +2083,7 @@ const GridJenisOrderan = () => {
       knownTotalPages?: number
     ) => {
       const cacheToCheck = existingCache ?? pageDataCache;
-      const effectiveTotalPages = knownTotalPages ?? totalPages;
+      const effectiveTotalPages = knownTotalPages ?? totalPages; // ← pakai nilai fresh jika dikirim
 
       const validPages = pagesToFetch.filter(
         (p) =>
@@ -1900,8 +2096,10 @@ const GridJenisOrderan = () => {
 
       if (validPages.length === 0) return;
 
+      // Tandai semua sebagai sedang di-fetch agar tidak dobel
       validPages.forEach((p) => prefetchingPagesRef.current.add(p));
 
+      // Fetch semua secara paralel
       await Promise.allSettled(
         validPages.map(async (pageNum) => {
           try {
@@ -1916,6 +2114,7 @@ const GridJenisOrderan = () => {
               streamBufferRef.current.set(pageNum, data.data);
             }
           } catch (err) {
+            // Silent fail — user tidak perlu tahu jika prefetch gagal
             console.warn(
               `[StreamBuffer] Prefetch page ${pageNum} failed:`,
               err
@@ -1940,9 +2139,9 @@ const GridJenisOrderan = () => {
     }
   }, [rows, isFirstLoad]);
   useEffect(() => {
-    if (user.id) {
+    if (user?.id) {
       loadGridConfig(
-        String(user.id),
+        String(user?.id),
         'GridJenisOrderan',
         columns,
         setColumnsOrder,
@@ -1953,9 +2152,24 @@ const GridJenisOrderan = () => {
 
   useEffect(() => {
     if (isSubmitSuccessful) {
+      // reset();
+      // Pastikan fokus terjadi setelah repaint
       requestAnimationFrame(() => setFocus('nama'));
     }
   }, [isSubmitSuccessful, setFocus]);
+
+  // useEffect(() => {
+  //   if (isFirstLoad) {
+  //     setFilters((prevFilters) => ({
+  //       ...prevFilters,
+  //       filters: {
+  //         ...prevFilters.filters
+  //       },
+  //       page: 1
+  //     }));
+  //     resetBufferingCache(); // ADDED
+  //   }
+  // }, [filters, isFirstLoad]);
 
   // 1. Bulk Fetch Initialization
   useEffect(() => {
@@ -1964,7 +2178,12 @@ const GridJenisOrderan = () => {
         !shouldBulkFetch ||
         !allJenisOrderan ||
         isDataUpdated ||
-        isAfterMutation
+        isAfterMutation ||
+        // Selama settle pasca-mutasi (add/edit), jangan biarkan hasil refetch
+        // membangun ulang cache — kalau tidak, Row Combiner jalan lagi setelah
+        // pendingFocusIdRef dikonsumsi & fokus loncat ke baris 1. Effect #2
+        // (Pagination Fetch) sudah punya guard yang sama.
+        suppressRefetchRef.current
       ) {
         return;
       }
@@ -2031,13 +2250,27 @@ const GridJenisOrderan = () => {
 
   // 2. Pagination Fetch & Scroll Adjustment
   useEffect(() => {
-    if (shouldBulkFetch || isDataUpdated || isAfterMutation) {
+    if (
+      shouldBulkFetch ||
+      isDataUpdated ||
+      isAfterMutation ||
+      suppressRefetchRef.current
+    ) {
       return;
     }
 
     if (!allJenisOrderan) return;
 
     const newRows = allJenisOrderan.data || [];
+
+    const scrollContainer = scrollContainerRef.current;
+    const scrollBeforeUpdate = scrollContainer
+      ? {
+          scrollTop: scrollContainer.scrollTop,
+          scrollHeight: scrollContainer.scrollHeight,
+          clientHeight: scrollContainer.clientHeight
+        }
+      : null;
 
     setPageDataCache((prevCache) => {
       const newCache = new Map(prevCache);
@@ -2053,6 +2286,7 @@ const GridJenisOrderan = () => {
     if (currentPage > maxVisible && currentPage <= maxVisible + 1) {
       const removedPage = visiblePages[0];
       pendingScrollAdjustment.current = -(filters.limit * ROW_HEIGHT);
+      // --- TAMBAHAN: Geser index selected ke atas agar data tetap menunjuk ke item yg sama ---
       shiftSelectionForWindow(-filters.limit);
 
       setPageDataCache((prev) => {
@@ -2065,6 +2299,7 @@ const GridJenisOrderan = () => {
       // --- SCROLL KE ATAS ---
       const removedPage = visiblePages[visiblePages.length - 1];
       pendingScrollAdjustment.current = filters.limit * ROW_HEIGHT;
+      // --- TAMBAHAN: Geser index selected ke bawah ---
       shiftSelectionForWindow(filters.limit);
 
       setPageDataCache((prev) => {
@@ -2088,8 +2323,11 @@ const GridJenisOrderan = () => {
     setTimeout(() => {
       setIsTransitioning(false);
       setIsFetching(false);
+      const maxVis = Math.max(...visiblePages);
+      const minVis = Math.min(...visiblePages);
 
-      const isScrollDown = currentPage >= Math.max(...visiblePages);
+      // Tentukan arah: jika currentPage > maxVisible sebelumnya = scroll down, sebaliknya up
+      const isScrollDown = currentPage >= maxVis;
       const pagesToPrefetch = isScrollDown
         ? Array.from(
             { length: STREAM_BUFFER_SIZE },
@@ -2114,6 +2352,7 @@ const GridJenisOrderan = () => {
   ]);
 
   // 3. Row Combiner (Mapping cache to rows state)
+  // 3. Row Combiner (Mapping cache to rows state)
   useEffect(() => {
     const combinedRows: IJenisOrderan[] = [];
     visiblePages?.forEach((page) => {
@@ -2128,6 +2367,11 @@ const GridJenisOrderan = () => {
       prevRowsLengthRef.current = combinedRows.length;
 
       // --- Fokus baris yang baru disimpan (add/edit) BERDASARKAN ID ---
+      // Backend mengembalikan window yang memuat baris baru; cari index-nya di
+      // sini lalu scroll+select. Pakai posisi tengah window (idx 1 = kolom data
+      // pertama) sehingga TIDAK kena THRESHOLD_ROWS handleScroll -> window tidak
+      // bergeser -> fokus tidak meleset. `return` mencegah cabang else
+      // men-scroll ke row 0 (yang memicu pergeseran window).
       if (pendingFocusIdRef.current != null) {
         const fid = pendingFocusIdRef.current;
         pendingFocusIdRef.current = null;
@@ -2146,6 +2390,7 @@ const GridJenisOrderan = () => {
       }
 
       if (jumpToFirstRef.current) {
+        // Ctrl+Home — selalu idx 0
         jumpToFirstRef.current = false;
         setSelectedRow(0);
         setTimeout(() => {
@@ -2162,6 +2407,9 @@ const GridJenisOrderan = () => {
         }, 50);
       } else if (isPageTransitionRef.current) {
         isPageTransitionRef.current = false;
+        // Commit selectedRow yang sudah digeser BERSAMAAN dengan setRows di atas,
+        // sehingga highlight (getRowClass) selalu menunjuk baris data yang sama
+        // di satu render -> tidak ada frame inkonsisten -> highlight tidak berkedip.
         const targetRow = Math.min(
           Math.max(selectedRowRef.current, 0),
           combinedRows.length - 1
@@ -2202,14 +2450,23 @@ const GridJenisOrderan = () => {
     if (pendingScrollAdjustment.current !== 0 && scrollContainerRef.current) {
       const container = scrollContainerRef.current;
 
+      // Geser scroll seketika (Sync)
       container.scrollTop += pendingScrollAdjustment.current;
 
+      // Update referensi agar sistem tidak mengira user scroll manual
       scrollPositionRef.current = container.scrollTop;
       lastScrollTopRef.current = container.scrollTop;
       hasAdjustedScrollRef.current = true;
 
+      // Reset
       pendingScrollAdjustment.current = 0;
 
+      // Re-anchor selected cell react-data-grid ke index baris yang sudah
+      // digeser -- HANYA jika window-shift dipicu navigasi keyboard. Saat mouse
+      // scroll, user tidak sedang menavigasi sel, jadi sel aktif tidak boleh
+      // ikut pindah. Karena scrollTop sudah dikompensasi di atas, baris target
+      // berada di posisi visual yang sama -> selectCell TIDAK memicu scroll
+      // tambahan (cell sudah di viewport), jadi tampilan tidak loncat.
       if (reanchorFromKeyboardRef.current) {
         const targetRow = selectedRowRef.current;
         const idxFromKey = finalColumns.findIndex(
@@ -2222,6 +2479,16 @@ const GridJenisOrderan = () => {
     }
   }, [rows]);
 
+  useEffect(() => {
+    if (rows.length > 0 && selectedRow !== null) {
+      const selectedRowData = rows[selectedRow];
+      // dispatch(setHeaderData(selectedRowData));
+      if (selectedRowData?.id !== lastDispatchedId.current) {
+        dispatch(setHeaderData(selectedRowData));
+        lastDispatchedId.current = selectedRowData?.id;
+      }
+    }
+  }, [rows, selectedRow, dispatch]);
   useEffect(() => {
     const preventScrollOnSpace = (event: KeyboardEvent) => {
       if (
@@ -2290,15 +2557,29 @@ const GridJenisOrderan = () => {
 
   useEffect(() => {
     if (selectedRow !== null && rows.length > 0 && mode !== 'add') {
-      fillFormFromRow(rows[selectedRow]);
+      forms.setValue('id', rowData?.id ?? '');
+      forms.setValue('uuid', rowData?.uuid);
+      forms.setValue('nama', rowData?.nama);
+      forms.setValue('keterangan', rowData?.keterangan);
+      forms.setValue('statusformat', String(rowData?.statusformat ?? ''));
+      forms.setValue(
+        'statusformat_text',
+        rowData?.statusformat_text ?? rowData?.format_nama ?? ''
+      );
+      forms.setValue('statusaktif', String(rowData?.statusaktif ?? ''));
+      forms.setValue('text', rowData?.text);
     }
-    // JANGAN forms.reset() saat mode 'add' di sini — effect ikut ter-trigger
-    // saat `rows` di-update background fetch selama modal Add terbuka, dan akan
-    // me-reset nilai yang baru diisi user. Reset add-mode ditangani
-    // handleAdd()/onSuccess() lewat resetAddForm().
+    // JANGAN forms.reset() saat mode 'add' di sini. Effect ini ikut ter-trigger
+    // setiap kali `rows` di-update background fetch (bulk/prefetch) selama modal
+    // Add terbuka, sehingga me-reset nilai yang baru diisi user ke default
+    // kosong (''). Sejak id status migrasi number→string (z.string().min(1)),
+    // default '' membuat validasi gagal diam-diam → Save/Save & Add "tidak
+    // terjadi apa-apa" padahal LookUp masih menampilkan teks. Reset form
+    // add-mode sudah ditangani handleAdd()/onSuccess() lewat resetAddForm().
   }, [forms, selectedRow, rows, mode]);
 
   useEffect(() => {
+    // Initialize the refs based on columns dynamically
     columns.forEach((col) => {
       if (!inputColRefs.current[col.key]) {
         inputColRefs.current[col.key] = null;
@@ -2310,15 +2591,17 @@ const GridJenisOrderan = () => {
     const handleEscape = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         clearError();
-        forms.reset();
-        setMode('');
+        forms.reset(); // Reset the form when the Escape key is pressed
+        setMode(''); // Reset the mode to empty
         setPopOver(false);
         dispatch(clearOpenName());
       }
     };
 
+    // Add event listener for keydown when the component is mounted
     document.addEventListener('keydown', handleEscape);
 
+    // Cleanup event listener when the component is unmounted or the effect is re-run
     return () => {
       document.removeEventListener('keydown', handleEscape);
     };
@@ -2407,7 +2690,7 @@ const GridJenisOrderan = () => {
             <DraggableColumn
               defaultColumns={columns}
               saveColumns={finalColumns}
-              userId={String(user.id)}
+              userId={String(user?.id)}
               gridName="GridJenisOrderan"
               setColumnsOrder={setColumnsOrder}
               setColumnsWidth={setColumnsWidth}
@@ -2432,7 +2715,7 @@ const GridJenisOrderan = () => {
             handleCellClick({ row: args.row });
           }}
           headerRowHeight={70}
-          rowHeight={ROW_HEIGHT}
+          rowHeight={27}
           className={`${isDark ? 'rdg-dark' : 'rdg-light'} fill-grid`}
           enableVirtualization={true}
           onColumnResize={onColumnResize}
@@ -2446,7 +2729,6 @@ const GridJenisOrderan = () => {
           <ActionButton
             module="JenisOrderan"
             onAdd={handleAdd}
-            checkedRows={checkedRows}
             onDelete={handleDelete}
             onView={handleView}
             onEdit={handleEdit}
@@ -2459,8 +2741,15 @@ const GridJenisOrderan = () => {
               {
                 label: 'Print',
                 icon: <FaPrint />,
+                shortcut: 'P',
                 onClick: () => handleReport(),
                 className: 'bg-cyan-500 hover:bg-cyan-700'
+              },
+              {
+                label: 'Export',
+                icon: <FaFileExport />,
+                onClick: () => handleExportExcel(),
+                className: 'bg-green-600 hover:bg-green-700'
               }
             ]}
           />
@@ -2470,9 +2759,9 @@ const GridJenisOrderan = () => {
               ref={contextMenuRef}
               className="bg-background-input"
               style={{
-                position: 'fixed',
-                top: contextMenu.y,
-                left: contextMenu.x,
+                position: 'fixed', // Fixed agar koordinat sesuai dengan viewport
+                top: contextMenu.y, // Pastikan contextMenu.y berasal dari event.clientY
+                left: contextMenu.x, // Pastikan contextMenu.x berasal dari event.clientX
                 boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.2)',
                 padding: '8px',
                 borderRadius: '4px',
@@ -2483,8 +2772,9 @@ const GridJenisOrderan = () => {
                 variant="default"
                 onClick={() => {
                   resetGridConfig(
-                    String(user.id),
+                    String(user?.id),
                     'GridJenisOrderan',
+
                     columns,
                     setColumnsOrder,
                     setColumnsWidth

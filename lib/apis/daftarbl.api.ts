@@ -3,7 +3,6 @@ import { IAllDaftarbl, IDaftarbl } from '../types/daftarbl.type';
 import { buildQueryParams } from '../utils';
 import { api, api2 } from '../utils/AxiosInstance';
 import { DaftarblInput } from '../validations/daftarbl.validation';
-import { MenuInput } from '../validations/menu.validation';
 
 interface UpdateMenuParams {
   id: string;
@@ -21,41 +20,32 @@ export const getDaftarblFn = async (
       params: queryParams,
       signal
     });
-
     return response.data;
   } catch (error) {
     if (signal?.aborted) {
       throw new Error('Request was cancelled');
     }
-    // Jangan pakai console.error di sini. AxiosInstance sudah menangani &
-    // mencatat network error (sebagai console.warn) + menampilkan offline
-    // overlay. Memanggil console.error akan memunculkan overlay merah
-    // "Console Error" Next.js untuk error yang sebenarnya sudah ditangani
-    // (mis. saat backend port 5004 belum siap / sedang restart). Lempar ulang
-    // error aslinya supaya react-query tetap punya konteks status/response.
+    // Jangan console.error di sini. AxiosInstance sudah menangani & mencatat
+    // network error lalu menampilkan offline overlay; console.error malah
+    // memunculkan overlay merah Next.js untuk error yang sudah ditangani.
+    // Lempar ulang error aslinya supaya react-query tetap punya konteksnya.
     throw error;
   }
 };
-export const deleteDaftarblFn = async (id: string) => {
-  try {
-    const response = await api2.delete(`/daftarbl/${id}`);
-    return response.data; // Optionally return response data if needed
-  } catch (error) {
-    console.error('Error deleting order:', error);
-    throw error; // Re-throw the error if you want to handle it in the calling function
-  }
+export const deleteDaftarblFn = async (id: string): Promise<unknown> => {
+  const response = await api2.delete(`/daftarbl/${id}`);
+  return response.data;
 };
+
 export const updateDaftarblFn = async ({ id, fields }: UpdateMenuParams) => {
-  const response = await api2.put(`/daftarbl/${id}`, fields);
+  const response = await api2.put(`/daftarbl/update/${id}`, fields);
   return response.data;
 };
 
 export const storeDaftarblFn = async (fields: DaftarblInput) => {
-  const response = await api2.post(`/daftarbl`, fields);
-
+  const response = await api2.post('/daftarbl', fields);
   return response.data;
 };
-
 export const exportDaftarblFn = async (filters: any): Promise<any> => {
   try {
     const queryParams = buildQueryParams(filters);
@@ -70,22 +60,6 @@ export const exportDaftarblFn = async (filters: any): Promise<any> => {
     throw new Error('Failed to export data');
   }
 };
-
-// export const exportMenuFn = async (filters: any): Promise<any> => {
-//   try {
-//     const queryParams = buildQueryParams(filters);
-//     const response = await api2.get('/menu/export', {
-//       params: queryParams,
-//       responseType: 'blob' // Pastikan respon dalam bentuk Blob
-//     });
-
-//     return response.data; // Return the Blob file from response
-//   } catch (error) {
-//     console.error('Error exporting data:', error);
-//     throw new Error('Failed to export data');
-//   }
-// };
-
 // Correctly typed 'ids' and sending proper data format to the NestJS API
 // export const reportMenuBySelectFn = async (ids: { id: number }[]) => {
 //   try {

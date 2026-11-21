@@ -38,6 +38,7 @@ import {
 } from '@/lib/server/useConsignee';
 import { parseCurrency } from '@/lib/utils';
 import { filterConsigneeHargaJual } from '@/lib/types/consignee.type';
+import { useShiftHorizontalScroll } from '@/hooks/use-shift-horizontal-scroll';
 const FormConsignee = ({
   popOver,
   setPopOver,
@@ -51,6 +52,10 @@ const FormConsignee = ({
 }: any) => {
   const { theme, resolvedTheme } = useTheme();
   const isDark = theme === 'dark' || resolvedTheme === 'dark';
+  // Shift + scroll = geser horizontal. Grid ini lebih lebar dari modal dan
+  // react-remove-scroll bawaan Radix Dialog membatalkan wheel-nya.
+  useShiftHorizontalScroll();
+
   const [selectedRow, setSelectedRow] = useState<number>(0);
   const [popOverTglSampai, setPopOverTglSampai] = useState<boolean>(false);
   const [editingRowId, setEditingRowId] = useState<number | null>(null); // Menyimpan ID baris yang sedang diedit
@@ -669,7 +674,10 @@ const FormConsignee = ({
                           lookupValue={(value: any) => {
                             // shipper_id = varchar UUID. Number(value) → NaN →
                             // validasi gagal & shipper_id null di backend.
-                            forms.setValue('shipper_id', value ? String(value) : '');
+                            forms.setValue(
+                              'shipper_id',
+                              value ? String(value) : ''
+                            );
                           }}
                           name="shipper_id"
                           forms={forms}

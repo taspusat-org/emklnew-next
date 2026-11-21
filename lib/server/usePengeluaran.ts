@@ -17,18 +17,6 @@ import { IErrorResponse } from '../types/user.type';
 import { useAlert } from '../store/client/useAlert';
 import { useFormError } from '../hooks/formErrorContext';
 
-/**
- * Penanganan error mutasi pengeluaran.
- *
- * Dulu seluruh badan handler dibungkus `if (errorResponse !== undefined)`, jadi
- * kalau backend balas tanpa body yang bisa dibaca — 500 ber-body HTML, gateway
- * error, backend mati saat online — user menekan SIMPAN dan TIDAK terjadi apa
- * pun: dialog diam, tanpa pesan. Sekarang selalu ada pesan yang keluar.
- *
- * Yang SENGAJA dilewati: pembatalan request dan kondisi offline. Keduanya sudah
- * ditangani interceptor AxiosInstance (overlay offline / alert "Koneksi
- * Timeout"), jadi alert kedua di sini hanya jadi popup dobel.
- */
 const handleMutationError = (
   error: AxiosError,
   {

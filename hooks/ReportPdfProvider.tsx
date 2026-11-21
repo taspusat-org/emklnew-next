@@ -59,7 +59,6 @@ export function ReportPdfProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
-/** Pakai hook ini di grid manapun untuk memicu cetak laporan background. */
 export function useReportPdfContext() {
   const ctx = useContext(ReportPdfContext);
   if (!ctx) {

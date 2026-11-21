@@ -1,14 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from 'react-query';
+import { IErrorResponse } from '../types/user.type';
+import { AxiosError } from 'axios';
 import {
   deleteDaftarblFn,
   getDaftarblFn,
   storeDaftarblFn,
   updateDaftarblFn
 } from '../apis/daftarbl.api';
-import { AxiosError } from 'axios';
-import { IErrorResponse } from '../types/user.type';
-import { useFormError } from '../hooks/formErrorContext';
 import { useAlert } from '../store/client/useAlert';
+import { useFormError } from '../hooks/formErrorContext';
 
 export const useGetDaftarbl = (
   filters: {
@@ -24,12 +24,12 @@ export const useGetDaftarbl = (
     sortBy?: string;
     sortDirection?: string;
     limit?: number;
-    search?: string;
+    search?: string; // Kata kunci pencarian
   } = {},
   signal?: AbortSignal
 ) => {
   return useQuery(
-    ['daftarbls', filters],
+    ['daftarbl', filters],
     async () => await getDaftarblFn(filters, signal),
     {
       // Jangan fetch saat page < 1 (mis. trik setCurrentPage(0) untuk memaksa
@@ -44,26 +44,26 @@ export const useGetDaftarbl = (
 
 export const useCreateDaftarbl = () => {
   const { setError } = useFormError();
-  const queryClient = useQueryClient();
   const { alert } = useAlert();
 
+  // Sengaja TIDAK invalidateQueries('daftarbl') di sini. Alur onSuccess di
+  // GridDaftarbl sudah otoritatif: ia mengambil window baru dari redis lalu
+  // setCurrentPage(pageNumber) yang memicu refetch halaman yang BENAR.
+  // invalidateQueries malah me-refetch `currentPage` yang mungkin masih basi
+  // (mis. page 10093 pada tabel ~1jt baris) — query offset besar itu lambat,
+  // tiba paling akhir, dan menimpa fokus by-id -> baris fokus loncat ke baris 1.
   return useMutation(storeDaftarblFn, {
-    onSuccess: () => {
-      void queryClient.invalidateQueries('daftarbls');
-    },
     onError: (error: AxiosError) => {
       const errorResponse = error.response?.data as IErrorResponse;
 
       if (errorResponse !== undefined) {
-        // Menangani error berdasarkan path
         const errorFields = errorResponse.message || [];
 
         if (errorResponse.statusCode === 400 && Array.isArray(errorFields)) {
           // Iterasi error message dan set error di form
           errorFields?.forEach((err: { path: string[]; message: string }) => {
-            const path = err.path[0]; // Ambil path error pertama (misalnya 'nama', 'akuntansi_id')
-
-            setError(path, err.message); // Update error di context
+            const path = err.path[0];
+            setError(path, err.message);
           });
         } else {
           alert({
@@ -84,21 +84,19 @@ export const useDeleteDaftarbl = () => {
 
   return useMutation(deleteDaftarblFn, {
     onSuccess: () => {
-      void queryClient.invalidateQueries('daftarbls');
+      void queryClient.invalidateQueries('daftarbl');
     },
     onError: (error: AxiosError) => {
       const errorResponse = error.response?.data as IErrorResponse;
 
       if (errorResponse !== undefined) {
-        // Menangani error berdasarkan path
         const errorFields = errorResponse.message || [];
 
         if (errorResponse.statusCode === 400 && Array.isArray(errorFields)) {
           // Iterasi error message dan set error di form
           errorFields?.forEach((err: { path: string[]; message: string }) => {
-            const path = err.path[0]; // Ambil path error pertama (misalnya 'nama', 'akuntansi_id')
-
-            setError(path, err.message); // Update error di context
+            const path = err.path[0];
+            setError(path, err.message);
           });
         } else {
           alert({
@@ -111,28 +109,26 @@ export const useDeleteDaftarbl = () => {
     }
   });
 };
+
 export const useUpdateDaftarbl = () => {
   const { setError } = useFormError();
-  const queryClient = useQueryClient();
   const { alert } = useAlert();
 
+  // Sama seperti create: JANGAN invalidateQueries di sini. onSuccess grid yang
+  // mengatur data + fokus. invalidateQueries me-refetch currentPage basi
+  // (page besar akibat ~1jt baris) yang lambat & menimpa fokus -> baris 1.
   return useMutation(updateDaftarblFn, {
-    onSuccess: () => {
-      void queryClient.invalidateQueries('daftarbls');
-    },
     onError: (error: AxiosError) => {
       const errorResponse = error.response?.data as IErrorResponse;
 
       if (errorResponse !== undefined) {
-        // Menangani error berdasarkan path
         const errorFields = errorResponse.message || [];
 
         if (errorResponse.statusCode === 400 && Array.isArray(errorFields)) {
           // Iterasi error message dan set error di form
           errorFields?.forEach((err: { path: string[]; message: string }) => {
-            const path = err.path[0]; // Ambil path error pertama (misalnya 'nama', 'akuntansi_id')
-
-            setError(path, err.message); // Update error di context
+            const path = err.path[0];
+            setError(path, err.message);
           });
         } else {
           alert({

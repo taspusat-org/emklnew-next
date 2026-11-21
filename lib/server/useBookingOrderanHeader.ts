@@ -20,6 +20,7 @@ export const useGetAllBookingOrderanHeader = (
   filters: {
     page?: number;
     limit?: number;
+    customOffset?: number;
     search?: string;
     sortBy?: string;
     sortDirection?: string;
@@ -39,28 +40,23 @@ export const useGetAllBookingOrderanHeader = (
   const { alert } = useAlert();
   const queryClient = useQueryClient();
 
+  // TANPA dispatch(setProcessing()). Overlay loading global itu dipakai untuk
+  // MUTASI (simpan/edit/hapus), bukan untuk memuat grid — sama seperti
+  // useGetAllBiayaExtraHeader. Grid berjendela menembak bulk fetch + prefetch
+  // sekali buka, dan menembak lagi tiap pergeseran window; menyalakan overlay
+  // global di query-nya membuat layar berkedip "loading" terus-menerus padahal
+  // grid sudah menampilkan data.
+  //
+  // staleTime/cacheTime 0: window pagination dikelola sendiri oleh grid
+  // (pageDataCache + streamBuffer). Guard page >= 1 dipakai grid lewat trik
+  // setCurrentPage(0) untuk memaksa refetch window.
   return useQuery(
     ['bookingorderan', filters],
-    async () => {
-      // Only trigger processing if the page is 1
-      if (filters.page === 1) {
-        dispatch(setProcessing());
-      }
-
-      try {
-        const data = await getAllBookingOrderanMuatanFn(filters, signal);
-        return data;
-      } catch (error) {
-        // Show error toast and dispatch processed
-        dispatch(setProcessed());
-        throw error;
-      } finally {
-        // Regardless of success or failure, we dispatch setProcessed after the query finishes
-        dispatch(setProcessed());
-      }
-    },
+    async () => await getAllBookingOrderanMuatanFn(filters, signal),
     {
-      enabled: !signal?.aborted
+      enabled: !signal?.aborted && (filters.page ?? 1) >= 1,
+      staleTime: 0,
+      cacheTime: 0
     }
   );
 };

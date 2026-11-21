@@ -356,7 +356,18 @@ const ActionButton = ({
 
   // Fetch all required data
   const fetchData = async () => {
-    if (!id) return; // ← guard di sini
+    // `id` berasal dari redux-persist yang rehydrate SESUDAH render pertama,
+    // jadi pada mount pertama nilainya masih null. Dulu di sini hanya `return`
+    // tanpa mematikan isLoadingPermissions (nilai awalnya true), sementara
+    // useEffect di bawah tidak memantau `id` sehingga tidak pernah dicoba
+    // ulang saat rehydrate selesai. Akibatnya isLoadingPermissions macet di
+    // true dan tombol APPROVAL — yang dirender dengan syarat
+    // `!isLoadingPermissions` — tidak pernah muncul, bahkan untuk user yang
+    // haknya lengkap.
+    if (!id) {
+      setIsLoadingPermissions(false);
+      return;
+    }
 
     setIsLoadingPermissions(true);
     try {
@@ -395,7 +406,9 @@ const ActionButton = ({
     if (formattedModule) {
       fetchData();
     }
-  }, [formattedModule]);
+    // `id` WAJIB ikut di sini: tanpa itu permission tidak pernah diambil ulang
+    // setelah redux-persist selesai rehydrate.
+  }, [formattedModule, id]);
 
   // Computed value untuk menentukan apakah show dropdown
   const showApprovalDropdown = useMemo(() => {
@@ -436,6 +449,28 @@ const ActionButton = ({
     }
     return 'APPROVAL/NON';
   }, [hasApprovalPermission, hasNonApprovalPermission]);
+
+  // ⚠️ DIAGNOSTIK SEMENTARA — HAPUS setelah tombol APPROVAL ketemu masalahnya.
+  // Mencetak semua nilai yang menentukan tampil/tidaknya tombol approval.
+  console.log('### DIAG APPROVAL ###', {
+    module,
+    formattedModule,
+    authId: id ?? '(KOSONG)',
+    isLoadingPermissions,
+    hasApprovalPermission,
+    hasNonApprovalPermission,
+    showApprovalDropdown,
+    jumlahPermissions: permissions.length,
+    jumlahPermissionModulIni: permissions.filter(
+      (p: any) =>
+        String(p.subject ?? '')
+          .replace(/-/g, ' ')
+          .toUpperCase() === String(formattedModule ?? '').toUpperCase()
+    ).length,
+    jumlahDataParameter: dataParameter?.length ?? 0,
+    jumlahIsiDropdown: filteredApprovalData.length,
+    TOMBOL_TAMPIL: showApprovalDropdown && !isLoadingPermissions
+  });
 
   return (
     <div className="flex w-full flex-col justify-between lg:flex-row">

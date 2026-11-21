@@ -144,6 +144,25 @@ export default function SignInViewPage() {
         const session = await getSession();
 
         if (session?.user.id) {
+          // Simpan kredensial ke Redux. Tanpa ini `state.auth` tidak pernah
+          // terisi (setCredentials sudah di-import tapi belum pernah
+          // dipanggil), sehingga `state.auth.id` selalu null — dan semua
+          // komponen yang membacanya berhenti bekerja: ActionButton tidak
+          // pernah mengambil permission sehingga tombol APPROVAL tidak
+          // muncul, begitu juga hasPermission, DialogApproval, DialogLainnya,
+          // dan ubah-password.
+          dispatch(
+            setCredentials({
+              user: (session.user as User) ?? null,
+              id: session.user.id ?? null,
+              token: session.token ?? null,
+              refreshToken: session.refreshToken ?? null,
+              cabang_id: session.cabang_id ?? null,
+              accessTokenExpires: session?.accessTokenExpires ?? undefined,
+              autoLogoutExpires: Date.now()
+            })
+          );
+
           // Pre-fetch menu data dan simpan ke Redux
           try {
             const menuResponse = await api2.get(

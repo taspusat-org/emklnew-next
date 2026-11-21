@@ -1,5 +1,5 @@
 'use client';
-import React, { ReactElement, useEffect, useState } from 'react';
+import React, { ReactElement, useEffect, useState, useRef } from 'react';
 import { Worker, Viewer } from '@react-pdf-viewer/core';
 import '@react-pdf-viewer/core/lib/styles/index.css';
 import { pdfjs } from 'react-pdf';
@@ -19,8 +19,6 @@ import '@react-pdf-viewer/zoom/lib/styles/index.css';
 import { MdOutlineZoomOut } from 'react-icons/md';
 import { FaDownload, FaFileExport, FaPrint } from 'react-icons/fa';
 import { exportDivisiFn } from '@/lib/apis/divisi.api';
-import { setProcessed } from '@/lib/store/loadingSlice/loadingSlice';
-import { useDispatch } from 'react-redux';
 import CustomPrintModal from '@/components/custom-ui/CustomPrint';
 import { HeaderPdfViewer } from '@/components/custom-ui/HeaderPdfViewer';
 
@@ -28,17 +26,12 @@ const ReportMenuPage: React.FC = () => {
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [savedFilters, setSavedFilters] = useState<any>({});
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
-  const dispatch = useDispatch();
 
-  // Print plugin
   const printPluginInstance = printPlugin();
-  const { Print } = printPluginInstance;
 
-  // Zoom plugin
   const zoomPluginInstance = zoomPlugin();
   const { ZoomPopover } = zoomPluginInstance;
 
-  // Default layout with custom toolbar
   useEffect(() => {
     const storedPdf = sessionStorage.getItem('pdfUrl');
     if (storedPdf) setPdfUrl(storedPdf);
@@ -58,7 +51,6 @@ const ReportMenuPage: React.FC = () => {
       const exportPayload = { ...savedFilters };
       const response = await exportDivisiFn(exportPayload);
 
-      // Buat link download dari Blob
       const url = window.URL.createObjectURL(new Blob([response]));
       const link = document.createElement('a');
       link.href = url;
@@ -66,7 +58,6 @@ const ReportMenuPage: React.FC = () => {
       document.body.appendChild(link);
       link.click();
 
-      // Bersihkan URL object
       window.URL.revokeObjectURL(url);
       document.body.removeChild(link);
     } catch (error) {
@@ -206,10 +197,7 @@ const ReportMenuPage: React.FC = () => {
           {pdfUrl && (
             <CustomPrintModal
               isOpen={isPrintModalOpen}
-              onClose={() => {
-                setIsPrintModalOpen(false);
-                dispatch(setProcessed());
-              }}
+              onClose={() => setIsPrintModalOpen(false)}
               docUrl={pdfUrl ?? ''}
               showPages={true}
             />

@@ -20,18 +20,7 @@ import { MdOutlineZoomOut } from 'react-icons/md';
 import { FaDownload, FaFileExport, FaPrint } from 'react-icons/fa';
 import { exportJenisOrderanFn } from '@/lib/apis/jenisorderan.api';
 import CustomPrintModal from '@/components/custom-ui/CustomPrint';
-import {
-  getPrintersFn,
-  getPaperSizesFn,
-  printFileFn,
-  PrinterInfo
-} from '@/lib/apis/print.api';
 import { HeaderPdfViewer } from '@/components/custom-ui/HeaderPdfViewer';
-
-interface PaperSize {
-  id: number;
-  name: string;
-}
 
 const ReportMenuPage: React.FC = () => {
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
@@ -39,7 +28,6 @@ const ReportMenuPage: React.FC = () => {
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
 
   const printPluginInstance = printPlugin();
-  const { Print } = printPluginInstance;
 
   const zoomPluginInstance = zoomPlugin();
   const { ZoomPopover } = zoomPluginInstance;

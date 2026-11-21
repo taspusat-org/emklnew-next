@@ -3,7 +3,12 @@ import { useDispatch } from 'react-redux';
 import { useAlert } from '../store/client/useAlert';
 import { IErrorResponse } from '../types/blheader.type';
 import { useFormError } from '../hooks/formErrorContext';
-import { useMutation, useQuery, useQueryClient } from 'react-query';
+import {
+  QueryClient,
+  useMutation,
+  useQuery,
+  useQueryClient
+} from 'react-query';
 import {
   setProcessed,
   setProcessing
@@ -16,6 +21,11 @@ import {
   storePanjarHeaderFn,
   updatePanjarHeaderFn
 } from '../apis/panjarheader.api';
+
+const invalidatePanjar = (queryClient: QueryClient) => {
+  void queryClient.invalidateQueries('panjarheader');
+  void queryClient.invalidateQueries('panjarmuatandetail');
+};
 
 export const useGetAllPanjarHeader = (
   filters: {
@@ -39,40 +49,21 @@ export const useGetAllPanjarHeader = (
   } = {},
   signal?: AbortSignal
 ) => {
-  const dispatch = useDispatch();
+  // TANPA dispatch(setProcessing()). Overlay loading global itu dipakai untuk
+  // MUTASI (simpan/edit/hapus), bukan untuk memuat grid — sama seperti
+  // useGetAllBiayaExtraHeader. Grid ini berjendela: satu kali buka saja sudah
+  // menembak bulk fetch + beberapa prefetch, dan tiap pergeseran window
+  // menembak lagi. Menyalakan overlay global di query-nya membuat layar
+  // berkedip "loading" terus-menerus padahal grid sudah menampilkan data.
+  // Indikator yang relevan tetap ada di footer grid ({isLoading ?
+  // <LoadRowsRenderer /> : null}).
   return useQuery(
     ['panjarheader', filters],
-    async () => {
-      // Only trigger processing if the page is 1
-      if (filters.page === 1) {
-        dispatch(setProcessing());
-      }
-
-      try {
-        const data = await getAllPanjarHeaderFn(filters, signal);
-        return data;
-      } catch (error) {
-        // Show error toast and dispatch processed
-        dispatch(setProcessed());
-        // toast({
-        //   variant: 'destructive',
-        //   title: 'Gagal',
-        //   description: 'Terjadi masalah dengan permintaan Anda.'
-        // });
-        throw error;
-      } finally {
-        // Regardless of success or failure, we dispatch setProcessed after the query finishes
-        dispatch(setProcessed());
-      }
-    },
+    async () => await getAllPanjarHeaderFn(filters, signal),
     {
-      // Optionally, you can use the `onSettled` callback if you want to reset the processing state after query success or failure
-      onSettled: () => {
-        if (filters.page === 1) {
-          dispatch(setProcessed());
-        }
-      },
-      enabled: !signal?.aborted
+      enabled: !signal?.aborted && (filters.page ?? 1) >= 1,
+      staleTime: 0,
+      cacheTime: 0
     }
   );
 };
@@ -95,11 +86,19 @@ export const useGetPanjarMuatanDetail = (
   } = {},
   signal?: AbortSignal
 ) => {
+  // Key 'panjarmuatandetail', BUKAN 'panjarheader'. Dulu detail memakai prefix
+  // yang sama dengan useGetAllPanjarHeader sehingga cache keduanya saling
+  // menimpa/membatalkan walau isinya tidak terkait.
   return useQuery(
-    ['panjarheader', id, filters],
-    async () => await getPanjarMuatanDetailFn(id!, filters),
+    ['panjarmuatandetail', id, filters],
+    async () => await getPanjarMuatanDetailFn(id!, filters, signal),
     {
-      enabled: !!id || !signal?.aborted // Hanya aktifkan query jika tab aktif adalah "pengalamankerja"
+      // HARUS `&&`. Dengan `||`, `!signal?.aborted` bernilai true saat signal
+      // undefined sehingga query tetap jalan walau id kosong — request jadi
+      // `/panjarmuatandetail/0` dan backend menyaring panjar_id = '0'.
+      enabled: !!id && !signal?.aborted && (filters.page ?? 1) >= 1,
+      staleTime: 0,
+      cacheTime: 0
     }
   );
 };
@@ -144,7 +143,7 @@ export const useCreatePanjarHeader = () => {
     },
     onSuccess: () => {
       // on success, invalidate + clear loading
-      void queryClient.invalidateQueries(['panjarheader']);
+      invalidatePanjar(queryClient);
       dispatch(setProcessed());
     },
     onError: (error: AxiosError) => {
@@ -186,7 +185,7 @@ export const useUpdatePanjarHeader = () => {
       dispatch(setProcessing());
     },
     onSuccess: () => {
-      void queryClient.invalidateQueries('panjarheader');
+      invalidatePanjar(queryClient);
       dispatch(setProcessed());
     },
     onError: (error: AxiosError) => {
@@ -223,7 +222,7 @@ export const useDeletePanjarHeader = () => {
 
   return useMutation(deletePanjarHeaderFn, {
     onSuccess: () => {
-      void queryClient.invalidateQueries('panjarheader');
+      invalidatePanjar(queryClient);
     },
     onError: (error: AxiosError) => {
       const errorResponse = error.response?.data as IErrorResponse;

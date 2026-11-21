@@ -39,6 +39,7 @@ import {
 } from '@/constants/biayaheader';
 import FormBiayaLainLainDetailMuatan from './FormBiayaLainLainDetailMuatan';
 import { getBiayaExtraDetailByIdFn } from '@/lib/apis/biayaextraheader.api';
+import { useShiftHorizontalScroll } from '@/hooks/use-shift-horizontal-scroll';
 
 const FormBiayaHeader = ({
   popOver,
@@ -54,6 +55,10 @@ const FormBiayaHeader = ({
   const dispatch = useDispatch();
   const formRef = useRef<HTMLFormElement | null>(null); // Ref untuk form
   const openName = useSelector((state: RootState) => state.lookup.openName);
+  // Shift + scroll = geser horizontal. Grid ini lebih lebar dari modal dan
+  // react-remove-scroll bawaan Radix Dialog membatalkan wheel-nya.
+  useShiftHorizontalScroll();
+
   const [isDisableDetail, setIsDisableDetail] = useState(false);
   // const [showErrorNominal, setShowErrorNominal] = useState(false);
   const [errorNominal, setErrorNominal] = useState<Record<number, boolean>>({});

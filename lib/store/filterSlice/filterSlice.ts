@@ -5,10 +5,6 @@ import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 // TYPES
 // ============================================================
 
-/**
- * Shape filter yang bisa di-pending/commit per halaman.
- * Tambah field baru cukup di sini — slice tidak perlu diubah.
- */
 export type PageFilter = {
   tglDari: string;
   tglSampai: string;
@@ -32,16 +28,8 @@ export type PageFilter = {
 };
 
 type FilterSliceState = {
-  /**
-   * Draft — apa yang user ketik/pilih di FilterGrid,
-   * belum di-commit, tidak trigger fetch di Grid.
-   */
   pending: PageFilter;
 
-  /**
-   * Committed — dipakai Grid untuk fetch API.
-   * Hanya berubah saat user klik Reload (commitFilter).
-   */
   committed: PageFilter;
   selectedDate: string;
   selectedDate2: string;
@@ -141,15 +129,10 @@ const filterSlice = createSlice({
     // ✅ NEW: pending → commit pattern
     // ----------------------------------------------------------
 
-    /** User mengetik/memilih di FilterGrid → update pending saja */
     setPending(state, action: PayloadAction<Partial<PageFilter>>) {
       state.pending = { ...state.pending, ...action.payload };
     },
 
-    /**
-     * User klik Reload & validasi lolos → atomic commit.
-     * Inilah satu-satunya action yang boleh memicu fetch di Grid.
-     */
     commitFilter(state) {
       state.committed = { ...state.pending };
 
@@ -175,7 +158,6 @@ const filterSlice = createSlice({
       state.onReload = true;
     },
 
-    /** Buang draft, kembalikan ke committed terakhir */
     resetPending(state) {
       state.pending = { ...state.committed };
     },

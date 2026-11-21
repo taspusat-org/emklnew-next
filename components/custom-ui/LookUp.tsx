@@ -97,11 +97,6 @@ interface LookUpProps {
   onSelectRow?: (selectedRowValue?: any | undefined) => void;
   onClear?: () => void;
   autoSearch?: boolean;
-  /**
-   * Menampilkan saran inline (ghost text abu-abu) berdasarkan hasil match
-   * teratas saat mengetik. Tekan Tab atau panah kanan (kursor di akhir)
-   * untuk menerima saran. Default: true.
-   */
   autoComplete?: boolean;
   isExactMatch?: boolean;
   showClearButton?: boolean;
@@ -2328,6 +2323,10 @@ export default function LookUp({
                         onPaste={(e) =>
                           handlePaste(e.clipboardData.getData('text'))
                         }
+                        // Token tema, sama dengan cabang non-FormControl di
+                        // bawah. Versi lama memakai text-zinc-900 + border-zinc-300
+                        // yang dipatok terang, jadi begitu field ada isinya
+                        // teksnya hitam di atas background gelap (tak terbaca).
                         className={`w-full rounded-r-none text-sm tracking-normal text-input-text lg:w-[100%] rounded-none${
                           showOnButton && !forInput
                             ? 'rounded-r-none border-r-0'
@@ -2375,6 +2374,10 @@ export default function LookUp({
                       ) : null}
 
                       {showOnButton && !forInput ? (
+                        // Kelas HARUS pakai token tema, sama dengan cabang
+                        // non-FormControl di bawah. Versi lama memakai warna
+                        // biru-muda yang dipatok (#e0ecff dkk) sehingga tombolnya
+                        // menyala putih di dark mode.
                         <Button
                           type="button"
                           variant="outline"

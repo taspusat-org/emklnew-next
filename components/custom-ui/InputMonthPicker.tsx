@@ -19,33 +19,21 @@ export interface MonthInputProps
     | 'value'
     | 'onChange'
   > {
-  /** Current value of the input ("MM-YYYY" format) */
   value?: string;
-  /** Called when the value changes via typing or calendar */
   onChange?: (value: string) => void;
-  /** If true, show calendar popover */
   showCalendar?: boolean;
-  /** Callback when a month is selected in the calendar (returns Date object) */
   onSelectDate?: (date: Date) => void;
-  /** Year range start for calendar */
   fromYear?: number;
-  /** Year range end for calendar */
   toYear?: number;
-  /** Additional CSS classes for wrapper */
   className?: string;
   disabled?: boolean;
-  /** Min date for calendar */
   minDate?: Date;
-  /** Max date for calendar */
   maxDate?: Date;
-  /** Disabled dates for calendar */
   disabledDates?: Date[];
-  /** Calendar callbacks */
   callbacks?: {
     yearLabel?: (year: number) => string;
     monthLabel?: (month: { number: number; name: string }) => string;
   };
-  /** Calendar variants */
   variant?: {
     calendar?: {
       main?: any;
@@ -55,9 +43,6 @@ export interface MonthInputProps
   };
 }
 
-/**
- * A reusable month-year input with mask and optional month calendar.
- */
 const InputMonthPicker: React.FC<MonthInputProps> = ({
   value = '',
   onChange,

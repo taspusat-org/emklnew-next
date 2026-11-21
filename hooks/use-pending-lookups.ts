@@ -3,10 +3,6 @@ import { RootState } from '@/lib/store/store';
 import { useCallback, useState } from 'react';
 import { setSubmitClicked } from '@/lib/store/lookupSlice/lookupSlice';
 
-/**
- * Hook untuk menangani pending lookups saat form submit
- * Menunggu semua lookup selesai fetch data sebelum submit
- */
 export function usePendingLookups() {
   const pendingLookups = useSelector(
     (state: RootState) => state.lookup.pendingLookups
@@ -17,11 +13,6 @@ export function usePendingLookups() {
 
   const hasPendingLookups = pendingLookups.length > 0;
 
-  /**
-   * Menunggu semua pending lookups selesai dengan timeout
-   * @param timeoutMs - Maximum waktu tunggu dalam milliseconds (default: 3000ms)
-   * @returns Promise yang resolve true jika semua selesai, false jika timeout
-   */
   const waitForPendingLookups = useCallback(
     (timeoutMs: number = 3000): Promise<boolean> => {
       return new Promise((resolve) => {
@@ -54,12 +45,6 @@ export function usePendingLookups() {
     [store]
   );
 
-  /**
-   * Handler untuk submit form dengan pengecekan pending lookups
-   * Akan menunggu semua pending lookups selesai sebelum menjalankan onSubmit
-   * @param onSubmit - Fungsi submit yang akan dijalankan
-   * @param options - Opsi tambahan (timeoutMs, triggerSubmitClicked)
-   */
   const handleSubmitWithPendingCheck = useCallback(
     async <T = any>(
       onSubmit: (arg?: T) => void | Promise<void>,

@@ -15,10 +15,7 @@ import DataGrid, { Column, DataGridHandle } from 'react-data-grid';
 import InputDatePicker from '@/components/custom-ui/InputDatePicker';
 import { useLainnyaDialog } from '@/lib/store/client/useDialogLainnya';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
-import {
-  setClearLookup,
-  setSubmitClicked
-} from '@/lib/store/lookupSlice/lookupSlice';
+import { setSubmitClicked } from '@/lib/store/lookupSlice/lookupSlice';
 import {
   Form,
   FormControl,
@@ -27,10 +24,8 @@ import {
   FormLabel,
   FormMessage
 } from '@/components/ui/form';
-import {
-  JENISORDERMUATAN,
-  JENISORDERMUATANNAMA
-} from '@/constants/bookingorderan';
+import { JENISORDERMUATANNAMA } from '@/constants/bookingorderan';
+import { useShiftHorizontalScroll } from '@/hooks/use-shift-horizontal-scroll';
 
 const FormJobParty = ({
   forms,
@@ -49,6 +44,10 @@ const FormJobParty = ({
   const dispatch = useDispatch();
   const gridRef = useRef<DataGridHandle>(null);
   const formRef = useRef<HTMLFormElement | null>(null);
+  // Shift + scroll = geser horizontal. Grid ini lebih lebar dari modal dan
+  // react-remove-scroll bawaan Radix Dialog membatalkan wheel-nya.
+  useShiftHorizontalScroll();
+
   const [partyCount, setPartyCount] = useState(0);
   const [dataGridKey, setDataGridKey] = useState(0);
   // const [reloadForm, setReloadForm] = useState<boolean>(false);
@@ -324,11 +323,7 @@ const FormJobParty = ({
                     {...propsScheduleLookup}
                     label={`SCHEDULE_PARTY_${props.rowIdx}`} // Ensure you use row.id or rowIdx for unique labeling
                     lookupValue={(id) => {
-                      handleInputChange(
-                        props.rowIdx,
-                        'schedule_id',
-                        id
-                      );
+                      handleInputChange(props.rowIdx, 'schedule_id', id);
                     }}
                     onSelectRow={(val) => {
                       handleInputChange(
@@ -546,11 +541,7 @@ const FormJobParty = ({
                     {...propsdaftarblLookup}
                     label={`DAFTARBL_PARTY_${props.rowIdx}`} // Ensure you use row.id or rowIdx for unique labeling
                     lookupValue={(id) => {
-                      handleInputChange(
-                        props.rowIdx,
-                        'daftarbl_id',
-                        id
-                      );
+                      handleInputChange(props.rowIdx, 'daftarbl_id', id);
                     }}
                     onSelectRow={(val) => {
                       handleInputChange(
@@ -594,11 +585,7 @@ const FormJobParty = ({
                   {...propshargatruckingLookup}
                   label={`HARGATRUCKING_PARTY_${props.rowIdx}`} // Ensure you use row.id or rowIdx for unique labeling
                   lookupValue={(id) => {
-                    handleInputChange(
-                      props.rowIdx,
-                      'hargatrucking',
-                      id
-                    );
+                    handleInputChange(props.rowIdx, 'hargatrucking', id);
                   }}
                   onSelectRow={(val) => {
                     handleInputChange(
@@ -732,8 +719,12 @@ const FormJobParty = ({
     );
 
     try {
-      dispatch(setClearLookup(true));
-
+      // TIDAK memanggil setClearLookup(true) di sini. Flag itu global: SEMUA
+      // LookUp yang sedang ter-mount mengosongkan teks input-nya, termasuk
+      // lookup header (marketing, tujuan, container) dan lookup di kanan grid
+      // (daftar BL, harga trucking, lokasi stuffing) yang nilainya sudah ada.
+      // Akibatnya user harus memilih ulang padahal nilainya masih tersimpan di
+      // form. PROSES di Shipping Instruction & BL juga tidak melakukan ini.
       if (
         marketing &&
         tujuan &&
@@ -746,28 +737,43 @@ const FormJobParty = ({
       ) {
         setReloadForm(true);
 
-        const rowsBaru = Array.from({ length: partyCount }, (_, idx) => ({
-          id: idx,
-          nocontainer: '',
-          noseal: '',
-          schedule_id: null,
-          schedule_nama: '',
-          kapal: '',
-          kapal_nama: '',
-          pelayarancontainer_id: null,
-          pelayarancontainer_nama: '',
-          voyberangkat: '',
-          tglberangkat: '',
-          daftarbl_id: null,
-          daftarbl_nama: '',
-          hargatrucking: '',
-          hargatrucking_nama: '',
-          nominalstuffing: '',
-          lokasistuffing: '',
-          lokasistuffing_nama: ''
-        }));
+        // Snapshot baris yang sudah ada — PROSES ulang TIDAK boleh menghapus
+        // isian user. Sebelumnya tiap baris dibuat ulang kosong, jadi container,
+        // seal, schedule, daftar BL, harga trucking, sampai lokasi stuffing
+        // hilang semua dan harus dipilih lagi. Kuncinya index (party ke-N),
+        // karena baris di sini memang dibangkitkan dari jumlah party.
+        const barisSebelumnya = forms.getValues('details') as any[] | undefined;
 
-        setRows(rowsBaru);
+        setRows((prevRows) => {
+          const sumber = prevRows.length > 0 ? prevRows : barisSebelumnya ?? [];
+
+          return Array.from({ length: partyCount }, (_, idx) => {
+            const lama = sumber[idx];
+
+            return {
+              // Baris baru dikirim sebagai STRING '0' — id di database bertipe
+              // TEXT (UUID) sejak migrasi, jadi jangan pakai angka.
+              id: lama?.id ?? '0',
+              nocontainer: lama?.nocontainer ?? '',
+              noseal: lama?.noseal ?? '',
+              schedule_id: lama?.schedule_id ?? null,
+              schedule_nama: lama?.schedule_nama ?? '',
+              kapal: lama?.kapal ?? '',
+              kapal_nama: lama?.kapal_nama ?? '',
+              pelayarancontainer_id: lama?.pelayarancontainer_id ?? null,
+              pelayarancontainer_nama: lama?.pelayarancontainer_nama ?? '',
+              voyberangkat: lama?.voyberangkat ?? '',
+              tglberangkat: lama?.tglberangkat ?? '',
+              daftarbl_id: lama?.daftarbl_id ?? null,
+              daftarbl_nama: lama?.daftarbl_nama ?? '',
+              hargatrucking: lama?.hargatrucking ?? '',
+              hargatrucking_nama: lama?.hargatrucking_nama ?? '',
+              nominalstuffing: lama?.nominalstuffing ?? '',
+              lokasistuffing: lama?.lokasistuffing ?? '',
+              lokasistuffing_nama: lama?.lokasistuffing_nama ?? ''
+            };
+          });
+        });
       } else {
         setReloadForm(false);
       }
@@ -778,13 +784,16 @@ const FormJobParty = ({
 
   useEffect(() => {
     forms.setValue('nobukti', '');
-    forms.setValue('jenisorder_id', JENISORDERMUATAN);
-    forms.setValue('jenisorder_nama', JENISORDERMUATANNAMA);
+    forms.setValue('jenisorder_id', String(selectedJenisOrderan ?? ''));
+    forms.setValue(
+      'jenisorder_nama',
+      selectedJenisOrderanNama || JENISORDERMUATANNAMA
+    );
 
     if (partyCount != 0) {
       setPartyCount(0);
     }
-  }, [forms, openForm]);
+  }, [forms, openForm, selectedJenisOrderan, selectedJenisOrderanNama]);
 
   useEffect(() => {
     if (rows) {
@@ -1135,14 +1144,20 @@ const FormJobParty = ({
                   </div>
 
                   <Button
-                    type="submit"
+                    // type="button", dan HANYA processOnReload() — sama seperti
+                    // tombol PROSES di Shipping Instruction & BL.
+                    //
+                    // Sebelumnya tombol ini juga memanggil onSubmit(), yaitu
+                    // forms.handleSubmit milik grid: tombol proses ikut
+                    // menjalankan validasi SIMPAN, dan kalau validasinya lolos
+                    // justru benar-benar MENYIMPAN. Prasyaratnya sudah dicek
+                    // sendiri di processOnReload (marketing, tujuan, party,
+                    // est muat, container, tanggal, asal muatan).
+                    type="button"
                     variant="default"
                     className="mt-2 flex w-fit flex-row items-center justify-center"
-                    // onClick={onSubmit}
                     onClick={(e) => {
                       e.preventDefault();
-                      onSubmit();
-                      // setReloadForm(true)
                       processOnReload();
                     }}
                   >

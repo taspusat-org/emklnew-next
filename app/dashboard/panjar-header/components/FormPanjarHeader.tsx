@@ -25,10 +25,12 @@ import FormLabel, {
   FormMessage
 } from '@/components/ui/form';
 import { EmptyRowsRenderer } from '@/components/EmptyRows';
-import { JENISORDERMUATAN } from '@/constants/biayaextraheader';
+import { JENISORDERMUATANNAMA } from '@/constants/biayaextraheader';
 import { FaRegSquarePlus } from 'react-icons/fa6';
 import { PanjarMuatanDetail } from '@/lib/types/panjarheader.type';
 import { useGetPanjarMuatanDetail } from '@/lib/server/usePanjarheader';
+import { api2 } from '@/lib/utils/AxiosInstance';
+import { useShiftHorizontalScroll } from '@/hooks/use-shift-horizontal-scroll';
 
 const FormPanjarHeader = ({
   popOver,
@@ -44,6 +46,10 @@ const FormPanjarHeader = ({
   const todayDate = new Date();
   const { theme, resolvedTheme } = useTheme();
   const isDark = theme === 'dark' || resolvedTheme === 'dark';
+  // Shift + scroll = geser horizontal. Grid ini lebih lebar dari modal dan
+  // react-remove-scroll bawaan Radix Dialog membatalkan wheel-nya.
+  useShiftHorizontalScroll();
+
   const [dataGridKey, setDataGridKey] = useState(0);
   const [editingRowId, setEditingRowId] = useState(0); // Menyimpan ID baris yang sedang diedit
   const [editableValues, setEditableValues] = useState<Map<number, string>>(
@@ -58,15 +64,18 @@ const FormPanjarHeader = ({
   const formRef = useRef<HTMLFormElement | null>(null); // Ref untuk form
   const openName = useSelector((state: RootState) => state.lookup.openName);
   const headerData = useSelector((state: RootState) => state.header.headerData);
-  const { selectedJenisOrderan } = useSelector(
-    (state: RootState) => state.filter
-  );
+  const { committed } = useSelector((state: RootState) => state.filter);
+  const panjarId = headerData?.id ? String(headerData.id) : undefined;
 
+  // Tanpa filter/limit = ambil SELURUH detail panjar terpilih (service
+  // memperlakukan limit 0/undefined sebagai "semua"). Form memang butuh semua
+  // barisnya, bukan satu halaman: payload simpan dibangun dari daftar ini dan
+  // baris yang tidak terkirim akan DIHAPUS backend.
   const {
     data: allDataDetail,
     isLoading: isLoadingData,
     refetch
-  } = useGetPanjarMuatanDetail(headerData?.id ?? 0);
+  } = useGetPanjarMuatanDetail(panjarId);
 
   const fmt = (date: Date) =>
     `${String(date.getDate()).padStart(2, '0')}-${String(
@@ -105,9 +114,12 @@ const FormPanjarHeader = ({
     }
   ];
 
-  const jenisOrderan = selectedJenisOrderan
-    ? selectedJenisOrderan
-    : JENISORDERMUATAN;
+  // jenisorder_id sekarang uuid v7 bertipe text. Sumbernya: nilai form (diisi
+  // dari baris header saat edit/view, atau dari filter yang aktif saat add).
+  // Konstanta JENISORDER* lama (angka 1..4) sudah TIDAK ada di database, jadi
+  // memakainya membuat lookup orderan selalu kosong.
+  const jenisOrderan =
+    forms.watch('jenisorder_id') || committed.jenisOrderan || '';
   const lookupOrderan = [
     {
       columns: [{ key: 'nobukti', name: 'NO BUKTI' }],
@@ -279,11 +291,7 @@ const FormPanjarHeader = ({
                     {...orderan}
                     label={`ORDERAN ${props.rowIdx + 1}`} // Ensure you use row.id or rowIdx for unique labeling
                     lookupValue={(id) => {
-                      handleInputChange(
-                        props.rowIdx,
-                        'orderanmuatan_id',
-                        id
-                      ); // Use props.rowIdx to get the correct index
+                      handleInputChange(props.rowIdx, 'orderanmuatan_id', id); // Use props.rowIdx to get the correct index
                     }}
                     onSelectRow={(val) =>
                       handleInputChange(
@@ -572,42 +580,52 @@ const FormPanjarHeader = ({
   }, [openName]); // Tambahkan popOverDate sebagai dependen
 
   useEffect(() => {
-    if (allDataDetail && popOver) {
-      if (allDataDetail?.data?.length > 0 && mode !== 'add') {
-        // Format data detail utama (tanpa rincian)
-        const formattedRows = allDataDetail.data.map((item: any) => ({
-          id: item.id,
-          nobukti: item.nobukti ?? '',
-          panjar_id: item.panjar_id,
-          orderanmuatan_id: item.orderanmuatan_id ?? '',
-          orderanmuatan_nobukti: item.orderanmuatan_nobukti ?? '',
-          estimasi: formatCurrency(item.estimasi) ?? '0',
-          nominal: formatCurrency(item.nominal) ?? '0',
-          keterangan: item.keterangan ?? '',
-          isNew: false
-        }));
+    if (!popOver) return;
 
-        setRows([
-          ...formattedRows,
-          { isAddRow: true, id: 'add_row', isNew: false } // Always add the "Add Row" button row at the end
-        ]);
-      } else {
-        setRows([
-          // If no data, add one editable row and the "Add Row" button row at the end
-          {
-            id: '',
-            nobukti: '',
-            panjar_id: '',
-            orderanmuatan_id: '',
-            orderanmuatan_nobukti: '',
-            estimasi: '0',
-            nominal: '0',
-            keterangan: '',
-            isNew: true
-          },
-          { isAddRow: true, id: 'add_row', isNew: false } // Row for the "Add Row" button
-        ]);
-      }
+    // Mode add TIDAK boleh menunggu `allDataDetail`. `panjarId` diambil dari
+    // baris grid yang sedang terpilih, jadi saat belum ada baris terpilih
+    // query detail disabled dan datanya tetap undefined selamanya. Guard lama
+    // (`if (allDataDetail && popOver)`) membuat efek ini tidak pernah jalan
+    // pada kondisi itu, sehingga grid detail kosong: tanpa baris input maupun
+    // baris tombol tambah.
+    if (mode !== 'add' && !allDataDetail) return;
+
+    const detailData = mode === 'add' ? [] : allDataDetail?.data ?? [];
+
+    if (detailData.length > 0) {
+      // Format data detail utama (tanpa rincian)
+      const formattedRows = detailData.map((item: any) => ({
+        id: item.id,
+        nobukti: item.nobukti ?? '',
+        panjar_id: item.panjar_id,
+        orderanmuatan_id: item.orderanmuatan_id ?? '',
+        orderanmuatan_nobukti: item.orderanmuatan_nobukti ?? '',
+        estimasi: formatCurrency(item.estimasi) ?? '0',
+        nominal: formatCurrency(item.nominal) ?? '0',
+        keterangan: item.keterangan ?? '',
+        isNew: false
+      }));
+
+      setRows([
+        ...formattedRows,
+        { isAddRow: true, id: 'add_row', isNew: false } // Always add the "Add Row" button row at the end
+      ]);
+    } else {
+      setRows([
+        // If no data, add one editable row and the "Add Row" button row at the end
+        {
+          id: '',
+          nobukti: '',
+          panjar_id: '',
+          orderanmuatan_id: '',
+          orderanmuatan_nobukti: '',
+          estimasi: '0',
+          nominal: '0',
+          keterangan: '',
+          isNew: true
+        },
+        { isAddRow: true, id: 'add_row', isNew: false } // Row for the "Add Row" button
+      ]);
     }
   }, [allDataDetail, headerData?.id, popOver, mode]);
 
@@ -625,8 +643,42 @@ const FormPanjarHeader = ({
   }, [rows]);
 
   useEffect(() => {
+    if (!popOver || mode !== 'add') return;
+
     forms.setValue('tglbukti', fmt(todayDate));
-  }, [popOver]);
+
+    if (committed.jenisOrderan) {
+      forms.setValue('jenisorder_id', String(committed.jenisOrderan));
+      forms.setValue(
+        'jenisorder_nama',
+        committed.jenisOrderanNama || JENISORDERMUATANNAMA
+      );
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await api2.get('/JenisOrderan', {
+          params: { nama: JENISORDERMUATANNAMA }
+        });
+        const list: any[] = res?.data?.data ?? res?.data ?? [];
+        const muatan = list.find(
+          (item) => String(item?.nama).toUpperCase() === JENISORDERMUATANNAMA
+        );
+        if (!cancelled && muatan) {
+          forms.setValue('jenisorder_id', String(muatan.id));
+          forms.setValue('jenisorder_nama', muatan.nama);
+        }
+      } catch (err) {
+        console.error('Gagal mengambil default JENIS ORDERAN:', err);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [popOver, mode, committed.jenisOrderan, committed.jenisOrderanNama]);
 
   return (
     <Dialog open={popOver} onOpenChange={setPopOver}>
@@ -657,7 +709,14 @@ const FormPanjarHeader = ({
             <Form {...forms}>
               <form
                 ref={formRef}
-                onSubmit={onSubmit}
+                // `onSubmit` dari grid menerima (keepOpenModal), bukan event —
+                // meneruskan handler ini apa adanya membuat submit native
+                // (mis. tekan Enter) mengirim objek event sebagai keepOpenModal
+                // yang selalu truthy, sehingga modal salah dianggap "Save & Add".
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  onSubmit(false);
+                }}
                 className="flex h-full flex-col gap-6"
               >
                 <div className="flex h-[100%] flex-col gap-2 lg:gap-3">

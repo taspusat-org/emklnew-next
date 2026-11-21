@@ -32,7 +32,13 @@ export const useGetAllOrderanMuatan = (
       schedule_id?: number | string;
     };
   } = {},
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  // Pemakai yang cuma butuh data ini secara on-demand (mis. FormShippingInstraction
+  // yang hanya memakai `refetch()` saat proses reload) bisa mematikan fetch
+  // otomatis. Default true supaya grid yang memang menampilkan daftar penuh
+  // (GridOrderanMuatan) tidak berubah perilakunya. Sejalan dengan
+  // useGetPengeluaranHeaderList(params, popOver).
+  enabled = true
 ) => {
   const dispatch = useDispatch();
 
@@ -57,7 +63,7 @@ export const useGetAllOrderanMuatan = (
       }
     },
     {
-      enabled: !signal?.aborted
+      enabled: enabled && !signal?.aborted
     }
   );
 };

@@ -505,8 +505,10 @@ export const HeaderPdfViewer = (
                   <GoToPreviousPage>
                     {(props) => (
                       <button
-                        {...props}
-                        className="flex h-6 w-6 items-center justify-center rounded transition-colors hover:bg-gray-200 sm:h-7 sm:w-7"
+                        onClick={props.onClick}
+                        disabled={props.isDisabled}
+                        aria-label="Previous page"
+                        className="flex h-6 w-6 items-center justify-center rounded transition-colors hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-40 sm:h-7 sm:w-7"
                       >
                         <FaArrowUp className="text-xs text-gray-600 sm:text-sm" />
                       </button>
@@ -520,8 +522,10 @@ export const HeaderPdfViewer = (
                   <GoToNextPage>
                     {(props) => (
                       <button
-                        {...props}
-                        className="flex h-6 w-6 items-center justify-center rounded transition-colors hover:bg-gray-200 sm:h-7 sm:w-7"
+                        onClick={props.onClick}
+                        disabled={props.isDisabled}
+                        aria-label="Next page"
+                        className="flex h-6 w-6 items-center justify-center rounded transition-colors hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-40 sm:h-7 sm:w-7"
                       >
                         <FaArrowDown className="text-xs text-gray-600 sm:text-sm" />
                       </button>
@@ -548,7 +552,8 @@ export const HeaderPdfViewer = (
                 <DefaultZoomOut>
                   {(props) => (
                     <button
-                      {...props}
+                      onClick={props.onClick}
+                      aria-label="Zoom out"
                       className="flex h-6 w-6 items-center justify-center rounded transition-colors hover:bg-gray-200 sm:h-7 sm:w-7"
                     >
                       <FaMinus className="text-xs text-gray-600 sm:text-sm" />
@@ -563,7 +568,8 @@ export const HeaderPdfViewer = (
                 <DefaultZoomIn>
                   {(props) => (
                     <button
-                      {...props}
+                      onClick={props.onClick}
+                      aria-label="Zoom in"
                       className="flex h-6 w-6 items-center justify-center rounded transition-colors hover:bg-gray-200 sm:h-7 sm:w-7"
                     >
                       <FaPlus className="text-xs text-gray-600 sm:text-sm" />

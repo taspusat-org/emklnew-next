@@ -42,6 +42,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { useAlert } from '@/lib/store/client/useAlert';
 import { useGetPenerimaanEmklDetail } from '@/lib/server/usePenerimaanEmklHeader';
 import { useTheme } from 'next-themes';
+import { useShiftHorizontalScroll } from '@/hooks/use-shift-horizontal-scroll';
 const FormPengembalianPinjamanEmkl = ({ forms, mode, popOver }: any) => {
   const { theme, resolvedTheme } = useTheme();
   const isDark = theme === 'dark' || resolvedTheme === 'dark';
@@ -53,6 +54,10 @@ const FormPengembalianPinjamanEmkl = ({ forms, mode, popOver }: any) => {
   } = useGetPenerimaanEmklDetail({
     filters: { nobukti: headerData?.nobukti ?? '' }
   });
+  // Shift + scroll = geser horizontal. Grid ini lebih lebar dari modal dan
+  // react-remove-scroll bawaan Radix Dialog membatalkan wheel-nya.
+  useShiftHorizontalScroll();
+
   const [tglDari, setTglDari] = useState<string>('');
   const [tglSampai, setTglSampai] = useState<string>('');
   const [editingRowId, setEditingRowId] = useState<number | null>(null); // Menyimpan ID baris yang sedang diedit

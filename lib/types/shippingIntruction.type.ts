@@ -31,7 +31,9 @@ export interface ShippingInstructionDetail {
   notifyparty: string;
   statuspisahbl: string;
   statuspisahbl_nama: string;
-  emkllain_id: number;
+  // emkl_id = kolom (sudah di-rename dari emkl_id, bertipe UUID teks).
+  // emkllain_nama tetap — itu alias tampilan hasil join ke tabel emkl.
+  emkl_id: string;
   emkllain_nama: string;
   containerpelayaran_id: number;
   containerpelayaran_nama: string;

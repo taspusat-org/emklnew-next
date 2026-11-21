@@ -446,6 +446,27 @@ table {
   background-color: #e2f5f7; /* Warna untuk row yang dipilih */
   color: black;
 }
+/* Sel yang isinya grid rincian (tab "Shipping") TIDAK boleh ikut diwarnai
+   sebagai sel terpilih. Aturan fokus di atas memakai warna terang yang dipatok
+   (#e2f5f7 + color:black) — di dark mode itu membuat isi grid rincian tidak
+   terbaca saat sel-nya diklik. Isinya sudah punya latar & warna teks sendiri
+   dari token tema, jadi di sini cukup dinetralkan. */
+.rincian-block-cell,
+.rincian-block-cell[tabindex='0'] {
+  background-color: transparent !important;
+  color: inherit !important;
+  padding: 0 !important;
+}
+/* Grid rincian bersarang: aturan ".rdg > .rdg-row:last-child .rdg-cell" milik
+   grid induk memakai descendant selector, jadi ikut mematikan garis antar baris
+   di dalam grid rincian saat blok-nya jadi baris terakhir. Kembalikan di sini,
+   kecuali untuk baris terakhir grid rincian itu sendiri. */
+.rincian-block-cell .rdg > .rdg-row:not(:last-child) > .rdg-cell {
+  border-bottom: 1px solid hsla(var(--border));
+}
+.rincian-block-cell .rdg > .rdg-row:not(:has(~ .rdg-row)) > .rdg-cell {
+  border-bottom: none;
+}
 .s8wc6fl7-0-0-beta-47[tabindex='0'] {
   color: black;
 }

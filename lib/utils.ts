@@ -123,7 +123,8 @@ export const buildQueryParams = ({
   isreload,
   isLookUp = '',
   sortDirection = 'asc',
-  search = ''
+  search = '',
+  customOffset
 }: GetParams) => {
   const params: any = {
     page,
@@ -134,6 +135,11 @@ export const buildQueryParams = ({
     sortDirection,
     ...filters
   };
+
+  // Hanya dikirim kalau memang dipakai, supaya URL modul lain tidak berubah.
+  if (customOffset !== undefined) {
+    params.customOffset = customOffset;
+  }
 
   // Hanya tambahkan isreload jika ada (tidak undefined)
   if (isreload !== undefined) {
@@ -149,12 +155,6 @@ export function dynamicRequiredMessage(fieldName: string) {
   return `${fieldName.toUpperCase()} ${REQUIRED_FIELD}`;
 }
 
-/**
- * Kolom relasi (`*_id`, `coa*`) boleh NULL di db tapi TIDAK boleh string kosong:
- * '' tetap dianggap nilai dan langsung ditolak foreign key. LookUp yang
- * di-clear lewat `String(id ?? '')` dan defaultValues bernilai '' menghasilkan
- * '' itu, jadi payload dinormalkan dulu sebelum dikirim.
- */
 export const blankToNull = <T extends Record<string, unknown>>(
   values: T,
   keys: readonly (keyof T)[]
@@ -177,6 +177,15 @@ export const parseCurrency = (value: string): number => {
   return parseFloat(stringValue.replace(/,/g, '')) || 0;
 };
 
+// Satu formatter dipakai ulang. number.toLocaleString(locale, opts) membangun
+// Intl.NumberFormat BARU tiap panggilan; di grid berjendela itu dipanggil
+// ratusan kali per render dan jadi penyebab utama scroll terasa berat
+// (terukur ~473ms vs ~8ms untuk 40 render x 250 baris).
+const currencyFormatter = new Intl.NumberFormat('en-US', {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2
+});
+
 export const formatCurrency = (value: number | string): string => {
   if (typeof value === 'string' && value.trim() === '') return ''; // Handle empty input
 
@@ -185,10 +194,7 @@ export const formatCurrency = (value: number | string): string => {
   if (isNaN(number)) return ''; // Return empty if it's not a valid number
 
   // Format angka sebagai currency dengan ribuan dan dua desimal
-  return number.toLocaleString('en-US', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2
-  });
+  return currencyFormatter.format(number);
 };
 
 export const cancelPreviousRequest = (abortControllerRef: any) => {

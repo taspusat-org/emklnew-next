@@ -83,7 +83,7 @@ export const orderanMuatanSchema = z.object({
 
   nominalstuffing: z.string().nullable().optional(),
 
-  emkllain_id: z.number().nullable().optional(),
+  emkl_id: z.number().nullable().optional(),
   emkllain_nama: z.string().nullable().optional(),
 
   asalmuatan: z.string().nullable().optional(),

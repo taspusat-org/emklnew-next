@@ -1,11 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import React from 'react';
-import {
-  render,
-  screen,
-  waitFor,
-  within
-} from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -85,12 +80,10 @@ export const queryBtn = (label: string) =>
 export const saveButton = () => getBtn('SAVE');
 
 export interface RenderFormOptions {
-  /** Zod schema used to wire react-hook-form validation. */
   schema?: any;
   mode?: 'add' | 'edit' | 'view' | 'delete' | string;
   defaultValues?: Record<string, any>;
   onValid?: jest.Mock;
-  /** Extra/override props passed to the form component. */
   props?: Record<string, any>;
 }
 
@@ -101,14 +94,6 @@ export interface RenderFormResult {
   store: ReturnType<typeof makeTestStore>;
 }
 
-/**
- * Render a dashboard form component with the standard props it expects
- * (forms, onSubmit, mode, handleClose, popOver, setPopOver, loading flags),
- * wrapped in redux + react-query + form-error providers.
- *
- * `onSubmit(isSaveAndAdd)` mirrors the real parent: it runs react-hook-form
- * validation and only invokes `onValid` when the data satisfies the schema.
- */
 export function renderForm(
   FormComponent: any,
   options: RenderFormOptions = {}

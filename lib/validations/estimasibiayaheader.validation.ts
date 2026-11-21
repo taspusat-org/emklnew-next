@@ -4,12 +4,12 @@ import { dynamicRequiredMessage } from '../utils';
 export const estimasiBiayaDetailInvoiceSchema = z.object({
   id: z.string().optional(),
   nobukti: z.string().nullable().optional(),
-  estimasibiaya_id: z.number().nullable().optional(),
+  estimasibiaya_id: z.string().nullable().optional(),
 
-  link_id: z.number().nullable().optional(),
+  link_id: z.string().nullable().optional(),
   linkdetailinvoice_nama: z.string().nullable().optional(),
 
-  biayaemkl_id: z.number().nullable().optional(),
+  biayaemkl_id: z.string().nullable().optional(),
   biayaemkldetailinvoice_nama: z.string().nullable().optional(),
 
   nominal: z.string().nullable().optional()
@@ -21,12 +21,12 @@ export type estimasiBiayaDetailInvoiceInput = z.infer<
 export const estimasiBiayaDetailBiayaSchema = z.object({
   id: z.string().optional(),
   nobukti: z.string().nullable().optional(),
-  estimasibiaya_id: z.number().nullable().optional(),
+  estimasibiaya_id: z.string().nullable().optional(),
 
-  link_id: z.number().nullable().optional(),
+  link_id: z.string().nullable().optional(),
   link_nama: z.string().nullable().optional(),
 
-  biayaemkl_id: z.number().nullable().optional(),
+  biayaemkl_id: z.string().nullable().optional(),
   biayaemkl_nama: z.string().nullable().optional(),
 
   nominal: z.string().nullable().optional(),
@@ -48,13 +48,13 @@ export const estimasiBiayaHeaderSchema = z.object({
     .nonempty({ message: dynamicRequiredMessage('TGL BUKTI') }),
 
   jenisorder_id: z
-    .number({
+    .string({
       required_error: dynamicRequiredMessage('JENIS ORDER')
     })
     .min(1, { message: dynamicRequiredMessage('JENIS ORDER') }),
   jenisorder_nama: z.string().nullable().optional(),
 
-  orderan_id: z.number().nullable().optional(),
+  orderan_id: z.string().nullable().optional(),
   orderan_nobukti: z
     .string({ message: dynamicRequiredMessage('NO BUKTI ORDERAN') })
     .nonempty({ message: dynamicRequiredMessage('NO BUKTI ORDERAN') }),
@@ -64,27 +64,28 @@ export const estimasiBiayaHeaderSchema = z.object({
     .nonempty({ message: dynamicRequiredMessage('NOMINAL') }),
 
   shipper_id: z
-    .number({
+    .string({
       required_error: dynamicRequiredMessage('SHIPPER')
     })
     .min(1, { message: dynamicRequiredMessage('SHIPPER') }),
   shipper_nama: z.string().nullable().optional(),
 
-  statusppn: z.string()
+  statusppn: z
+    .string()
     .min(1, { message: dynamicRequiredMessage('STATUS PPN') }),
   statusppn_nama: z.string().nullable().optional(),
 
   asuransi_id: z
-    .number({
+    .string({
       required_error: dynamicRequiredMessage('ASURANSI')
     })
     .min(1, { message: dynamicRequiredMessage('ASURANSI') }),
   asuransi_nama: z.string().nullable().optional(),
 
-  comodity_id: z.number().nullable().optional(),
+  comodity_id: z.string().nullable().optional(),
   comodity_nama: z.string().nullable().optional(),
 
-  consignee_id: z.number().nullable().optional(),
+  consignee_id: z.string().nullable().optional(),
   consignee_nama: z.string().nullable().optional(),
 
   detailsbiaya: z.array(estimasiBiayaDetailBiayaSchema).min(1),

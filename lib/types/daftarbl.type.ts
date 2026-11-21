@@ -1,18 +1,20 @@
 import { IMeta } from './error.type';
 
 export interface IDaftarbl {
-  id: string;
-  nama: string;
-  keterangan: string;
+  id: string; // Primary key (varchar(200))
+  uuid: string; // Unique identifier
+  nama: string; // Nama (nvarchar(max))
+  keterangan: string; // Keterangan (nvarchar(max))
 
-  statusaktif: string; // id parameter status aktif (varchar UUID), bukan angka
-  statusaktif_text: string;
-  text?: string; // teks status aktif (par.text)
-  memo?: string; // memo status aktif (JSON) — dipakai render badge di grid
+  statusaktif?: string; // Status Aktif (id parameter varchar)
+  text?: string; // Status Aktif text
+  memo?: string; // Memo status aktif (JSON) — dipakai render badge di grid
+  statusaktif_uuid?: string;
 
-  modifiedby?: string;
-  created_at: string;
-  updated_at: string;
+  info?: string; // Info (nvarchar(max))
+  modifiedby?: string; // Modified by (varchar(200))
+  created_at: string; // Created at (datetime)
+  updated_at: string; // Updated at (datetime)
 }
 export interface IAllDaftarbl {
   data: IDaftarbl[];

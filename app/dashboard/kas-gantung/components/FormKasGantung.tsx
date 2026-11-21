@@ -48,6 +48,7 @@ import { useGetKasGantungDetail } from '@/lib/server/useKasGantung';
 import InputCurrency from '@/components/custom-ui/InputCurrency';
 import LookUpModal from '@/components/custom-ui/LookUpModal';
 import { useTheme } from 'next-themes';
+import { useShiftHorizontalScroll } from '@/hooks/use-shift-horizontal-scroll';
 const FormKasGantung = ({
   popOver,
   setPopOver,
@@ -61,6 +62,10 @@ const FormKasGantung = ({
 }: any) => {
   const { theme, resolvedTheme } = useTheme();
   const isDark = theme === 'dark' || resolvedTheme === 'dark';
+  // Shift + scroll = geser horizontal. Grid ini lebih lebar dari modal dan
+  // react-remove-scroll bawaan Radix Dialog membatalkan wheel-nya.
+  useShiftHorizontalScroll();
+
   const [selectedRow, setSelectedRow] = useState<number>(0);
   const [popOverTglSampai, setPopOverTglSampai] = useState<boolean>(false);
   const [editingRowId, setEditingRowId] = useState<number | null>(null); // Menyimpan ID baris yang sedang diedit

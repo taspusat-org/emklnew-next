@@ -5,23 +5,38 @@ import { useSelector } from 'react-redux';
 import { IoMdRefresh } from 'react-icons/io';
 import { Button } from '@/components/ui/button';
 import React, { useEffect, useState } from 'react';
-import { commitFilter, setPending } from '@/lib/store/filterSlice/filterSlice';
-import PeriodeValidation from '@/components/custom-ui/PeriodeValidate';
 import { RootState } from '@/lib/store/store';
+import {
+  setOnReload,
+  setPending,
+  commitFilter
+} from '@/lib/store/filterSlice/filterSlice';
+import PeriodeValidation from '@/components/custom-ui/PeriodeValidate';
 
 const FilterGrid = () => {
   const dispatch = useDispatch();
   const pending = useSelector((state: RootState) => state.filter.pending);
   const [triggerValidation, setTriggerValidation] = useState(false);
+  const { onReload } = useSelector((state: any) => state.filter);
+
+  const onSubmit = () => {
+    setTriggerValidation(true);
+  };
 
   const handleValidationResult = (isValid: boolean) => {
-    if (!triggerValidation) return;
-    setTriggerValidation(false);
-    if (!isValid) return;
-
-    // ✅ Atomic commit — satu action, satu re-render
-    dispatch(commitFilter());
+    if (triggerValidation) {
+      if (isValid) {
+        dispatch(commitFilter());
+      }
+      setTriggerValidation(false);
+    }
   };
+
+  useEffect(() => {
+    if (onReload) {
+      dispatch(setOnReload(false)); // Simulate a reload operation
+    }
+  }, [onReload]);
 
   return (
     <div className={`flex h-[100%] w-full justify-center`}>

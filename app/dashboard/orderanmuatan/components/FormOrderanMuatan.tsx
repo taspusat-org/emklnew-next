@@ -1219,7 +1219,7 @@ const FormOrderanMuatan = ({
                             key={index}
                             {...props}
                             lookupValue={(value: any) => {
-                              forms.setValue('emkllain_id', Number(value));
+                              forms.setValue('emkl_id', Number(value));
                             }}
                             onSelectRow={(val) => {
                               forms.setValue('emkllain_nama', val?.nama);
@@ -1227,7 +1227,7 @@ const FormOrderanMuatan = ({
                             onClear={() => {
                               forms.setValue('emkllain_nama', '');
                             }}
-                            name="emkllain_id"
+                            name="emkl_id"
                             forms={forms}
                             lookupNama={forms.getValues('emkllain_nama')}
                           />

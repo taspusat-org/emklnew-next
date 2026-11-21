@@ -6,21 +6,14 @@ import LookUp from '@/components/custom-ui/LookUp';
 import FormFooterButtons from '@/components/custom-ui/FormFooterButtons';
 import { useSelector, useDispatch } from 'react-redux';
 import { IoMdClose, IoMdRefresh } from 'react-icons/io';
+import { FaChevronDown, FaChevronRight } from 'react-icons/fa';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import DataGrid, { Column, DataGridHandle } from 'react-data-grid';
 import InputDatePicker from '@/components/custom-ui/InputDatePicker';
-import {
-  filterOrderanMuatan,
-  OrderanMuatan
-} from '@/lib/types/orderanHeader.type';
-import { useGetAllOrderanMuatan } from '@/lib/server/useOrderanHeader';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { prosesShippingOrderanMuatanFn } from '@/lib/apis/orderanHeader.api';
 import { JENISORDERMUATAN, statusJobMasukGudang } from '@/constants/statusjob';
-import {
-  ShippingInstructionDetail,
-  ShippingInstructionDetailRincian
-} from '@/lib/types/shippingIntruction.type';
+import { ShippingInstructionDetail } from '@/lib/types/shippingIntruction.type';
 import {
   setClearLookup,
   setSubmitClicked
@@ -36,24 +29,50 @@ import {
   setProcessed,
   setProcessing
 } from '@/lib/store/loadingSlice/loadingSlice';
-import {
-  useGetShippingInstructionDetail,
-  useGetShippingInstructionDetailRincian
-} from '@/lib/server/useShippingIntruction';
+import { useGetShippingInstructionDetail } from '@/lib/server/useShippingIntruction';
+import { useAlert } from '@/lib/store/client/useAlert';
 import {
   getAllShippingInstructionHeaderFn,
   getShippingInstructionDetailRincianFn
 } from '@/lib/apis/shippinginstruction.api';
 import { EmptyRowsRenderer } from '@/components/EmptyRows';
+import { useShiftHorizontalScroll } from '@/hooks/use-shift-horizontal-scroll';
 
-interface Filter {
-  page: number;
-  limit: number;
-  search: string;
-  filters: typeof filterOrderanMuatan;
-  sortBy: string;
-  sortDirection: 'asc' | 'desc';
-}
+const JUMLAH_KOLOM_TREE = 9;
+
+const TINGGI_BARIS_DETAIL = 55;
+const TINGGI_TAB_RINCIAN = 32;
+const TINGGI_HEADER_RINCIAN = 27;
+const TINGGI_BARIS_RINCIAN = 40;
+const TINGGI_BORDER_GRID_RINCIAN = 2;
+const TINGGI_PEMBUNGKUS_RINCIAN = 14;
+
+const cellWithError = (
+  value: string,
+  error: string | undefined,
+  control: React.ReactNode
+) => (
+  <div
+    className="flex h-full w-full flex-col justify-center"
+    title={error ?? value}
+  >
+    {control}
+    {error && (
+      <p className="truncate px-1 pt-[2px] text-[10px] leading-tight text-destructive">
+        {error}
+      </p>
+    )}
+  </div>
+);
+
+const headerCell = (label: string) => (
+  <div
+    className="flex h-full flex-col items-center justify-center gap-1"
+    title={label.toUpperCase()}
+  >
+    <p className="text-sm">{label}</p>
+  </div>
+);
 
 const FormShippingInstruction = ({
   popOver,
@@ -69,15 +88,16 @@ const FormShippingInstruction = ({
   const todayDate = new Date();
   const { theme, resolvedTheme } = useTheme();
   const isDark = theme === 'dark' || resolvedTheme === 'dark';
+  // Shift + scroll = geser horizontal. Grid ini lebih lebar dari modal dan
+  // react-remove-scroll bawaan Radix Dialog membatalkan wheel-nya.
+  useShiftHorizontalScroll();
+
   const [dataGridKey, setDataGridKey] = useState(0);
   const [daftarBlValue, setDaftarBlValue] = useState(0);
-  const [scheduleValue, setScheduleValue] = useState(0);
+  const [scheduleValue, setScheduleValue] = useState<string>('');
   const [notIn, setNotIn] = useState('');
   const [reloadForm, setReloadForm] = useState<boolean>(false);
-  const [editingRowId, setEditingRowId] = useState(0); // Menyimpan ID baris yang sedang diedit
-  const [editableValues, setEditableValues] = useState<Map<number, string>>(
-    new Map()
-  ); // Nilai yang sedang diedit untuk setiap baris
+  const [editingRowId, setEditingRowId] = useState(0);
   const [rows, setRows] = useState<
     (
       | ShippingInstructionDetail
@@ -85,17 +105,16 @@ const FormShippingInstruction = ({
     )[]
   >([]);
 
-  const [rowsDetailRincian, setRowsDetailRincian] = useState<
-    (
-      | ShippingInstructionDetail
-      | (Partial<ShippingInstructionDetail> & { isNew: boolean })
-    )[]
-  >([]);
-
+  const [rincianByIndex, setRincianByIndex] = useState<Record<number, any[]>>(
+    {}
+  );
+  const [expandedDetailIdx, setExpandedDetailIdx] = useState<Set<number>>(
+    new Set()
+  );
   const dispatch = useDispatch();
+  const { alert } = useAlert();
   const gridRef = useRef<DataGridHandle>(null);
-  const formRef = useRef<HTMLFormElement | null>(null); // Ref untuk form
-  const abortControllerRef = useRef<AbortController | null>(null); // AbortController untuk cancel request
+  const formRef = useRef<HTMLFormElement | null>(null);
   const openName = useSelector((state: RootState) => state.lookup.openName);
   const headerData = useSelector((state: RootState) => state.header.headerData);
   const detailData = useSelector((state: RootState) => state.header.detailData);
@@ -104,36 +123,15 @@ const FormShippingInstruction = ({
       date.getMonth() + 1
     ).padStart(2, '0')}-${date.getFullYear()}`;
 
-  const [filters, setFilters] = useState<Filter>({
-    page: 1,
-    limit: 30,
-    filters: {
-      ...filterOrderanMuatan
-    },
-    search: '',
-    sortBy: 'nobukti',
-    sortDirection: 'asc'
-  });
-
-  const {
-    data: allDataOrderanMuatan,
-    isLoading: isLoadingOrderanMuatan,
-    refetch
-  } = useGetAllOrderanMuatan(
-    { ...filters, page: 1 },
-    abortControllerRef.current?.signal
-  );
-
   const {
     data: allDataDetail,
     isLoading,
     refetch: refetchDetail
-  } = useGetShippingInstructionDetail(headerData?.id ?? 0);
+  } = useGetShippingInstructionDetail(headerData?.id);
 
   const lookupPropsSchedule = [
     {
       columns: [
-        { key: 'id', name: 'ID' },
         { key: 'kapal_nama', name: 'KAPAL' },
         { key: 'pelayaran_nama', name: 'PELAYARAN' },
         { key: 'voyberangkat', name: 'VOY BERANGKAT' },
@@ -147,7 +145,7 @@ const FormShippingInstruction = ({
       singleColumn: false,
       pageSize: 20,
       disabled: mode === 'view' || mode === 'delete' ? true : false,
-      postData: 'id',
+      postData: 'kapal_nama',
       dataToPost: 'id'
     }
   ];
@@ -160,7 +158,6 @@ const FormShippingInstruction = ({
       showOnButton: false,
       showClearButton: false,
       selectedRequired: false,
-      // endpoint: 'tujuankapal',
       singleColumn: false,
       pageSize: 20,
       disabled: true,
@@ -177,8 +174,6 @@ const FormShippingInstruction = ({
       showOnButton: false,
       showClearButton: false,
       selectedRequired: false,
-      // endpoint: `kapal`,
-      // label: 'KAPAL LOOKUP',
       singleColumn: true,
       pageSize: 20,
       disabled: true,
@@ -198,113 +193,118 @@ const FormShippingInstruction = ({
 
   const processOnReload = async () => {
     try {
-      // forms.setValue(`details.detailsrincian`, []);
-      // setRowsDetailRincian([])
       const tglbukti = forms.getValues('tglbukti');
-      if (!scheduleValue || !tglbukti) {
-        setReloadForm(false);
-        setRows([]);
-        setRowsDetailRincian([]);
+      const scheduleId =
+        scheduleValue || String(forms.getValues('schedule_id') ?? '');
+
+      if (!scheduleId || !tglbukti) {
+        alert({
+          title: !scheduleId
+            ? 'SCHEDULE BELUM DIPILIH.'
+            : 'TGL BUKTI BELUM DIISI.',
+          variant: 'danger',
+          submitText: 'OK'
+        });
         return;
       }
 
       dispatch(setProcessing());
-      const test = await prosesShippingOrderanMuatanFn(Number(scheduleValue));
+
+      const detailSebelumnya = new Map<string, any>();
+      const rincianSebelumnya = new Map<string, any>();
+
+      rows.forEach((row: any, idx: number) => {
+        if (row?.isAddRow) return;
+        const key = String(row.daftarbl_id ?? '');
+        if (key !== '') {
+          detailSebelumnya.set(key, {
+            shippinginstructiondetail_nobukti:
+              row.shippinginstructiondetail_nobukti ?? '',
+            id: row.id,
+            keterangan: row.keterangan ?? '',
+            comodity: row.comodity ?? '',
+            notifyparty: row.notifyparty ?? '',
+            totalgw: row.totalgw ?? ''
+          });
+        }
+
+        (rincianByIndex[idx] ?? []).forEach((r: any) => {
+          const rKey = `${key}|${String(r.orderanmuatan_nobukti ?? '')}`;
+          rincianSebelumnya.set(rKey, {
+            id: r.id,
+            comodity: r.comodity ?? ''
+          });
+        });
+      });
+
+      const hasil = await prosesShippingOrderanMuatanFn(scheduleId);
+      const grup = hasil?.data ?? [];
+
       setReloadForm(true);
 
-      // await Promise.all(
-      //   dataDaftarBL.map(async (data: any, index: number) => {
-      //     setFilters((prev) => ({
-      //       ...prev,
-      //       filters: {
-      //         ...prev.filters,
-      //         schedule_id: String(scheduleValue),
-      //         daftarbl_id: String(data.daftarbl_id)
-      //       }
-      //     }));
-
-      //     // Tunggu refetch selesai
-      //     const ref = await refetch();
-
-      //     const rowsData = ref?.data?.data ?? [];
-      //     // Kalau ada data, format untuk dimasukkan ke form
-      //     if (rowsData.length > 0) {
-      //       const formattedRows = rowsData.map((item: any) => ({
-      //         id: Number(item.id),
-      //         orderanmuatan_nobukti: item.nobukti ?? '',
-      //         comodity: item.comodity ?? '',
-      //         nocontainer: item.nocontainer ?? '',
-      //         noseal: item.noseal ?? '',
-      //         shipper_id: Number(item.shipper_id) ?? '',
-      //         shipper_nama: item.shipper_nama ?? '',
-      //         isNew: false
-      //       }));
-
-      //       // Set langsung ke form sesuai index barisnya
-      //       forms.setValue(`details.${index}.detailsrincian`, formattedRows);
-      //       return formattedRows;
-      //     } else {
-      //       forms.setValue(`details.${index}.detailsrincian`, []);
-      //       return [];
-      //     }
-      //   })
-      // );
-
-      for (const [index, data] of test.data.entries()) {
-        const daftarbl_id = data.daftarbl_id;
-        // Update filter sebelum refetch
-        setFilters((prevFilters) => ({
-          ...prevFilters,
-          filters: {
-            ...prevFilters.filters,
-            schedule_id: String(scheduleValue),
-            daftarbl_id: daftarbl_id
-          }
-        }));
-
-        // kasih jeda supaya state filters sempat update
-        await new Promise((r) => setTimeout(r, 5));
-
-        // Tunggu hasil refetch berdasarkan daftarbl_id saat ini
-        const ref = await refetch();
-        const rowsData = ref?.data?.data ?? [];
-
-        const formattedRows = rowsData.map((item: any) => ({
-          idOrderan: Number(item.id),
-          orderanmuatan_nobukti: item.nobukti ?? '',
-          keterangan: '',
-          comodity: item.comodity ?? '',
-          nocontainer: item.nocontainer ?? '',
-          noseal: item.noseal ?? '',
-          shipper_id: Number(item.shipper_id) ?? '',
-          shipper_nama: item.shipper_nama ?? '',
-          isNew: false
-        }));
-
-        // kasih jeda kecil biar React Hook Form sempat update internalnya
-        await new Promise((r) => setTimeout(r, 5));
-
-        forms.setValue(`details.${index}.detailsrincian`, formattedRows);
+      if (grup.length === 0) {
+        setRows([]);
+        resetTreeState();
+        dispatch(setProcessed());
+        return;
       }
 
-      setDaftarBlValue(test.data[0].daftarbl_id);
-      const rowsBaru = test.data.map((item: any, idx: number) => ({
-        id: idx,
-        orderan_id: Number(item.orderan_id) ?? 0,
-        daftarbl_id: Number(item.daftarbl_id) ?? 0,
-        containerpelayaran_id: Number(item.pelayarancontainer_id) ?? 0,
-        emkllain_id: Number(item.emkllain_id) ?? 0,
-        tujuankapal_id: Number(item.tujuankapal_id) ?? 0,
-        shippinginstructiondetail_nobukti: '',
-        asalpelabuhan: '',
-        keterangan: '',
-        consignee: '',
-        shipper: '',
-        comodity: '',
-        notifyparty: '',
-        totalgw: ''
-      }));
+      setDaftarBlValue(grup[0].daftarbl_id);
+
+      const rowsBaru: any[] = [];
+      const rincianBaru: Record<number, any[]> = {};
+
+      grup.forEach((item: any, idx: number) => {
+        const key = String(item.daftarbl_id ?? '');
+        const lama = detailSebelumnya.get(key);
+
+        rowsBaru.push({
+          id: lama?.id ?? '0',
+          orderan_id: item.orderan_id ?? '',
+          daftarbl_id: item.daftarbl_id ?? '',
+          containerpelayaran_id: item.pelayarancontainer_id ?? '',
+          emkl_id: item.emkl_id ?? '',
+          tujuankapal_id: item.tujuankapal_id ?? '',
+          shippinginstructiondetail_nobukti:
+            lama?.shippinginstructiondetail_nobukti ?? '',
+          asalpelabuhan: item.asalpelabuhan ?? '',
+          shipper: item.shipper ?? '',
+          consignee: item.consignee ?? '',
+          keterangan: lama?.keterangan ?? '',
+          comodity: lama?.comodity ?? item.comodity ?? '',
+          notifyparty: lama?.notifyparty ?? '',
+          totalgw: lama?.totalgw ?? '',
+          isNew: !lama
+        });
+
+        const rincian = Array.isArray(item.detailsrincian)
+          ? item.detailsrincian
+          : [];
+
+        rincianBaru[idx] = rincian.map((r: any) => {
+          const rKey = `${key}|${String(r.orderanmuatan_nobukti ?? '')}`;
+          const rLama = rincianSebelumnya.get(rKey);
+
+          return {
+            id: rLama?.id ?? '0',
+            idOrderan: r.shipper_id ?? '',
+            orderanmuatan_nobukti: r.orderanmuatan_nobukti ?? '',
+            keterangan: '',
+            comodity: rLama?.comodity ?? r.comodity ?? '',
+            nocontainer: r.nocontainer ?? '',
+            noseal: r.noseal ?? '',
+            shipper_id: r.shipper_id ?? '',
+            shipper_nama: r.shipper_nama ?? '',
+            isNew: !rLama
+          };
+        });
+
+        forms.setValue(`details.${idx}.detailsrincian`, rincianBaru[idx]);
+      });
+
       setRows(rowsBaru);
+      setRincianByIndex(rincianBaru);
+      setExpandedDetailIdx(new Set(rowsBaru.map((_r, i) => i)));
 
       dispatch(setProcessed());
     } catch (error) {
@@ -337,595 +337,361 @@ const FormShippingInstruction = ({
     });
   };
 
-  const handleInputChangeDetailRincian = (
-    index: number,
+  const handleRincianChange = (
+    detailIdx: number,
+    rincianIdx: number,
     field: string,
     value: string | number
   ) => {
-    setRowsDetailRincian((prevRows) => {
-      const updatedData = [...prevRows];
+    setRincianByIndex((prev) => {
+      const current = [...(prev[detailIdx] ?? [])];
+      const target = { ...current[rincianIdx], [field]: value };
 
-      updatedData[index][field] = value;
-
-      if (
-        updatedData[index].isNew &&
-        Object.values(updatedData[index]).every((val) => val !== '')
-      ) {
-        updatedData[index].isNew = false;
+      if (target.isNew && Object.values(target).every((val) => val !== '')) {
+        target.isNew = false;
       }
+      current[rincianIdx] = target;
 
-      if (editingRowId !== null) {
-        forms.setValue(`details.${editingRowId}.detailsrincian`, updatedData);
-      }
-      // else {
-      //   forms.setValue(`details.0.detailsrincian`, updatedData);
-      // }
+      forms.setValue(`details.${detailIdx}.detailsrincian`, current);
 
-      return updatedData;
+      return { ...prev, [detailIdx]: current };
     });
   };
 
+  const resetTreeState = () => {
+    setRincianByIndex({});
+    setExpandedDetailIdx(new Set());
+  };
+
+  const toggleDetailRow = (detailIdx: number) => {
+    setExpandedDetailIdx((prev) => {
+      const next = new Set(prev);
+      if (next.has(detailIdx)) next.delete(detailIdx);
+      else next.add(detailIdx);
+      return next;
+    });
+  };
+
+  const treeRows = useMemo(() => {
+    const flattened: any[] = [];
+    let detailNo = 0;
+
+    rows.forEach((row: any, detailIdx: number) => {
+      if (row?.isAddRow) return;
+
+      detailNo += 1;
+      flattened.push({
+        ...row,
+        isTreeType: 'detail',
+        detailIdx,
+        nomor: detailNo
+      });
+
+      if (expandedDetailIdx.has(detailIdx)) {
+        flattened.push({
+          isTreeType: 'rincianBlock',
+          detailIdx,
+          rincianRows: (rincianByIndex[detailIdx] ?? []).map(
+            (r: any, rincianIdx: number) => ({ ...r, detailIdx, rincianIdx })
+          )
+        });
+      }
+    });
+
+    return flattened;
+  }, [rows, rincianByIndex, expandedDetailIdx]);
+
+  const detailCount = useMemo(
+    () => rows.filter((r: any) => !r?.isAddRow).length,
+    [rows]
+  );
+
+  const detailErrors = forms.formState.errors?.details as any[] | undefined;
+
+  const rincianColumns = useMemo((): Column<any>[] => {
+    const isReadOnly = mode === 'delete' || mode === 'view';
+
+    const rincianError = (row: any, field: string) =>
+      (
+        (detailErrors?.[row.detailIdx] as any)?.detailsrincian?.[
+          row.rincianIdx
+        ] as any
+      )?.[field]?.message as string | undefined;
+
+    const rincianText = (row: any, field: string) => {
+      const value = String(row[field] ?? '');
+
+      return cellWithError(
+        value,
+        rincianError(row, field),
+        <p className="truncate px-1 text-xs">{value}</p>
+      );
+    };
+
+    const rincianInput = (row: any, field: string) => {
+      const value = String(row[field] ?? '');
+      const error = rincianError(row, field);
+
+      return cellWithError(
+        value,
+        error,
+        <Input
+          type="text"
+          value={value}
+          title={value}
+          readOnly={isReadOnly}
+          onKeyDown={inputStopPropagation}
+          onClick={(e) => e.stopPropagation()}
+          onChange={(e) =>
+            handleRincianChange(
+              row.detailIdx,
+              row.rincianIdx,
+              field,
+              e.target.value
+            )
+          }
+          className={`h-7 min-h-7 w-full rounded border text-xs ${
+            error ? 'border-destructive' : 'border-gray-300'
+          }`}
+        />
+      );
+    };
+
+    return [
+      {
+        key: 'orderanmuatan_nobukti',
+        name: 'job',
+        headerCellClass: 'column-headers',
+        cellClass: 'form-input',
+        resizable: true,
+        draggable: true,
+        width: '1fr',
+        minWidth: 160,
+        renderHeaderCell: () => headerCell('job'),
+        renderCell: (props: any) =>
+          rincianText(props.row, 'orderanmuatan_nobukti')
+      },
+      {
+        key: 'comodity',
+        name: 'comodity',
+        headerCellClass: 'column-headers',
+        cellClass: 'form-input',
+        resizable: true,
+        draggable: true,
+        width: '1fr',
+        minWidth: 160,
+        renderHeaderCell: () => headerCell('comodity'),
+        renderCell: (props: any) => rincianInput(props.row, 'comodity')
+      },
+      {
+        key: 'nocontainer',
+        name: 'no container',
+        headerCellClass: 'column-headers',
+        cellClass: 'form-input',
+        resizable: true,
+        draggable: true,
+        width: '1fr',
+        minWidth: 160,
+        renderHeaderCell: () => headerCell('no container'),
+        renderCell: (props: any) => rincianText(props.row, 'nocontainer')
+      },
+      {
+        key: 'noseal',
+        name: 'no seal',
+        headerCellClass: 'column-headers',
+        cellClass: 'form-input',
+        resizable: true,
+        draggable: true,
+        width: '1fr',
+        minWidth: 140,
+        renderHeaderCell: () => headerCell('no seal'),
+        renderCell: (props: any) => rincianText(props.row, 'noseal')
+      },
+      {
+        key: 'shipper_nama',
+        name: 'nama shipper',
+        headerCellClass: 'column-headers',
+        cellClass: 'form-input',
+        resizable: true,
+        draggable: true,
+        width: '1fr',
+        minWidth: 160,
+        renderHeaderCell: () => headerCell('nama shipper'),
+        renderCell: (props: any) => rincianText(props.row, 'shipper_nama')
+      }
+    ];
+  }, [mode, detailErrors]);
+
   const columns = useMemo((): Column<ShippingInstructionDetail>[] => {
+    const isReadOnly = mode === 'delete' || mode === 'view';
+
+    const detailError = (row: any, field: string) =>
+      (detailErrors?.[row.detailIdx] as any)?.[field]?.message as
+        | string
+        | undefined;
+
+    const detailInput = (row: any, field: string) => {
+      const value = String(row[field] ?? '');
+      const error = detailError(row, field);
+
+      return cellWithError(
+        value,
+        error,
+        <Input
+          type="text"
+          value={value}
+          title={value}
+          readOnly={isReadOnly}
+          onFocus={() => handleOnFocus(row.daftarbl_id, row.detailIdx)}
+          onKeyDown={inputStopPropagation}
+          onClick={(e) => e.stopPropagation()}
+          onChange={(e) =>
+            handleInputChange(row.detailIdx, field, e.target.value)
+          }
+          className={`h-2 min-h-9 w-full rounded border ${
+            error ? 'border-destructive' : 'border-gray-300'
+          }`}
+        />
+      );
+    };
+
+    const readOnlyInput = (row: any, field: string) => {
+      const value = String(row[field] ?? '');
+      const error = detailError(row, field);
+
+      return cellWithError(
+        value,
+        error,
+        <Input
+          type="text"
+          value={value}
+          title={value}
+          readOnly
+          className={`h-2 min-h-9 w-full rounded border ${
+            error ? 'border-destructive' : 'border-gray-300'
+          }`}
+        />
+      );
+    };
+
+    const rincianBlock = (row: any) => {
+      const rincianRows: any[] = row.rincianRows ?? [];
+      const jumlahBaris = Math.max(1, rincianRows.length);
+
+      return (
+        <div className="w-full bg-background py-1 pl-10 pr-3 text-foreground">
+          <div className="overflow-hidden rounded-sm border border-border">
+            <div className="flex w-full flex-row justify-start border-b border-border bg-background-grid-header px-1 pt-1">
+              <div className="rounded-t-sm border border-b-0 border-border bg-background px-4 py-1 text-xs font-bold uppercase text-primary">
+                Shipping
+              </div>
+            </div>
+
+            {/* Klik & tombol di dalam grid rincian tidak diteruskan ke grid
+                induk supaya seleksi sel dan navigasi keyboard tidak dobel. */}
+            <div
+              className="overflow-hidden bg-background text-foreground"
+              style={{
+                height:
+                  TINGGI_HEADER_RINCIAN + jumlahBaris * TINGGI_BARIS_RINCIAN
+              }}
+              onClick={(e) => e.stopPropagation()}
+              onKeyDown={(e) => e.stopPropagation()}
+            >
+              <DataGrid
+                columns={rincianColumns as any[]}
+                defaultColumnOptions={{ sortable: false, resizable: true }}
+                rows={rincianRows}
+                rowKeyGetter={(r: any) => `${r.detailIdx}-${r.rincianIdx}`}
+                rowHeight={TINGGI_BARIS_RINCIAN}
+                headerRowHeight={TINGGI_HEADER_RINCIAN}
+                renderers={{ noRowsFallback: <EmptyRowsRenderer /> }}
+                className={`${
+                  isDark ? 'rdg-dark' : 'rdg-light'
+                } fill-grid text-xs`}
+                enableVirtualization={false}
+              />
+            </div>
+          </div>
+        </div>
+      );
+    };
+
     return [
       {
         key: 'nomor',
         name: 'NO',
-        width: 50,
-        cellClass: 'form-input',
-        colSpan: (args) => {
-          if (args.type === 'ROW' && args.row.isAddRow) {
-            return 5; // Spanning the "Add Row" button across 3 columns (adjust as needed)
-          }
-          return undefined; // For other rows, no column spanning
-        },
+        width: 60,
+        cellClass: (row: any) =>
+          row?.isTreeType === 'rincianBlock'
+            ? 'rincian-block-cell'
+            : 'form-input',
         headerCellClass: 'column-headers',
-        renderHeaderCell: (column: any) => (
-          <div className="flex h-full flex-col items-center justify-center gap-1">
-            <p className="text-sm">No.</p>
-          </div>
-        ),
+        colSpan: (args: any) =>
+          args.type === 'ROW' && args.row?.isTreeType === 'rincianBlock'
+            ? JUMLAH_KOLOM_TREE
+            : undefined,
+        renderHeaderCell: () => headerCell('No.'),
         renderCell: (props: any) => {
+          if (props.row.isTreeType === 'rincianBlock') {
+            return rincianBlock(props.row);
+          }
           return (
-            <div className="flex h-full w-full cursor-pointer items-center justify-center text-sm">
-              {props.row.isAddRow ? '' : props.rowIdx + 1}
+            <div className="flex h-full w-full items-center justify-center text-sm font-bold">
+              {props.row.nomor}
             </div>
           );
         }
       },
       {
         key: 'shippinginstructiondetail_nobukti',
-        name: 'shippinginstructiondetail_nobukti',
+        name: 'nomor shipping',
         headerCellClass: 'column-headers',
         resizable: true,
         draggable: true,
         cellClass: 'form-input',
-        width: 250,
-        renderHeaderCell: (column: any) => (
-          <div className="flex h-full cursor-pointer flex-col items-center justify-center gap-1">
-            <p className={`text-sm`}>nomor shipping</p>
-          </div>
-        ),
+        width: 300,
+        renderHeaderCell: () => headerCell('nomor shipping'),
         renderCell: (props: any) => {
+          const isExpanded = expandedDetailIdx.has(props.row.detailIdx);
           return (
-            <div>
-              {props.row.isAddRow ? (
-                ''
-              ) : (
-                <Input
-                  type="text"
-                  value={props.row.shippinginstructiondetail_nobukti || ''}
-                  disabled={true}
-                  className="h-2 min-h-9 w-full rounded border border-gray-300"
-                />
-              )}
+            <div className="flex h-full w-full items-center gap-2">
+              <button
+                type="button"
+                aria-label={isExpanded ? 'Tutup rincian' : 'Buka rincian'}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toggleDetailRow(props.row.detailIdx);
+                }}
+                className="flex h-[20px] w-[20px] shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-700 transition-colors hover:bg-blue-200"
+              >
+                {isExpanded ? (
+                  <FaChevronDown size={10} />
+                ) : (
+                  <FaChevronRight size={10} />
+                )}
+              </button>
+              <Input
+                type="text"
+                value={props.row.shippinginstructiondetail_nobukti || ''}
+                title={props.row.shippinginstructiondetail_nobukti || ''}
+                disabled={true}
+                className="h-2 min-h-9 w-full rounded border border-gray-300"
+              />
             </div>
           );
         }
       },
       {
         key: 'asalpelabuhan',
-        name: 'asalpelabuhan',
+        name: 'pelabuhan asal',
         headerCellClass: 'column-headers',
         resizable: true,
         draggable: true,
         cellClass: 'form-input',
         width: 250,
-        renderHeaderCell: (column: any) => (
-          <div className="flex h-full cursor-pointer flex-col items-center justify-center gap-1">
-            <p className={`text-sm`}>pelabuhan asal</p>
-          </div>
-        ),
-        renderCell: (props: any) => {
-          return (
-            <div>
-              {props.row.isAddRow ? (
-                ''
-              ) : (
-                <Input
-                  type="text"
-                  onFocus={() =>
-                    handleOnFocus(props.row.daftarbl_id, props.rowIdx)
-                  }
-                  value={props.row.asalpelabuhan}
-                  readOnly={mode == 'delete' || mode == 'view'}
-                  onKeyDown={inputStopPropagation}
-                  onClick={(e) => e.stopPropagation()}
-                  onChange={(e) => {
-                    handleInputChange(
-                      props.rowIdx,
-                      'asalpelabuhan',
-                      e.target.value
-                    );
-                  }}
-                  className="h-2 min-h-9 w-full rounded border border-gray-300"
-                />
-                // <FormField
-                //   name="pelabuhanasal"
-                //   control={forms.control}
-                //   render={({ field }) => (
-                //     <FormItem className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
-                //       <div className="flex flex-col lg:w-full">
-                //         <FormControl>
-                //             <Input
-                //               type="text"
-                //               value={props.row.pelabuhanasal}
-                //               onKeyDown={inputStopPropagation}
-                //               onClick={(e) => e.stopPropagation()}
-                //               onChange={(e) =>
-                //                 handleInputChange(props.rowIdx, 'pelabuhanasal', e.target.value)
-                //               }
-                //               className="h-2 min-h-9 w-full rounded border border-gray-300"
-                //             />
-                //         </FormControl>
-                //         <FormMessage />
-                //       </div>
-                //     </FormItem>
-                //   )}
-                // />
-              )}
-            </div>
-          );
-        }
-      },
-      {
-        key: 'keterangan',
-        name: 'KETERANGAN',
-        headerCellClass: 'column-headers',
-        resizable: true,
-        draggable: true,
-        cellClass: 'form-input',
-        width: 250,
-        renderHeaderCell: (column: any) => (
-          <div className="flex h-full cursor-pointer flex-col items-center justify-center gap-1">
-            <p className={`text-sm`}>Keterangan</p>
-          </div>
-        ),
-        renderCell: (props: any) => {
-          return (
-            <div>
-              {props.row.isAddRow ? (
-                ''
-              ) : (
-                <Input
-                  type="text"
-                  value={props.row.keterangan}
-                  readOnly={mode == 'delete' || mode == 'view'}
-                  onFocus={() =>
-                    handleOnFocus(props.row.daftarbl_id, props.rowIdx)
-                  }
-                  onKeyDown={inputStopPropagation}
-                  onClick={(e) => e.stopPropagation()}
-                  onChange={(e) =>
-                    handleInputChange(
-                      props.rowIdx,
-                      'keterangan',
-                      e.target.value
-                    )
-                  }
-                  className="h-2 min-h-9 w-full rounded border border-gray-300"
-                />
-              )}
-            </div>
-          );
-        }
-      },
-      {
-        key: 'consignee',
-        name: 'consignee',
-        headerCellClass: 'column-headers',
-        resizable: true,
-        draggable: true,
-        cellClass: 'form-input',
-        width: 250,
-        renderHeaderCell: (column: any) => (
-          <div className="flex h-full cursor-pointer flex-col items-center justify-center gap-1">
-            <p className={`text-sm`}>consignee</p>
-          </div>
-        ),
-        renderCell: (props: any) => {
-          return (
-            <div>
-              {props.row.isAddRow ? (
-                ''
-              ) : (
-                <Input
-                  type="text"
-                  value={props.row.consignee}
-                  readOnly={mode == 'delete' || mode == 'view'}
-                  onFocus={() =>
-                    handleOnFocus(props.row.daftarbl_id, props.rowIdx)
-                  }
-                  onKeyDown={inputStopPropagation}
-                  onClick={(e) => e.stopPropagation()}
-                  onChange={(e) =>
-                    handleInputChange(props.rowIdx, 'consignee', e.target.value)
-                  }
-                  className="h-2 min-h-9 w-full rounded border border-gray-300"
-                />
-              )}
-            </div>
-          );
-        }
-      },
-      {
-        key: 'shipper',
-        name: 'shipper',
-        headerCellClass: 'column-headers',
-        resizable: true,
-        draggable: true,
-        cellClass: 'form-input',
-        width: 250,
-        renderHeaderCell: (column: any) => (
-          <div className="flex h-full cursor-pointer flex-col items-center justify-center gap-1">
-            <p className={`text-sm`}>shipper</p>
-          </div>
-        ),
-        renderCell: (props: any) => {
-          return (
-            <div>
-              {props.row.isAddRow ? (
-                ''
-              ) : (
-                <Input
-                  type="text"
-                  value={props.row.shipper}
-                  readOnly={mode == 'delete' || mode == 'view'}
-                  onFocus={() =>
-                    handleOnFocus(props.row.daftarbl_id, props.rowIdx)
-                  }
-                  onKeyDown={inputStopPropagation}
-                  onClick={(e) => e.stopPropagation()}
-                  onChange={(e) =>
-                    handleInputChange(props.rowIdx, 'shipper', e.target.value)
-                  }
-                  className="h-2 min-h-9 w-full rounded border border-gray-300"
-                />
-              )}
-            </div>
-          );
-        }
-      },
-      {
-        key: 'comodity',
-        name: 'comodity',
-        headerCellClass: 'column-headers',
-        resizable: true,
-        draggable: true,
-        cellClass: 'form-input',
-        width: 250,
-        renderHeaderCell: (column: any) => (
-          <div className="flex h-full cursor-pointer flex-col items-center justify-center gap-1">
-            <p className={`text-sm`}>comodity</p>
-          </div>
-        ),
-        renderCell: (props: any) => {
-          return (
-            <div>
-              {props.row.isAddRow ? (
-                ''
-              ) : (
-                <Input
-                  type="text"
-                  value={props.row.comodity}
-                  readOnly={mode == 'delete' || mode == 'view'}
-                  onFocus={() =>
-                    handleOnFocus(props.row.daftarbl_id, props.rowIdx)
-                  }
-                  onKeyDown={inputStopPropagation}
-                  onClick={(e) => e.stopPropagation()}
-                  onChange={(e) =>
-                    handleInputChange(props.rowIdx, 'comodity', e.target.value)
-                  }
-                  className="h-2 min-h-9 w-full rounded border border-gray-300"
-                />
-              )}
-            </div>
-          );
-        }
-      },
-      {
-        key: 'notifyparty',
-        name: 'notifyparty',
-        headerCellClass: 'column-headers',
-        resizable: true,
-        draggable: true,
-        cellClass: 'form-input',
-        width: 250,
-        renderHeaderCell: (column: any) => (
-          <div className="flex h-full cursor-pointer flex-col items-center justify-center gap-1">
-            <p className={`text-sm`}>notify party</p>
-          </div>
-        ),
-        renderCell: (props: any) => {
-          return (
-            <div>
-              {props.row.isAddRow ? (
-                ''
-              ) : (
-                <Input
-                  type="text"
-                  value={props.row.notifyparty}
-                  readOnly={mode == 'delete' || mode == 'view'}
-                  onFocus={() =>
-                    handleOnFocus(props.row.daftarbl_id, props.rowIdx)
-                  }
-                  onKeyDown={inputStopPropagation}
-                  onClick={(e) => e.stopPropagation()}
-                  onChange={(e) =>
-                    handleInputChange(
-                      props.rowIdx,
-                      'notifyparty',
-                      e.target.value
-                    )
-                  }
-                  className="h-2 min-h-9 w-full rounded border border-gray-300"
-                />
-              )}
-            </div>
-          );
-        }
-      },
-      {
-        key: 'totalgw',
-        name: 'totalgw',
-        headerCellClass: 'column-headers',
-        resizable: true,
-        draggable: true,
-        cellClass: 'form-input',
-        width: 250,
-        renderHeaderCell: (column: any) => (
-          <div className="flex h-full cursor-pointer flex-col items-center justify-center gap-1">
-            <p className={`text-sm`}>total gw / nw</p>
-          </div>
-        ),
-        renderCell: (props: any) => {
-          return (
-            <div>
-              {props.row.isAddRow ? (
-                ''
-              ) : (
-                <Input
-                  type="text"
-                  value={props.row.totalgw}
-                  readOnly={mode == 'delete' || mode == 'view'}
-                  onFocus={() =>
-                    handleOnFocus(props.row.daftarbl_id, props.rowIdx)
-                  }
-                  onKeyDown={inputStopPropagation}
-                  onClick={(e) => e.stopPropagation()}
-                  onChange={(e) =>
-                    handleInputChange(props.rowIdx, 'totalgw', e.target.value)
-                  }
-                  className="h-2 min-h-9 w-full rounded border border-gray-300"
-                />
-              )}
-            </div>
-          );
-        }
-      }
-      // {
-      //   key: 'namapelayaran',
-      //   name: 'namapelayaran',
-      //   headerCellClass: 'column-headers',
-      //   resizable: true,
-      //   draggable: true,
-      //   cellClass: 'form-input',
-      //   width: 250,
-      //   renderHeaderCell: (column: any) => (
-      //     <div className="flex h-full cursor-pointer flex-col items-center gap-1">
-      //       <div className="headers-cell h-[50%] px-8">
-      //         <p className={`text-sm`}>namapelayaran</p>
-      //       </div>
-      //       {/* <div className="relative h-[50%] w-full px-1"></div> */}
-      //     </div>
-      //   ),
-      //   renderCell: (props: any) => {
-      //     return (
-      //       <div>
-      //         {props.row.isAddRow ? (
-      //           ''
-      //         ) : (
-      //           <Input
-      //             type="text"
-      //             value={props.row.namapelayaran}
-      //             readOnly={mode == 'delete' || mode == 'view'}
-      //             onKeyDown={inputStopPropagation}
-      //             onClick={(e) => e.stopPropagation()}
-      //             onChange={(e) =>
-      //               handleInputChange(
-      //                 props.rowIdx,
-      //                 'namapelayaran',
-      //                 e.target.value
-      //               )
-      //             }
-      //             className="h-2 min-h-9 w-full rounded border border-gray-300"
-      //           />
-      //           // <FormField
-      //           //   name="namapelayaran"
-      //           //   control={forms.control}
-      //           //   render={({ field }) => (
-      //           //     <FormItem className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
-      //           //       <div className="flex flex-col lg:w-full">
-      //           //         <FormControl>
-      //           //             <Input
-      //           //               type="text"
-      //           //               value={props.row.namapelayaran}
-      //           //               onKeyDown={inputStopPropagation}
-      //           //               onClick={(e) => e.stopPropagation()}
-      //           //               onChange={(e) =>
-      //           //                 handleInputChange(
-      //           //                   props.rowIdx,
-      //           //                   'namapelayaran',
-      //           //                   e.target.value
-      //           //                 )
-      //           //               }
-      //           //               className="h-2 min-h-9 w-full rounded border border-gray-300"
-      //           //             />
-      //           //         </FormControl>
-      //           //         <FormMessage />
-      //           //       </div>
-      //           //     </FormItem>
-      //           //   )}
-      //           // />
-      //         )}
-      //       </div>
-      //     );
-      //   }
-      // },
-
-      // {
-      //   key: 'shipper',
-      //   name: 'SHIPPER',
-      //   headerCellClass: 'column-headers',
-      //   resizable: true,
-      //   draggable: true,
-      //   cellClass: 'form-input',
-      //   width: 250,
-      //   renderHeaderCell: (column: any) => (
-      //     <div className="flex h-full cursor-pointer flex-col items-center gap-1">
-      //       <div className="headers-cell h-[50%] px-8">
-      //         <p className={`text-sm`}>SHIPPER</p>
-      //       </div>
-      //       {/* <div className="relative h-[50%] w-full px-1"></div> */}
-      //     </div>
-      //   ),
-      //   renderCell: (props: any) => {
-      //     return (
-      //       <div className="m-0 flex h-full w-full cursor-pointer items-center p-0 text-xs">
-      //         {props.row.isAddRow ? (
-      //           ''
-      //         ) : (
-      //           <Input
-      //             type="text"
-      //             value={props.row.shipper_nama}
-      //             onKeyDown={inputStopPropagation}
-      //             onClick={(e) => e.stopPropagation()}
-      //             readOnly
-      //             className="h-2 min-h-9 w-full rounded border border-gray-300"
-      //           />
-      //         )}
-      //       </div>
-      //     );
-      //   }
-      // },
-    ];
-  }, [rows, editingRowId, editableValues]);
-
-  const columnsDetailRincian = useMemo((): Column<OrderanMuatan>[] => {
-    return [
-      {
-        key: 'nomor',
-        name: 'NO',
-        width: 50,
-        cellClass: 'form-input',
-        colSpan: (args) => {
-          // if (args.type === 'ROW' && args.row.isAddRow) {
-          //   return 5; // Spanning the "Add Row" button across 3 columns (adjust as needed)
-          // }
-          return undefined; // For other rows, no column spanning
-        },
-        headerCellClass: 'column-headers',
-        renderHeaderCell: (column: any) => (
-          <div className="flex h-full flex-col items-center justify-center gap-1">
-            <p className="text-sm">No.</p>
-          </div>
-        ),
-        renderCell: (props: any) => {
-          return (
-            <div className="flex h-full w-full cursor-pointer items-center justify-center text-sm">
-              {props.row.isAddRow ? '' : props.rowIdx + 1}
-            </div>
-          );
-        }
-      },
-      {
-        key: 'job',
-        name: 'job',
-        headerCellClass: 'column-headers',
-        resizable: true,
-        draggable: true,
-        cellClass: 'form-input',
-        width: 250,
-        renderHeaderCell: (column: any) => (
-          <div className="flex h-full cursor-pointer flex-col items-center justify-center gap-1">
-            <p className={`text-sm`}>Job</p>
-          </div>
-        ),
-        renderCell: (props: any) => {
-          return (
-            <div>
-              {props.row.isAddRow ? (
-                ''
-              ) : (
-                <Input
-                  type="text"
-                  value={props.row.orderanmuatan_nobukti || ''}
-                  readOnly={true}
-                  className="h-2 min-h-9 w-full rounded border border-gray-300"
-                />
-              )}
-            </div>
-          );
-        }
-      },
-      {
-        key: 'comodity',
-        name: 'comodity',
-        headerCellClass: 'column-headers',
-        resizable: true,
-        draggable: true,
-        cellClass: 'form-input',
-        width: 250,
-        renderHeaderCell: (column: any) => (
-          <div className="flex h-full cursor-pointer flex-col items-center justify-center gap-1">
-            <p className={`text-sm`}>comodity</p>
-          </div>
-        ),
-        renderCell: (props: any) => {
-          return (
-            <div>
-              {props.row.isAddRow ? (
-                ''
-              ) : (
-                <Input
-                  type="text"
-                  value={props.row.comodity || ''}
-                  readOnly={mode == 'delete' || mode == 'view'}
-                  onKeyDown={inputStopPropagation}
-                  onClick={(e) => e.stopPropagation()}
-                  onChange={(e) => {
-                    handleInputChangeDetailRincian(
-                      props.rowIdx,
-                      'comodity',
-                      e.target.value
-                    );
-                  }}
-                  className="h-2 min-h-9 w-full rounded border border-gray-300"
-                />
-              )}
-            </div>
-          );
-        }
+        renderHeaderCell: () => headerCell('pelabuhan asal'),
+        renderCell: (props: any) => readOnlyInput(props.row, 'asalpelabuhan')
       },
       {
         key: 'keterangan',
@@ -935,96 +701,19 @@ const FormShippingInstruction = ({
         draggable: true,
         cellClass: 'form-input',
         width: 250,
-        renderHeaderCell: (column: any) => (
-          <div className="flex h-full cursor-pointer flex-col items-center justify-center gap-1">
-            <p className={`text-sm`}>keterangan</p>
-          </div>
-        ),
-        renderCell: (props: any) => {
-          return (
-            <div>
-              {props.row.isAddRow ? (
-                ''
-              ) : (
-                <Input
-                  type="text"
-                  value={props.row.keterangan || ''}
-                  readOnly={mode == 'delete' || mode == 'view'}
-                  onKeyDown={inputStopPropagation}
-                  onClick={(e) => e.stopPropagation()}
-                  onChange={(e) => {
-                    handleInputChangeDetailRincian(
-                      props.rowIdx,
-                      'keterangan',
-                      e.target.value
-                    );
-                  }}
-                  className="h-2 min-h-9 w-full rounded border border-gray-300"
-                />
-              )}
-            </div>
-          );
-        }
+        renderHeaderCell: () => headerCell('keterangan'),
+        renderCell: (props: any) => detailInput(props.row, 'keterangan')
       },
       {
-        key: 'nocontainer',
-        name: 'nocontainer',
+        key: 'consignee',
+        name: 'consignee',
         headerCellClass: 'column-headers',
         resizable: true,
         draggable: true,
         cellClass: 'form-input',
         width: 250,
-        renderHeaderCell: (column: any) => (
-          <div className="flex h-full cursor-pointer flex-col items-center justify-center gap-1">
-            <p className={`text-sm`}>nocontainer</p>
-          </div>
-        ),
-        renderCell: (props: any) => {
-          return (
-            <div>
-              {props.row.isAddRow ? (
-                ''
-              ) : (
-                <Input
-                  type="text"
-                  value={props.row.nocontainer || ''}
-                  readOnly={true}
-                  className="h-2 min-h-9 w-full rounded border border-gray-300"
-                />
-              )}
-            </div>
-          );
-        }
-      },
-      {
-        key: 'noseal',
-        name: 'noseal',
-        headerCellClass: 'column-headers',
-        resizable: true,
-        draggable: true,
-        cellClass: 'form-input',
-        width: 250,
-        renderHeaderCell: (column: any) => (
-          <div className="flex h-full cursor-pointer flex-col items-center justify-center gap-1">
-            <p className={`text-sm`}>noseal</p>
-          </div>
-        ),
-        renderCell: (props: any) => {
-          return (
-            <div>
-              {props.row.isAddRow ? (
-                ''
-              ) : (
-                <Input
-                  type="text"
-                  value={props.row.noseal || ''}
-                  readOnly={true}
-                  className="h-2 min-h-9 w-full rounded border border-gray-300"
-                />
-              )}
-            </div>
-          );
-        }
+        renderHeaderCell: () => headerCell('consignee'),
+        renderCell: (props: any) => readOnlyInput(props.row, 'consignee')
       },
       {
         key: 'shipper',
@@ -1034,36 +723,55 @@ const FormShippingInstruction = ({
         draggable: true,
         cellClass: 'form-input',
         width: 250,
-        renderHeaderCell: (column: any) => (
-          <div className="flex h-full cursor-pointer flex-col items-center justify-center gap-1">
-            <p className={`text-sm`}>shipper</p>
-          </div>
-        ),
-        renderCell: (props: any) => {
-          return (
-            <div>
-              {props.row.isAddRow ? (
-                ''
-              ) : (
-                <Input
-                  type="text"
-                  value={props.row.shipper_nama || ''}
-                  readOnly={true}
-                  className="h-2 min-h-9 w-full rounded border border-gray-300"
-                />
-              )}
-            </div>
-          );
-        }
+        renderHeaderCell: () => headerCell('shipper'),
+        renderCell: (props: any) => readOnlyInput(props.row, 'shipper')
+      },
+      {
+        key: 'comodity',
+        name: 'comodity',
+        headerCellClass: 'column-headers',
+        resizable: true,
+        draggable: true,
+        cellClass: 'form-input',
+        width: 250,
+        renderHeaderCell: () => headerCell('comodity'),
+        renderCell: (props: any) => detailInput(props.row, 'comodity')
+      },
+      {
+        key: 'notifyparty',
+        name: 'notify party',
+        headerCellClass: 'column-headers',
+        resizable: true,
+        draggable: true,
+        cellClass: 'form-input',
+        width: 250,
+        renderHeaderCell: () => headerCell('notify party'),
+        renderCell: (props: any) => detailInput(props.row, 'notifyparty')
+      },
+      {
+        key: 'totalgw',
+        name: 'total gw / nw',
+        headerCellClass: 'column-headers',
+        resizable: true,
+        draggable: true,
+        cellClass: 'form-input',
+        width: 250,
+        renderHeaderCell: () => headerCell('total gw / nw'),
+        renderCell: (props: any) => detailInput(props.row, 'totalgw')
       }
     ];
-  }, [rowsDetailRincian, editingRowId, editableValues]);
+  }, [
+    mode,
+    expandedDetailIdx,
+    rincianByIndex,
+    detailErrors,
+    rincianColumns,
+    isDark
+  ]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      // Fungsi untuk menangani pergerakan fokus berdasarkan tombol
       if (openName) {
-        // Jika popOverDate ada nilainya, jangan lakukan apa-apa
         return;
       }
 
@@ -1134,15 +842,6 @@ const FormShippingInstruction = ({
   }, [openName]); // Tambahkan popOverDate sebagai dependen
 
   useEffect(() => {
-    const allDetails = forms.getValues('details');
-    let activeDetail = allDetails?.[editingRowId];
-
-    if (activeDetail?.detailsrincian) {
-      setRowsDetailRincian(activeDetail.detailsrincian);
-    }
-  }, [editingRowId, reloadForm, rows]);
-
-  useEffect(() => {
     if (rows) {
       const currentDetails = forms.getValues('details') || [];
 
@@ -1170,11 +869,11 @@ const FormShippingInstruction = ({
       if (allDataDetail?.data?.length > 0) {
         // Format data detail utama (tanpa rincian)
         const formattedDetails = allDataDetail.data.map((item: any) => ({
-          id: Number(item.id),
-          daftarbl_id: Number(item.daftarbl_id) ?? '',
-          containerpelayaran_id: Number(item.containerpelayaran_id) ?? '',
-          emkllain_id: Number(item.emkllain_id) ?? '',
-          tujuankapal_id: Number(item.tujuankapal_id) ?? '',
+          id: item.id ?? '',
+          daftarbl_id: item.daftarbl_id ?? '',
+          containerpelayaran_id: item.containerpelayaran_id ?? '',
+          emkl_id: item.emkl_id ?? '',
+          tujuankapal_id: item.tujuankapal_id ?? '',
           shippinginstructiondetail_nobukti:
             item.shippinginstructiondetail_nobukti ?? '',
           asalpelabuhan: item.asalpelabuhan ?? '',
@@ -1191,43 +890,41 @@ const FormShippingInstruction = ({
         setRows(formattedDetails);
 
         // Lalu refetch rincian untuk setiap detail
+        const rincianMap: Record<number, any[]> = {};
+
         for (const [index, detail] of allDataDetail.data.entries()) {
           try {
             setEditingRowId(0);
             // Tunggu refetch selesai
             const rincian = await getShippingInstructionDetailRincianFn(
-              Number(detail.id),
+              String(detail.id),
               { search: '' }
             );
             const rowsData = rincian?.data ?? [];
 
             // Format data rincian
             const formattedRincian = rowsData.map((r: any) => ({
-              id: Number(r.id),
-              idOrderan: Number(r.id),
+              id: r.id ?? '',
+              idOrderan: r.id ?? '',
               orderanmuatan_nobukti: r.orderanmuatan_nobukti ?? '',
               keterangan: r.keterangan ?? '',
               comodity: r.comodity ?? '',
               nocontainer: r.nocontainer ?? '',
               noseal: r.noseal ?? '',
-              shipper_id: Number(r.shipper_id) ?? '',
+              shipper_id: r.shipper_id ?? '',
               shipper_nama: r.shipper_nama ?? '',
               isNew: false
             }));
 
             // Set ke form sesuai index detail
             forms.setValue(`details.${index}.detailsrincian`, formattedRincian);
+            rincianMap[index] = formattedRincian;
           } catch (err) {
             console.error(`Gagal ambil rincian untuk detail ${detail.id}`, err);
           }
         }
 
-        const allDetails = forms.getValues('details');
-        let activeDetail = allDetails?.[0];
-
-        if (activeDetail?.detailsrincian) {
-          setRowsDetailRincian(activeDetail.detailsrincian);
-        }
+        setRincianByIndex(rincianMap);
       }
     };
 
@@ -1238,21 +935,24 @@ const FormShippingInstruction = ({
     const fetchAllShippingHeader = async () => {
       try {
         const allHeader = await getAllShippingInstructionHeaderFn({
-          filters: {
-            limit: 0,
-            filters: {}
-          }
+          limit: 0,
+          filters: {}
         });
 
         const rowsData = allHeader?.data ?? [];
+        const currentScheduleId = String(headerData?.schedule_id ?? '');
         const id = [
-          ...rowsData
-            .filter((row, idx) => {
-              return (
-                String(row?.schedule_id) && String(row?.schedule_id) !== ''
-              );
-            })
-            .map((row) => row?.schedule_id)
+          ...new Set(
+            rowsData
+              .map((row) => String(row?.schedule_id ?? ''))
+              .filter(
+                (scheduleId) =>
+                  scheduleId !== '' &&
+                  scheduleId !== 'null' &&
+                  scheduleId !== 'undefined' &&
+                  !(mode !== 'add' && scheduleId === currentScheduleId)
+              )
+          )
         ];
 
         const jsonString = JSON.stringify({ id });
@@ -1265,20 +965,83 @@ const FormShippingInstruction = ({
       }
     };
 
-    setEditingRowId(0);
     fetchAllShippingHeader();
+  }, [popOver, mode, headerData?.schedule_id]);
+
+  useEffect(() => {
+    setEditingRowId(0);
+
+    resetTreeState();
 
     if (mode === 'add') {
       setRows([]);
-      setScheduleValue(0);
+      setScheduleValue('');
       setDaftarBlValue(0);
-      setRowsDetailRincian([]);
       setReloadForm(false);
       forms.setValue('tglbukti', fmt(todayDate));
+      forms.setValue('schedule_id', '');
+      forms.setValue('voyberangkat', '');
+      forms.setValue('kapal_id', '');
+      forms.setValue('kapal_nama', '');
+      forms.setValue('tglberangkat', '');
+      forms.setValue('tujuankapal_id', '');
+      forms.setValue('tujuankapal_nama', '');
     } else {
+      setScheduleValue(String(headerData?.schedule_id ?? ''));
       setReloadForm(true);
     }
   }, [popOver, mode]);
+
+  useEffect(() => {
+    if (!popOver) return;
+
+    const cariScrollerHorizontal = (mulai: HTMLElement | null) => {
+      let node: HTMLElement | null = mulai;
+
+      while (node && node !== document.body) {
+        const { overflowX } = window.getComputedStyle(node);
+        const bolehScroll = overflowX === 'auto' || overflowX === 'scroll';
+
+        if (bolehScroll && node.scrollWidth - node.clientWidth > 1) {
+          return node;
+        }
+        node = node.parentElement;
+      }
+
+      return null;
+    };
+
+    const handleShiftWheel = (event: WheelEvent) => {
+      if (!event.shiftKey || event.ctrlKey) return;
+
+      const delta = event.deltaX !== 0 ? event.deltaX : event.deltaY;
+      if (delta === 0) return;
+
+      const scroller = cariScrollerHorizontal(
+        event.target as HTMLElement | null
+      );
+      if (!scroller) return;
+
+      const maxScrollLeft = scroller.scrollWidth - scroller.clientWidth;
+      const nextScrollLeft = Math.min(
+        Math.max(scroller.scrollLeft + delta, 0),
+        maxScrollLeft
+      );
+      if (nextScrollLeft === scroller.scrollLeft) return;
+
+      event.preventDefault();
+      scroller.scrollLeft = nextScrollLeft;
+    };
+
+    document.addEventListener('wheel', handleShiftWheel, {
+      passive: false,
+      capture: true
+    });
+    return () =>
+      document.removeEventListener('wheel', handleShiftWheel, {
+        capture: true
+      });
+  }, [popOver]);
 
   return (
     <Dialog open={popOver} onOpenChange={setPopOver}>
@@ -1309,7 +1072,10 @@ const FormShippingInstruction = ({
             <Form {...forms}>
               <form
                 ref={formRef}
-                onSubmit={onSubmit}
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  onSubmit(false);
+                }}
                 className="flex h-full flex-col gap-6"
               >
                 <div className="flex h-[100%] flex-col gap-2 lg:gap-3">
@@ -1383,12 +1149,16 @@ const FormShippingInstruction = ({
                               key={index}
                               {...props}
                               lookupValue={(value: any) => {
-                                forms.setValue('schedule_id', Number(value));
+                                forms.setValue(
+                                  'schedule_id',
+                                  String(value ?? '')
+                                );
                               }}
                               onSelectRow={(val) => {
-                                setReloadForm(false);
-                                setScheduleValue(Number(val?.id));
-                                // forms.setValue('schedule_id', Number(val?.id));
+                                if (mode === 'add') {
+                                  setReloadForm(false);
+                                }
+                                setScheduleValue(String(val?.id ?? ''));
                                 forms.setValue(
                                   'tglberangkat',
                                   val?.tglberangkat
@@ -1399,12 +1169,12 @@ const FormShippingInstruction = ({
                                 );
                                 forms.setValue(
                                   'kapal_id',
-                                  Number(val?.kapal_id)
+                                  String(val?.kapal_id ?? '')
                                 );
                                 forms.setValue('kapal_nama', val?.kapal_nama);
                                 forms.setValue(
                                   'tujuankapal_id',
-                                  Number(val?.tujuankapal_id)
+                                  String(val?.tujuankapal_id ?? '')
                                 );
                                 forms.setValue(
                                   'tujuankapal_nama',
@@ -1412,19 +1182,20 @@ const FormShippingInstruction = ({
                                 );
                               }}
                               onClear={() => {
-                                setReloadForm(false);
-                                setScheduleValue(0);
-                                // forms.setValue('schedule_id', 0);
+                                if (mode === 'add') {
+                                  setReloadForm(false);
+                                }
+                                setScheduleValue('');
                                 forms.setValue('tglberangkat', '');
                                 forms.setValue('voyberangkat', '');
-                                forms.setValue('kapal_id', 0);
+                                forms.setValue('kapal_id', '');
                                 forms.setValue('kapal_nama', '');
-                                forms.setValue('tujuankapal_id', 0);
+                                forms.setValue('tujuankapal_id', '');
                                 forms.setValue('tujuankapal_nama', '');
                               }}
                               name="schedule_id"
                               forms={forms}
-                              lookupNama={forms.getValues('schedule_id')}
+                              lookupNama={forms.getValues('kapal_nama')}
                             />
                           ))}
                         </div>
@@ -1528,15 +1299,11 @@ const FormShippingInstruction = ({
                   />
 
                   <Button
-                    type="submit"
+                    type="button"
                     variant="default"
                     className="mt-2 flex w-fit flex-row items-center justify-center"
                     onClick={(e) => {
                       e.preventDefault();
-                      onSubmit();
-                      setRows([]);
-                      setRowsDetailRincian([]);
-                      setReloadForm(false);
                       processOnReload();
                     }}
                   >
@@ -1547,48 +1314,62 @@ const FormShippingInstruction = ({
                   </Button>
 
                   {reloadForm && (
-                    <div className="h-[400px] min-h-[400px]">
+                    <div className="h-[500px] min-h-[500px]">
                       <div className="flex h-[100%] w-full flex-col rounded-sm border border-border bg-background">
-                        <div className="flex h-[30px] w-full flex-row items-center rounded-t-sm border-b border-border bg-background-grid-header px-2"></div>
+                        <div className="flex h-[38px] w-full shrink-0 flex-row items-center justify-between rounded-t-sm border-b border-border bg-background-grid-header px-2">
+                          <span className="text-xs font-bold uppercase text-primary">
+                            Detail Shipping Instruction & Rincian
+                          </span>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="h-6 px-2 text-[10px]"
+                            onClick={() => {
+                              if (expandedDetailIdx.size > 0)
+                                setExpandedDetailIdx(new Set());
+                              else
+                                setExpandedDetailIdx(
+                                  new Set(
+                                    Array.from(
+                                      { length: detailCount },
+                                      (_, i) => i
+                                    )
+                                  )
+                                );
+                            }}
+                          >
+                            {expandedDetailIdx.size > 0
+                              ? 'Tutup Semua'
+                              : 'Buka Semua'}
+                          </Button>
+                        </div>
 
                         <DataGrid
                           key={dataGridKey}
                           ref={gridRef}
                           columns={columns as any[]}
                           defaultColumnOptions={{
-                            sortable: true,
+                            sortable: false,
                             resizable: true
                           }}
-                          rows={rows}
-                          headerRowHeight={35}
-                          rowHeight={55}
-                          renderers={{ noRowsFallback: <EmptyRowsRenderer /> }}
-                          className={`${
-                            isDark ? 'rdg-dark' : 'rdg-light'
-                          } fill-grid text-sm`}
-                          enableVirtualization={false}
-                        />
-                        <div className="flex flex-row justify-between border border-x-0 border-b-0 border-border bg-background-grid-header p-2"></div>
-                      </div>
-                    </div>
-                  )}
-
-                  {reloadForm && (
-                    <div className="h-[400px] min-h-[400px]">
-                      <div className="flex h-[100%] w-full flex-col rounded-sm border border-border bg-background">
-                        <div className="flex h-[30px] w-full flex-row items-center rounded-t-sm border-b border-border bg-background-grid-header px-2"></div>
-
-                        <DataGrid
-                          key={dataGridKey}
-                          ref={gridRef}
-                          columns={columnsDetailRincian as any[]}
-                          defaultColumnOptions={{
-                            sortable: true,
-                            resizable: true
-                          }}
-                          rows={rowsDetailRincian}
-                          headerRowHeight={35}
-                          rowHeight={55}
+                          rows={treeRows}
+                          rowKeyGetter={(row: any) =>
+                            row.isTreeType === 'rincianBlock'
+                              ? `RB-${row.detailIdx}`
+                              : `D-${row.detailIdx}`
+                          }
+                          rowHeight={(row: any) =>
+                            row.isTreeType === 'rincianBlock'
+                              ? TINGGI_TAB_RINCIAN +
+                                TINGGI_HEADER_RINCIAN +
+                                Math.max(1, (row.rincianRows ?? []).length) *
+                                  TINGGI_BARIS_RINCIAN +
+                                TINGGI_BORDER_GRID_RINCIAN +
+                                TINGGI_PEMBUNGKUS_RINCIAN
+                              : TINGGI_BARIS_DETAIL
+                          }
+                          headerRowHeight={40}
                           renderers={{ noRowsFallback: <EmptyRowsRenderer /> }}
                           className={`${
                             isDark ? 'rdg-dark' : 'rdg-light'
@@ -1615,8 +1396,8 @@ const FormShippingInstruction = ({
             dispatch(setSubmitClicked(true));
             setReloadForm(false);
             setRows([]);
-            setRowsDetailRincian([]);
-            setScheduleValue(0);
+            resetTreeState();
+            setScheduleValue('');
             setDaftarBlValue(0);
             setEditingRowId(0);
           }}

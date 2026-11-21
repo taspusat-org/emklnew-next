@@ -15,11 +15,6 @@ import {
 import { useAlert } from '../store/client/useAlert';
 import { useFormError } from '../hooks/formErrorContext';
 
-/**
- * Error validasi zod dari backend datang sebagai array { path, message } di
- * field `message`, sementara error biasa mengirim string. Dinormalkan di sini
- * supaya pemanggil bisa langsung meng-iterasi.
- */
 const toFieldErrors = (
   response?: IErrorResponse
 ): { path: string[]; message: string }[] => {

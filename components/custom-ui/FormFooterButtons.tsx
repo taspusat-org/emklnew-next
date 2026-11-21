@@ -18,9 +18,7 @@ interface FormFooterButtonsProps {
   saveDisabled?: boolean;
   hideSaveAndAdd?: boolean;
   deleteMode?: boolean;
-  /** Pass true for sub-form / inline footers (no bg, mt-6, type="button") */
   inline?: boolean;
-  /** Extra classes merged onto the outer wrapper div */
   className?: string;
 }
 

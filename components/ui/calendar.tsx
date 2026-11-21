@@ -31,18 +31,6 @@ const MONTH_NAMES = [
   'December'
 ];
 
-/**
- * Custom caption that renders: [<] [Month dropdown] [Year dropdown] [>]
- *
- * In react-day-picker v9 the <Nav> element is rendered as a sibling of
- * <MonthCaption>, so the old absolute-positioning trick no longer works.
- * We override MonthCaption entirely and embed the nav buttons ourselves.
- *
- * fromYear / toYear are read defensively because their location in the
- * context object shifted between v9 minor releases:
- *   - v9.0-9.3  => dayPicker.fromYear / toYear
- *   - v9.4+     => dayPicker.startMonth / endMonth  (Date objects)
- */
 function CaptionWithNav({ calendarMonth }: { calendarMonth: any }) {
   const { goToMonth, nextMonth, previousMonth } = useNavigation();
 

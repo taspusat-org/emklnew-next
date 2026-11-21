@@ -37,4 +37,5 @@ next-env.d.ts
 
 # pdf worker
 /public/pdf.worker.min.js
-CLAUDE.MD
+
+.claude/

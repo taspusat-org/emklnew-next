@@ -52,11 +52,13 @@ export const getPanjarHeaderByIdFn = async (id: any) => {
 
 export const getPanjarMuatanDetailFn = async (
   id: string,
-  filters: GetParams = {}
+  filters: GetParams = {},
+  signal?: AbortSignal
 ): Promise<IAllPanjarMuatanDetail> => {
   const queryParams = buildQueryParams(filters);
   const response = await api2.get(`/panjarmuatandetail/${id}`, {
-    params: queryParams
+    params: queryParams,
+    signal
   });
 
   return response.data;

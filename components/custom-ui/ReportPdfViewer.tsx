@@ -24,7 +24,6 @@ interface ReportPdfViewerProps {
   onClose: () => void;
   url: string;
   title?: string;
-  /** Callback tombol Export di toolbar; dipasok pemanggil (grid) beserta filternya. */
   onExport?: () => void | Promise<void>;
 }
 

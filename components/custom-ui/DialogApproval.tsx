@@ -337,6 +337,10 @@ const DialogApproval: React.FC = ({}) => {
           const filteredPermission = res.abilities.filter((item: any) =>
             item.action.includes('-> YA')
           );
+          // Bandingkan sebagai teks: acos.id sekarang UUIDv7, dan Number(uuid)
+          // menghasilkan NaN di kedua sisi — sedangkan NaN === NaN selalu
+          // false, jadi tidak ada satu pun baris yang lolos dan dialog
+          // approval tampil kosong.
           const filteredData = data.data.filter((item: any) =>
             filteredPermission.some(
               (filteredItem: any) =>
@@ -349,6 +353,7 @@ const DialogApproval: React.FC = ({}) => {
           const filteredPermission = res.abilities.filter((item: any) =>
             item.action.includes('-> TIDAK')
           );
+          // Sama seperti cabang APPROVAL: bandingkan sebagai teks.
           const filteredData = data.data.filter((item: any) =>
             filteredPermission.some(
               (filteredItem: any) =>
@@ -579,7 +584,12 @@ const DialogApproval: React.FC = ({}) => {
                 autoFocus
               /> */}
               <InputDatePicker
-                value={keterangan}
+                // Sisa dari <Textarea> keterangan yang dikomentari di atas:
+                // value-nya masih menunjuk ke state `keterangan`, padahal
+                // yang diisi onSelect/onChange adalah `tanggal`. InputDatePicker
+                // controlled penuh, jadi tanggal yang dipilih tersimpan di
+                // state tapi input tetap tampil kosong.
+                value={tanggal}
                 onChange={(e) => setTanggal(e.target.value)}
                 showCalendar={true}
                 onSelect={(date) => {

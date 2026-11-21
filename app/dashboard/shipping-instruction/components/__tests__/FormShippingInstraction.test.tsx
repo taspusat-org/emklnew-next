@@ -69,7 +69,10 @@ describe('FormShippingInstraction', () => {
   });
 
   test('cancel triggers handleClose', async () => {
-    const { handleClose } = renderForm(Form, { schema, defaultValues: validData });
+    const { handleClose } = renderForm(Form, {
+      schema,
+      defaultValues: validData
+    });
     await userEvent.click(getBtn('Cancel'));
     expect(handleClose).toHaveBeenCalled();
   });

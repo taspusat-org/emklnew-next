@@ -16,7 +16,6 @@ export interface IAuthResponseRegister {
 }
 export interface IAllUser {
   data: IUser[];
-  /** 'local' = data muat di client, 'json' = harus dicari server-side. */
   type: string;
   pagination: IMeta;
 }
@@ -25,9 +24,7 @@ export interface IUser {
   username: string;
   name: string;
   password: string;
-  /** Teks status aktif dari tabel parameter (hasil join p.text). */
   text: string;
-  /** JSON tampilan badge status aktif (warna/singkatan) dari p.memo. */
   memo: string;
   email: string;
   namakaryawan: string;

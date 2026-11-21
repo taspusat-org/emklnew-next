@@ -2,7 +2,12 @@ import { AxiosError } from 'axios';
 import { useDispatch } from 'react-redux';
 import { useAlert } from '../store/client/useAlert';
 import { useFormError } from '../hooks/formErrorContext';
-import { useMutation, useQuery, useQueryClient } from 'react-query';
+import {
+  QueryClient,
+  useMutation,
+  useQuery,
+  useQueryClient
+} from 'react-query';
 import {
   setProcessed,
   setProcessing
@@ -16,6 +21,12 @@ import {
   updateShippingInstructionFn
 } from '../apis/shippinginstruction.api';
 import { IErrorResponse } from '../types/shippingIntruction.type';
+
+const invalidateShippingInstruction = (queryClient: QueryClient) => {
+  void queryClient.invalidateQueries('shippinginstruction');
+  void queryClient.invalidateQueries('shippinginstructiondetail');
+  void queryClient.invalidateQueries('shippinginstructiondetailrincian');
+};
 
 export const useGetAllShippingInstructionHeader = (
   filters: {
@@ -64,7 +75,9 @@ export const useGetAllShippingInstructionHeader = (
       }
     },
     {
-      enabled: !signal?.aborted
+      enabled: !signal?.aborted && (filters.page ?? 1) >= 1,
+      staleTime: 0,
+      cacheTime: 0
     }
   );
 };
@@ -96,11 +109,27 @@ export const useGetShippingInstructionDetail = (
   } = {},
   signal?: AbortSignal
 ) => {
+  // Key 'shippinginstructiondetail', BUKAN 'shippinginstruction'. Dulu detail
+  // memakai prefix yang sama dengan useGetAllShippingInstructionHeader dan
+  // useGetShippingInstructionDetailRincian, sehingga cache ketiganya saling
+  // menimpa/membatalkan walau isinya tidak terkait.
   return useQuery(
-    ['shippinginstruction', id, filters],
+    ['shippinginstructiondetail', id, filters],
     async () => await getShippingInstructionDetailFn(id!, filters),
     {
-      enabled: !!id || !signal?.aborted
+      // HARUS `&&`. Dengan `||`, `!signal?.aborted` bernilai true saat signal
+      // undefined sehingga query tetap jalan walau id kosong — request jadi
+      // `/shippinginstructiondetail/0` dan backend 500 karena
+      // shippinginstruction_id bertipe varchar (UUID) dibanding integer.
+      //
+      // page < 1 juga tidak boleh jalan: grid memakai trik setCurrentPage(0)
+      // untuk memaksa refetch window walau halaman tujuan sama dengan halaman
+      // sekarang.
+      enabled: !!id && !signal?.aborted && (filters.page ?? 1) >= 1,
+      // staleTime/cacheTime 0: window pagination dikelola sendiri oleh grid
+      // (pageDataCache + streamBuffer), sama seperti useGetBiayaExtraMuatanDetail.
+      staleTime: 0,
+      cacheTime: 0
     }
   );
 };
@@ -123,11 +152,16 @@ export const useGetShippingInstructionDetailRincian = (
   } = {},
   signal?: AbortSignal
 ) => {
+  // Key & guard sama alasannya dengan useGetShippingInstructionDetail: prefix
+  // sendiri supaya tidak bertabrakan, dan `&&` supaya tidak pernah request
+  // `/shippinginstructiondetailrincian/0` saat belum ada detail terpilih.
   return useQuery(
-    ['shippinginstruction', id, filters],
+    ['shippinginstructiondetailrincian', id, filters],
     async () => await getShippingInstructionDetailRincianFn(id!, filters),
     {
-      enabled: !!id || !signal?.aborted
+      enabled: !!id && !signal?.aborted && (filters.page ?? 1) >= 1,
+      staleTime: 0,
+      cacheTime: 0
     }
   );
 };
@@ -145,7 +179,7 @@ export const useCreateShippingInstruction = () => {
     },
     onSuccess: () => {
       // on success, invalidate + clear loading
-      void queryClient.invalidateQueries(['shippinginstruction']);
+      invalidateShippingInstruction(queryClient);
       dispatch(setProcessed());
     },
     onError: (error: AxiosError) => {
@@ -187,7 +221,7 @@ export const useUpdateShippingInstruction = () => {
       dispatch(setProcessing());
     },
     onSuccess: () => {
-      void queryClient.invalidateQueries('shippinginstruction');
+      invalidateShippingInstruction(queryClient);
       dispatch(setProcessed());
     },
     onError: (error: AxiosError) => {
@@ -224,7 +258,7 @@ export const useDeleteShippingInstruction = () => {
 
   return useMutation(deleteShippingInstructionFn, {
     onSuccess: () => {
-      void queryClient.invalidateQueries('shippinginstruction');
+      invalidateShippingInstruction(queryClient);
     },
     onError: (error: AxiosError) => {
       const errorResponse = error.response?.data as IErrorResponse;

@@ -5,10 +5,11 @@ import { Button } from '@/components/ui/button';
 import React, { useEffect, useState } from 'react';
 import LookUp from '@/components/custom-ui/LookUp';
 import { useDispatch, useSelector } from 'react-redux';
+import { RootState } from '@/lib/store/store';
 import {
   setOnReload,
-  setSelectedDate,
-  setSelectedDate2,
+  setPending,
+  commitFilter,
   setSelectedJenisOrderan,
   setSelectedJenisOrderanNama
 } from '@/lib/store/filterSlice/filterSlice';
@@ -19,6 +20,10 @@ const FilterGrid = () => {
   const dispatch = useDispatch();
   const { onReload } = useSelector((state: any) => state.filter);
   const [triggerValidation, setTriggerValidation] = useState(false);
+  // PeriodeValidation sekarang komponen CONTROLLED — nilainya harus dikirim
+  // dari sini. Tanpa date1/date2 kedua input tanggal render kosong, dan tanpa
+  // onDate1Change/onDate2Change mengetik di dalamnya melempar TypeError.
+  const pending = useSelector((state: RootState) => state.filter.pending);
 
   const lookUpJenisOrderan = [
     {
@@ -42,25 +47,17 @@ const FilterGrid = () => {
   const handleValidationResult = (isValid: boolean) => {
     if (triggerValidation) {
       if (isValid) {
-        dispatch(setOnReload(true));
+        // Satu action: menyalin pending -> committed, menyinkronkan
+        // selectedDate/selectedDate2 yang masih dibaca GridOrderanMuatan, dan
+        // menyalakan onReload.
+        dispatch(commitFilter());
       }
       setTriggerValidation(false);
     }
   };
 
-  useEffect(() => {
-    const now = new Date();
-    const fmt = (date: Date) =>
-      `${String(date.getDate()).padStart(2, '0')}-${String(
-        date.getMonth() + 1
-      ).padStart(2, '0')}-${date.getFullYear()}`;
-
-    const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const lastOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-
-    dispatch(setSelectedDate(fmt(firstOfMonth)));
-    dispatch(setSelectedDate2(fmt(lastOfMonth)));
-  }, [dispatch]);
+  // Tanggal default (awal–akhir bulan berjalan) sudah disiapkan di initialState
+  // filterSlice, jadi tidak perlu di-set ulang dari sini.
 
   useEffect(() => {
     if (onReload) {
@@ -76,6 +73,10 @@ const FilterGrid = () => {
         <div className="bg-background-header p-4">
           <PeriodeValidation
             label="periode"
+            date1={pending.tglDari}
+            date2={pending.tglSampai}
+            onDate1Change={(val) => dispatch(setPending({ tglDari: val }))}
+            onDate2Change={(val) => dispatch(setPending({ tglSampai: val }))}
             onValidationChange={handleValidationResult}
             triggerValidation={triggerValidation}
           />
@@ -90,12 +91,15 @@ const FilterGrid = () => {
                 <LookUp
                   key={index}
                   {...props}
+                  // TANPA Number(): id jenisorder sudah UUIDv7 bertipe teks
+                  // (slice pun mengetiknya string). Number(uuid) = NaN, itu yang
+                  // membuat filter jenis orderan terkirim sebagai `null`.
                   onSelectRow={(val) => {
-                    dispatch(setSelectedJenisOrderan(Number(val.id)));
+                    dispatch(setSelectedJenisOrderan(String(val.id ?? '')));
                     dispatch(setSelectedJenisOrderanNama(val.nama));
                   }}
                   onClear={() => {
-                    dispatch(setSelectedJenisOrderan(null));
+                    dispatch(setSelectedJenisOrderan(''));
                     dispatch(setSelectedJenisOrderanNama(''));
                   }}
                   lookupNama={JENISORDERMUATANNAMA}

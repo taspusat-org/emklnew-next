@@ -1,10 +1,26 @@
 import { z } from 'zod';
 import { dynamicRequiredMessage } from '../utils';
 
-export const shippingInstructionDetailRincianSchema = z.object({
-  id: z.string().optional(),
+const optionalId = z.union([z.string(), z.number()]).nullable().optional();
 
-  idOrderan: z.number().optional(),
+const requiredId = (label: string) =>
+  z
+    .union([z.string(), z.number()], {
+      required_error: dynamicRequiredMessage(label),
+      invalid_type_error: dynamicRequiredMessage(label)
+    })
+    .refine(
+      (value) =>
+        typeof value === 'number'
+          ? Number.isFinite(value) && value > 0
+          : String(value).trim() !== '',
+      { message: dynamicRequiredMessage(label) }
+    );
+
+export const shippingInstructionDetailRincianSchema = z.object({
+  id: optionalId,
+
+  idOrderan: optionalId,
 
   orderanmuatan_nobukti: z
     .string({ message: dynamicRequiredMessage('JOB') })
@@ -21,32 +37,19 @@ export type shippingInstructionHeaderDetailRincianInput = z.infer<
 >;
 
 export const shippingInstructionDetailSchema = z.object({
-  id: z.string().optional(),
-  orderan_id: z.number().optional(),
+  id: optionalId,
+  orderan_id: optionalId,
 
-  daftarbl_id: z
-    .number({
-      required_error: dynamicRequiredMessage('DAFTAR BL')
-    })
-    .min(1, { message: dynamicRequiredMessage('DAFTAR BL') }),
+  daftarbl_id: requiredId('DAFTAR BL'),
 
-  containerpelayaran_id: z
-    .number({
-      required_error: dynamicRequiredMessage('CONTAINER PELAYARAN')
-    })
-    .min(1, { message: dynamicRequiredMessage('CONTAINER PELAYARAN') }),
+  containerpelayaran_id: requiredId('CONTAINER PELAYARAN'),
 
-  emkllain_id: z
-    .number({
-      required_error: dynamicRequiredMessage('EMKL LAIN')
-    })
-    .min(1, { message: dynamicRequiredMessage('EMKL LAIN') }),
+  // emkl_id, BUKAN emkl_id: kolomnya sudah di-rename di DB & backend
+  // (create() membaca detail.emkl_id). `emkllain_nama` sengaja tidak ikut
+  // di-rename — itu cuma alias tampilan hasil join, bukan kolom.
+  emkl_id: requiredId('EMKL LAIN'),
 
-  tujuankapal_id: z
-    .number({
-      required_error: dynamicRequiredMessage('TUJUAN KAPAL')
-    })
-    .min(1, { message: dynamicRequiredMessage('TUJUAN KAPAL') }),
+  tujuankapal_id: requiredId('TUJUAN KAPAL'),
 
   shippinginstructiondetail_nobukti: z.string().nullable().optional(),
 
@@ -90,39 +93,27 @@ export type shippingInstructionHeaderDetailInput = z.infer<
 >;
 
 export const shippingInstructionHeaderSchema = z.object({
-  id: z.string().optional(),
+  id: optionalId,
   nobukti: z.string().nullable().optional(),
 
   tglbukti: z
     .string({ message: dynamicRequiredMessage('TGL BUKTI') })
     .nonempty({ message: dynamicRequiredMessage('TGL BUKTI') }),
 
-  schedule_id: z
-    .number({
-      required_error: dynamicRequiredMessage('SCHEDULE')
-    })
-    .min(1, { message: dynamicRequiredMessage('SCHEDULE') }),
+  schedule_id: requiredId('SCHEDULE'),
 
   voyberangkat: z
     .string({ message: dynamicRequiredMessage('VOY BERANGKAT') })
     .nonempty({ message: dynamicRequiredMessage('VOY BERANGKAT') }),
 
-  kapal_id: z
-    .number({
-      required_error: dynamicRequiredMessage('KAPAL')
-    })
-    .min(1, { message: dynamicRequiredMessage('KAPAL') }),
+  kapal_id: requiredId('KAPAL'),
   kapal_nama: z.string().nullable().optional(),
 
   tglberangkat: z
     .string({ message: dynamicRequiredMessage('TGL BERANGKAT') })
     .nonempty({ message: dynamicRequiredMessage('TGL BERANGKAT') }),
 
-  tujuankapal_id: z
-    .number({
-      required_error: dynamicRequiredMessage('TUJUAN')
-    })
-    .min(1, { message: dynamicRequiredMessage('TUJUAN') }),
+  tujuankapal_id: requiredId('TUJUAN'),
   tujuankapal_nama: z.string().nullable().optional(),
 
   details: z.array(shippingInstructionDetailSchema).min(1)

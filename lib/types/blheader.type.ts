@@ -22,7 +22,10 @@ export interface BlHeader {
 export interface BLDetail {
   id: number | string;
   nobukti: string;
-  bl_id: number;
+  // bl_id bertipe UUID teks di database (mis. '02-019fef22-fa04-...'), BUKAN
+  // angka auto-increment lagi. Sempat ditulis `number` sehingga pemanggilnya
+  // membungkusnya dengan Number() -> NaN.
+  bl_id: string;
   bl_nobukti: string;
   shippinginstructiondetail_nobukti: string;
   keterangan: string;
@@ -42,8 +45,10 @@ export interface BLDetail {
 export interface BlDetailRincian {
   id: number | string;
   nobukti: string;
-  bldetail_id: number;
-  bldetail_nobukti: number;
+  // Sama seperti BLDetail.bl_id: UUID teks, bukan angka. Konvensinya disamakan
+  // dengan ShippingInstructionDetailRincian.shippinginstructiondetail_id.
+  bldetail_id: string;
+  bldetail_nobukti: string;
   orderanmuatan_nobukti: string;
   keterangan: string;
   nocontainer: string;

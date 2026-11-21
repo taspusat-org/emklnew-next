@@ -242,17 +242,21 @@ const Page = () => {
             'STATUS PENGURUSAN DOOR EKSPEDISI LAIN'
           ];
 
+          // Baris NON-default menyimpan `default` sebagai STRING KOSONG, bukan
+          // null. Versi lama memakai `.find((val) => val !== null || '')` —
+          // predikatnya selalu true untuk baris pertama (TIDAK), jadi
+          // defaultValue selalu '' dan LookUp tidak pernah menerapkan default:
+          // semua STATUS ... tampil kosong lalu ditolak "WAJIB DIISI" saat
+          // simpan. Pilih baris yang benar-benar bertanda default 'YA', sama
+          // seperti app/dashboard/alat-bayar/page.tsx.
+          const defaultValue =
+            statusNilaiData.find((item: any) => item.default === 'YA')
+              ?.default ?? '';
+
           multipleKey.forEach((labelKey) => {
             dispatch(setData({ key: labelKey, data: statusNilaiData }));
             dispatch(setType({ key: labelKey, type: parameterLookup.type }));
-
-            const defaultValue = statusNilaiData
-              .map((item: any) => item.default)
-              .find((val: any) => val !== null || '');
-
-            dispatch(
-              setDefault({ key: labelKey, isdefault: String(defaultValue) })
-            );
+            dispatch(setDefault({ key: labelKey, isdefault: defaultValue }));
           });
         }
 

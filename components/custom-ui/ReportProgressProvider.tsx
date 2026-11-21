@@ -62,11 +62,6 @@ export function useReportProgress() {
             stage: 'exporting',
             progress: type === 'excel' ? 75 : 80
           }),
-        /**
-         * Status jadi SIAP dulu (progress 100),
-         * baru setelah 1 detik openFn() dipanggil,
-         * lalu auto-dismiss oleh ToastCard.
-         */
         finish: (openFn?: () => void) => {
           ctx.updateJob(id, { stage: 'done', progress: 100 });
           setTimeout(() => {

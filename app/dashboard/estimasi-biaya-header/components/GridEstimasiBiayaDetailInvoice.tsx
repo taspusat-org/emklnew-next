@@ -13,7 +13,6 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { LoadRowsRenderer } from '@/components/LoadRows';
 import { EmptyRowsRenderer } from '@/components/EmptyRows';
 import FilterInput from '@/components/custom-ui/FilterInput';
-import FilterOptions from '@/components/custom-ui/FilterOptions';
 import DataGrid, { Column, DataGridHandle } from 'react-data-grid';
 import { FaSort, FaSortDown, FaSortUp, FaTimes } from 'react-icons/fa';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -22,12 +21,6 @@ import {
   EstimasiBiayaDetailInvoice,
   filterEstimasiBiayaDetailInvoice
 } from '@/lib/types/estimasibiayaheader.type';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger
-} from '@/components/ui/tooltip';
 import {
   cancelPreviousRequest,
   formatCurrency,
@@ -246,7 +239,10 @@ const GridEstimasiBiayaDetailInvoice = ({ activeTab }: GridProps) => {
         draggable: true,
         width: 200,
         renderHeaderCell: (column: any) => (
-          <div className="flex h-full cursor-pointer flex-col items-center gap-1">
+          <div
+            title="NO BUKTI"
+            className="flex h-full cursor-pointer flex-col items-center gap-1"
+          >
             <div
               className="headers-cell h-[50%] px-8"
               onClick={() => handleSort('nobukti')}
@@ -291,21 +287,12 @@ const GridEstimasiBiayaDetailInvoice = ({ activeTab }: GridProps) => {
           const columnFilter = filters.filters.nobukti || '';
           const cellValue = props.row.nobukti || '';
           return (
-            <TooltipProvider delayDuration={0}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="m-0 flex h-full cursor-pointer items-center p-0 text-sm">
-                    {highlightText(cellValue, filters.search, columnFilter)}
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent
-                  side="right"
-                  className="rounded-none border border-zinc-400 bg-white text-sm text-zinc-900"
-                >
-                  <p>{cellValue}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <div
+              title={cellValue}
+              className="m-0 flex h-full cursor-pointer items-center p-0 text-sm"
+            >
+              {highlightText(cellValue, filters.search, columnFilter)}
+            </div>
           );
         }
       },
@@ -317,7 +304,10 @@ const GridEstimasiBiayaDetailInvoice = ({ activeTab }: GridProps) => {
         draggable: true,
         width: 200,
         renderHeaderCell: (column: any) => (
-          <div className="flex h-full cursor-pointer flex-col items-center gap-1">
+          <div
+            title="BIAYA EMKL"
+            className="flex h-full cursor-pointer flex-col items-center gap-1"
+          >
             <div
               // className="flex h-full w-full cursor-pointer flex-col justify-center px-2"
               className="headers-cell h-[50%] px-8"
@@ -367,21 +357,12 @@ const GridEstimasiBiayaDetailInvoice = ({ activeTab }: GridProps) => {
           const columnFilter = filters.filters.biayaemkl_text || '';
           const cellValue = props.row.biayaemkl_nama || '';
           return (
-            <TooltipProvider delayDuration={0}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="m-0 flex h-full cursor-pointer items-center p-0 text-sm">
-                    {highlightText(cellValue, filters.search, columnFilter)}
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent
-                  side="right"
-                  className="rounded-none border border-zinc-400 bg-white text-sm text-zinc-900"
-                >
-                  <p>{cellValue}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <div
+              title={cellValue}
+              className="m-0 flex h-full cursor-pointer items-center p-0 text-sm"
+            >
+              {highlightText(cellValue, filters.search, columnFilter)}
+            </div>
           );
         }
       },
@@ -393,7 +374,10 @@ const GridEstimasiBiayaDetailInvoice = ({ activeTab }: GridProps) => {
         draggable: true,
         width: 200,
         renderHeaderCell: (column: any) => (
-          <div className="flex h-full cursor-pointer flex-col items-center gap-1">
+          <div
+            title="LINK HARGA TRUCKING"
+            className="flex h-full cursor-pointer flex-col items-center gap-1"
+          >
             <div
               // className="flex h-full w-full cursor-pointer flex-col justify-center px-2"
               className="headers-cell h-[50%] px-8"
@@ -441,21 +425,12 @@ const GridEstimasiBiayaDetailInvoice = ({ activeTab }: GridProps) => {
           const columnFilter = filters.filters.link_text || '';
           const cellValue = props.row.link_nama || '';
           return (
-            <TooltipProvider delayDuration={0}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="m-0 flex h-full cursor-pointer items-center p-0 text-sm">
-                    {highlightText(cellValue, filters.search, columnFilter)}
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent
-                  side="right"
-                  className="rounded-none border border-zinc-400 bg-white text-sm text-zinc-900"
-                >
-                  <p>{cellValue}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <div
+              title={cellValue}
+              className="m-0 flex h-full cursor-pointer items-center p-0 text-sm"
+            >
+              {highlightText(cellValue, filters.search, columnFilter)}
+            </div>
           );
         }
       },
@@ -467,7 +442,10 @@ const GridEstimasiBiayaDetailInvoice = ({ activeTab }: GridProps) => {
         draggable: true,
         width: 200,
         renderHeaderCell: (column: any) => (
-          <div className="flex h-full cursor-pointer flex-col items-center gap-1">
+          <div
+            title="NOMINAL"
+            className="flex h-full cursor-pointer flex-col items-center gap-1"
+          >
             <div
               className="headers-cell h-[50%] px-8"
               onClick={() => handleSort('nominal')}
@@ -515,21 +493,12 @@ const GridEstimasiBiayaDetailInvoice = ({ activeTab }: GridProps) => {
               ? formatCurrency(props.row.nominal)
               : '';
           return (
-            <TooltipProvider delayDuration={0}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="m-0 flex h-full cursor-pointer items-center justify-end p-0 text-sm">
-                    {highlightText(cellValue, filters.search, columnFilter)}
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent
-                  side="right"
-                  className="rounded-none border border-zinc-400 bg-white text-sm text-zinc-900"
-                >
-                  <p>{cellValue}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <div
+              title={cellValue}
+              className="m-0 flex h-full cursor-pointer items-center justify-end p-0 text-sm"
+            >
+              {highlightText(cellValue, filters.search, columnFilter)}
+            </div>
           );
         }
       }

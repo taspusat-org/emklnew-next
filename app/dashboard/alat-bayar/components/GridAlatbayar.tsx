@@ -80,12 +80,6 @@ import {
 } from '@/lib/store/loadingSlice/loadingSlice';
 import { useFormError } from '@/lib/hooks/formErrorContext';
 import FilterOptions from '@/components/custom-ui/FilterOptions';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger
-} from '@/components/ui/tooltip';
 import { debounce } from 'lodash';
 import FilterInput from '@/components/custom-ui/FilterInput';
 import {
@@ -2164,13 +2158,6 @@ const GridAlatbayar = () => {
     }
   };
 
-  /**
-   * Export Excel dijalankan di BACKEND (background job + socket), sama seperti
-   * alur cetak laporan. Frontend hanya mengirim filter yang sedang aktif di
-   * grid — filter kolom, search global, dan sort — lalu progresnya muncul di
-   * toast. Setelah selesai, toast menampilkan tombol Download untuk menyimpan
-   * file xlsx-nya.
-   */
   const handleExportExcel = async () => {
     const { page, limit, ...filtersWithoutLimit } = filters;
 

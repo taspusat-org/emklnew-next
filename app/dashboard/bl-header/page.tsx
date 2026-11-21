@@ -9,7 +9,6 @@ import { useDispatch, useSelector } from 'react-redux';
 import { Tabs, TabsContent } from '@/components/ui/tabs';
 import { fieldLength } from '@/lib/apis/field-length.api';
 import PageContainer from '@/components/layout/page-container';
-import GridBlDetailRincian from './components/GridBlDetailRincian';
 import { setFieldLength } from '@/lib/store/field-length/fieldLengthSlice';
 
 const Page = () => {
@@ -42,9 +41,6 @@ const Page = () => {
             </div>
             <div className="col-span-10 h-[500px]">
               <GridBlDetail />
-            </div>
-            <div className="col-span-10 h-[500px]">
-              <GridBlDetailRincian />
             </div>
           </div>
         </TabsContent>

@@ -146,7 +146,6 @@ export const generateKasGantungHeaderReportFn = async (
   const response = await api2.post('/kasgantungheader/report', payload);
   return response.data;
 };
-/** Export Excel satu bukti kas gantung + rinciannya (background job). */
 export const generateKasGantungHeaderExportFn = async (
   payload: ExportBuktiJobPayload
 ): Promise<ReportJobResponse> => {

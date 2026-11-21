@@ -29,11 +29,6 @@ export const userSchema = z.object({
   karyawan_id: z.string().nullable().optional(),
   namakaryawan: z.string().nullable().optional(),
   userId: z.string().nullable().optional(),
-  /**
-   * Teks status aktif untuk tampilan LookUp. Namanya `text` (bukan
-   * `statusaktif_text`) supaya sama dengan kolom hasil join backend dan
-   * dengan modul lain seperti groupbiayaextra.
-   */
   text: z.string().nullable().optional()
 });
 

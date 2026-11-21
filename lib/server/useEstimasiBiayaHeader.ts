@@ -44,30 +44,20 @@ export const useGetAllEstimasiBiayaHeader = (
   } = {},
   signal?: AbortSignal
 ) => {
-  const dispatch = useDispatch();
-
+  // TANPA dispatch(setProcessing()). Overlay loading global itu dipakai untuk
+  // MUTASI (simpan/edit/hapus), bukan untuk memuat grid — sama seperti
+  // useGetAllBlHeader. Grid ini berjendela: sekali buka saja sudah menembak
+  // bulk fetch + beberapa prefetch, dan tiap pergeseran window menembak lagi.
+  // Menyalakan overlay global di query-nya membuat layar berkedip "loading"
+  // terus-menerus dan terasa berat padahal grid sudah menampilkan data.
+  // Indikator yang relevan tetap ada di footer grid (LoadRowsRenderer).
   return useQuery(
     ['estimasibiaya', filters],
-    async () => {
-      // Only trigger processing if the page is 1
-      if (filters.page === 1) {
-        dispatch(setProcessing());
-      }
-
-      try {
-        const data = await getAllEstimasiBiayaHeaderFn(filters, signal);
-        return data;
-      } catch (error) {
-        // Show error toast and dispatch processed
-        dispatch(setProcessed());
-        throw error;
-      } finally {
-        // Regardless of success or failure, we dispatch setProcessed after the query finishes
-        dispatch(setProcessed());
-      }
-    },
+    async () => await getAllEstimasiBiayaHeaderFn(filters, signal),
     {
-      enabled: !signal?.aborted
+      enabled: !signal?.aborted && (filters.page ?? 1) >= 1,
+      staleTime: 0,
+      cacheTime: 0
     }
   );
 };
@@ -98,11 +88,11 @@ export const useGetEstimasiBiayaDetailBiaya = (
     ['estimasibiaya', id, 'detail-biaya', filters],
     async () => await getEstimasiBiayaDetailBiayaFn(id!, filters),
     {
-      enabled:
-        !!id ||
-        !signal?.aborted ||
-        activeTab === 'detailbiaya' ||
-        tabFormValues === 'detailbiaya' // Hanya aktifkan query jika tab aktif adalah "pengalamankerja"
+      // HARUS `&&`. Dengan `||`, `!signal?.aborted` bernilai true saat signal
+      // undefined sehingga query tetap jalan walau id kosong — request jadi
+      // `/estimasibiayadetailbiaya/0`. Guard page >= 1 dipakai saat scroll
+      // ke atas menekan currentPage ke 0 sesaat untuk memaksa refetch.
+      enabled: !!id && !signal?.aborted && (filters.page ?? 1) >= 1
     }
   );
 };
@@ -130,11 +120,11 @@ export const useGetEstimasiBiayaDetailInvoice = (
     ['estimasibiaya', id, 'detail-invoice', filters],
     async () => await getEstimasiBiayaDetailInvoiceFn(id!, filters),
     {
-      enabled:
-        !!id ||
-        !signal?.aborted ||
-        activeTab === 'detailinvoice' ||
-        tabFormValues === 'detailinvoice' // Hanya aktifkan query jika tab aktif adalah "pengalamankerja"
+      // HARUS `&&`. Dengan `||`, `!signal?.aborted` bernilai true saat signal
+      // undefined sehingga query tetap jalan walau id kosong — request jadi
+      // `/estimasibiayadetailinvoice/0`. Guard page >= 1 dipakai saat scroll
+      // ke atas menekan currentPage ke 0 sesaat untuk memaksa refetch.
+      enabled: !!id && !signal?.aborted && (filters.page ?? 1) >= 1
     }
   );
 };

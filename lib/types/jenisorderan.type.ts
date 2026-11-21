@@ -1,22 +1,26 @@
 import { IMeta } from './error.type';
+
 export interface IJenisOrderan {
-  id: string;
-  nama: string;
-  keterangan: string;
+  id: string; // Primary key (varchar(200))
+  uuid: string; // Unique identifier
+  nama: string; // Nama (nvarchar(max))
+  keterangan: string; // Keterangan (nvarchar(max))
 
-  statusaktif: string; // id parameter (varchar UUID)
-  statusaktif_text: string;
-  text?: string; // teks status aktif (par.text)
-  memo?: string; // memo status aktif (JSON) — dipakai render badge di grid
+  statusformat?: string; // Format (id parameter varchar)
+  statusformat_text?: string;
+  statusformat_uuid?: string;
+  format_nama?: string; // alias statusformat_text dari view
 
-  statusformat: string; // id parameter (varchar UUID)
-  format_nama: string | null;
+  statusaktif?: string; // Status Aktif (id parameter varchar)
+  text?: string; // Status Aktif text
+  memo?: string; // Memo status aktif (JSON) — dipakai render badge di grid
+  statusaktif_uuid?: string;
 
-  modifiedby?: string;
-  created_at: string;
-  updated_at: string;
+  info?: string; // Info (nvarchar(max))
+  modifiedby?: string; // Modified by (varchar(200))
+  created_at: string; // Created at (datetime)
+  updated_at: string; // Updated at (datetime)
 }
-
 export interface IAllJenisOrderan {
   data: IJenisOrderan[];
   type: string;

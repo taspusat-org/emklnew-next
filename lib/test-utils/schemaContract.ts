@@ -1,28 +1,11 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-/**
- * Generic Zod schema "contract" used by the per-module *.validation.test.ts
- * files. Instead of hand-writing valid/invalid cases for every schema, we
- * introspect the Zod definition at runtime to:
- *   - build a minimal valid object (only required fields),
- *   - assert that object passes,
- *   - assert every required field is actually enforced,
- *   - assert non-objects / empty objects are rejected.
- *
- * Schemas with cross-field refinements can pass a `valid` override (or
- * `skipValid`) via the options map keyed by export name.
- */
 
 type Zod = any;
 
 export interface SchemaContractOptions {
-  /** Replace the auto-generated valid object entirely. */
   valid?: Record<string, any>;
-  /** Merge these fields onto the auto-generated valid object (e.g. regex/date
-   * fields the generic builder cannot satisfy). */
   validPatch?: Record<string, any>;
-  /** Skip the "accepts valid object" + required-field assertions. */
   skipValid?: boolean;
-  /** Extra required-field keys to assert beyond the auto-detected ones. */
   extraRequired?: string[];
 }
 
@@ -30,7 +13,6 @@ export type ModuleContractOptions = Record<string, SchemaContractOptions>;
 
 const typeName = (s: Zod): string | undefined => s?._def?.typeName;
 
-/** True when omitting the key entirely still satisfies the field. */
 function acceptsUndefined(schema: Zod): boolean {
   const t = typeName(schema);
   if (t === 'ZodOptional' || t === 'ZodDefault') return true;
@@ -39,7 +21,6 @@ function acceptsUndefined(schema: Zod): boolean {
   return false;
 }
 
-/** Unwrap optional/nullable/default/effects to the underlying type. */
 function unwrap(schema: Zod): Zod {
   const t = typeName(schema);
   if (t === 'ZodOptional' || t === 'ZodNullable' || t === 'ZodDefault') {
@@ -73,7 +54,8 @@ function buildNumber(base: Zod): number {
   const checks: any[] = base._def.checks || [];
   let value = 1;
   for (const c of checks) {
-    if (c.kind === 'min') value = Math.max(value, c.inclusive ? c.value : c.value + 1);
+    if (c.kind === 'min')
+      value = Math.max(value, c.inclusive ? c.value : c.value + 1);
   }
   const maxCheck = checks.find((c) => c.kind === 'max');
   if (maxCheck && value > maxCheck.value) value = maxCheck.value;
@@ -101,7 +83,8 @@ function buildValue(schema: Zod): any {
     case 'ZodNativeEnum':
       return Object.values(base._def.values || {})[0];
     case 'ZodArray': {
-      const minLen = base._def.minLength?.value ?? base._def.exactLength?.value ?? 0;
+      const minLen =
+        base._def.minLength?.value ?? base._def.exactLength?.value ?? 0;
       if (minLen > 0) {
         return Array.from({ length: minLen }, () => buildValue(base._def.type));
       }
@@ -131,10 +114,6 @@ function buildObject(objectSchema: Zod): Record<string, any> {
   return out;
 }
 
-/**
- * Build a minimal valid object for a Zod object schema by introspection.
- * `patch` lets callers satisfy fields the generic builder can't (regex/date).
- */
 export function buildValidObject(
   schema: Zod,
   patch: Record<string, any> = {}
@@ -214,10 +193,6 @@ function runContract(
   });
 }
 
-/**
- * Run the contract against a single schema instance. Useful when the schema is
- * produced by a factory function (e.g. `menuSchema(mode)`).
- */
 export function runSchemaContract(
   label: string,
   schema: Zod,
@@ -226,17 +201,12 @@ export function runSchemaContract(
   runContract(label, schema, options);
 }
 
-/** Detect every exported value that is a Zod schema. */
 function schemaExports(mod: Record<string, any>): Array<[string, Zod]> {
   return Object.entries(mod).filter(
     ([, v]) => v && typeof v.safeParse === 'function' && v._def
   );
 }
 
-/**
- * Run the schema contract against every schema exported by a validation
- * module.
- */
 export function runModuleSchemaContract(
   moduleName: string,
   mod: Record<string, any>,
@@ -247,9 +217,7 @@ export function runModuleSchemaContract(
   if (entries.length === 0) {
     describe(`${moduleName} validation`, () => {
       test('exports at least one zod schema', () => {
-        throw new Error(
-          `No zod schema export found in module "${moduleName}"`
-        );
+        throw new Error(`No zod schema export found in module "${moduleName}"`);
       });
     });
     return;

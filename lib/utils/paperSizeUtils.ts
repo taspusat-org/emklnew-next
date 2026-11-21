@@ -125,9 +125,6 @@ export async function detectPaperSize(
   };
 }
 
-/**
- * Extract paper size from MRT file (support JSON dan XML format)
- */
 export async function extractPaperSizeFromMRT(mrtUrl: string): Promise<{
   paperSize: string;
   layout: 'portrait' | 'landscape';

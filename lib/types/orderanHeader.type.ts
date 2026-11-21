@@ -31,7 +31,7 @@ export interface OrderanMuatan {
   lokasistuffing: number;
   lokasistuffing_nama: string;
   nominalstuffing: string;
-  emkllain_id: number;
+  emkl_id: number;
   emkllain_nama: string | null;
   asalmuatan: string;
   daftarbl_id: number;

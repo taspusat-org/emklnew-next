@@ -5,9 +5,6 @@ export interface LookupDefault {
 
 export const EMPTY_LOOKUP_DEFAULT: LookupDefault = { id: '', text: '' };
 
-/**
- * Pilih baris default dari hasil lookup parameter (kolom `default` bernilai 'YA').
- */
 export const pickLookupDefault = (
   rows: any[],
   fallbackText: string
@@ -21,13 +18,6 @@ export const pickLookupDefault = (
     : EMPTY_LOOKUP_DEFAULT;
 };
 
-/**
- * Nilai form untuk mode 'add'. Objek ini dipakai `forms.reset()`, yang MENGGANTI
- * seluruh state form — field yang tidak disebut di sini menjadi `undefined`, bukan
- * kembali ke defaultValues. Jadi setiap field wajib di BiayaemklSchema harus ada di
- * sini, kalau tidak SAVE gagal diam-diam: lookup-nya tidak merender FormMessage,
- * sehingga error validasi tidak terlihat sama sekali oleh user.
- */
 export const buildAddFormValues = (
   aktif: LookupDefault,
   nilai: LookupDefault
