@@ -6,9 +6,9 @@ import { DayPicker } from 'react-day-picker';
 import { cn } from '@/lib/utils';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { MdOutlineKeyboardDoubleArrowRight } from 'react-icons/md';
-import { useGetAllOffDays } from '@/lib/server/useOffdays';
+import { useGetHarilibur } from '@/lib/server/useHarilibur';
 import { Checkbox } from '../ui/checkbox';
-import { IOffdays } from '@/lib/types/offday.type';
+import { IHariLibur } from '@/lib/types/harilibur.type';
 import { getParameterFn } from '@/lib/apis/parameter.api';
 
 export type CalendarProps = React.ComponentProps<typeof DayPicker>;
@@ -28,7 +28,7 @@ function CalendarCheck({
   disabled?: boolean; // Optional disabled prop
   defaultMonth: Date;
 }) {
-  const { data } = useGetAllOffDays();
+  const { data } = useGetHarilibur();
   const [batasCuti, setBatasCuti] = React.useState('');
   const [selectedDates, setSelectedDates] = React.useState<Set<string>>(
     new Set(selectedDatesProp) // Set initial state based on props
@@ -53,7 +53,7 @@ function CalendarCheck({
   };
 
   const holidays =
-    data?.data.map((item: IOffdays) => ({
+    data?.data.map((item: IHariLibur) => ({
       date: parseDate(item.tgl), // Use the parseDate function to handle the format correctly
       keterangan: item.keterangan
     })) || [];

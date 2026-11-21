@@ -70,20 +70,17 @@ export const useCreateLabaRugiKalkulasi = () => {
 
 export const useUpdateLabaRugiKalkulasi = () => {
   const { setError } = useFormError();
-  const queryClient = useQueryClient();
   const { alert } = useAlert();
 
+  // Sama seperti create: JANGAN invalidateQueries di sini. onSuccess grid yang
+  // mengatur data + fokus. invalidateQueries me-refetch currentPage basi
+  // (page besar akibat ~1jt baris) yang lambat & menimpa fokus -> baris 1.
   return useMutation(updateLabaRugiKalkulasiFn, {
-    onSuccess: () => {
-      void queryClient.invalidateQueries('labarugikalkulasi');
-    },
     onError: (error: AxiosError) => {
       const errorResponse = error.response?.data as IErrorResponse;
 
       if (errorResponse !== undefined) {
-        const errorFields = Array.isArray(errorResponse.message)
-          ? errorResponse.message
-          : [];
+        const errorFields = errorResponse.message || [];
 
         if (errorResponse.statusCode === 400 && Array.isArray(errorFields)) {
           errorFields?.forEach((err: { path: string[]; message: string }) => {
@@ -103,6 +100,7 @@ export const useUpdateLabaRugiKalkulasi = () => {
 };
 
 export const useDeleteLabaRugiKalkulasi = () => {
+  const { setError } = useFormError();
   const queryClient = useQueryClient();
   const { alert } = useAlert();
 
@@ -112,12 +110,22 @@ export const useDeleteLabaRugiKalkulasi = () => {
     },
     onError: (error: AxiosError) => {
       const errorResponse = error.response?.data as IErrorResponse;
+
       if (errorResponse !== undefined) {
-        alert({
-          title: errorResponse.message ?? 'Gagal',
-          variant: 'danger',
-          submitText: 'OK'
-        });
+        const errorFields = errorResponse.message || [];
+
+        if (errorResponse.statusCode === 400 && Array.isArray(errorFields)) {
+          errorFields?.forEach((err: { path: string[]; message: string }) => {
+            const path = err.path[0];
+            setError(path, err.message);
+          });
+        } else {
+          alert({
+            title: errorResponse.message ?? 'Gagal',
+            variant: 'danger',
+            submitText: 'OK'
+          });
+        }
       }
     }
   });

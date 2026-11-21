@@ -26,7 +26,8 @@ const SKIP = {
   FormJobParty: 'sub-form rendered inside a parent FormProvider',
   FormTabs: 'tabbed wrapper composing child forms, not a standalone form',
   FormBiayaLainLainDetailMuatan: 'detail sub-form, needs parent form context',
-  FormPenerimaanSeal: 'sub-form using useFormContext (needs parent FormProvider)',
+  FormPenerimaanSeal:
+    'sub-form using useFormContext (needs parent FormProvider)',
   FormPinjamanEmkl: 'sub-form using useFormContext (needs parent FormProvider)',
   FormPengembalianPinjamanEmkl:
     'sub-form using useFormContext (needs parent FormProvider)',
@@ -41,7 +42,7 @@ const NO_VIEW_DISABLE = new Set([
   'FormRoleAcl',
   'FormShipper',
   'FormMarketingDetail',
-  'FormOffdays'
+  'FormHarilibur'
 ]);
 // Forms with no required fields, or whose empty-submit path can't be exercised.
 const NO_EMPTY_SUBMIT = new Set(['FormParameter', 'FormBiayaHeader']);
@@ -183,7 +184,9 @@ for (const formPath of forms) {
   fs.mkdirSync(testDir, { recursive: true });
   fs.writeFileSync(testFile, buildTest(formName, schema), 'utf8');
   created++;
-  report.push(`${formName} -> ${schema ? schema.ident : 'NO_SCHEMA(smoke only)'}`);
+  report.push(
+    `${formName} -> ${schema ? schema.ident : 'NO_SCHEMA(smoke only)'}`
+  );
 }
 console.log(`created=${created} skipped=${skipped} noSchema=${noSchema}`);
 console.log(report.join('\n'));

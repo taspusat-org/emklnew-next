@@ -16,6 +16,9 @@ export const getScheduleKapalFn = async (
 
     return response.data;
   } catch (error) {
+    if (signal?.aborted) {
+      throw new Error('Request was cancelled');
+    }
     console.error('Error fetching Schedule Kapal data:', error);
     throw new Error('Failed to fetch Schedule Kapal data');
   }
