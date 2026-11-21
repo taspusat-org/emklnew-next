@@ -230,7 +230,7 @@ const FormAsuransi = ({
                   />
 
                   <FormField
-                    name="notelp"
+                    name="telp"
                     control={forms.control}
                     render={({ field }) => (
                       <FormItem className="flex w-full flex-col justify-between lg:flex-row lg:items-center">

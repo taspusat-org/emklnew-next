@@ -1434,6 +1434,8 @@ const GridBiaya = () => {
   const handleEdit = () => {
     if (selectedRow !== null) {
       const rowData = rows[selectedRow];
+      dispatch(setClearLookup(false));
+      fillFormFromRow(rows[selectedRow]);
       setPopOver(true);
       setMode('edit');
     }
@@ -1441,12 +1443,16 @@ const GridBiaya = () => {
   const handleDelete = () => {
     if (selectedRow !== null) {
       setMode('delete');
+      dispatch(setClearLookup(false));
+      fillFormFromRow(rows[selectedRow]);
       setPopOver(true);
     }
   };
   const handleView = () => {
     if (selectedRow !== null) {
       setMode('view');
+      dispatch(setClearLookup(false));
+      fillFormFromRow(rows[selectedRow]);
       setPopOver(true);
     }
   };
@@ -1839,24 +1845,33 @@ const GridBiaya = () => {
     };
   }, []);
 
+  // Isi form dari baris terpilih. Dipanggil SINKRON sebelum modal dibuka (bukan
+  // hanya lewat effect): LookUp membaca `lookupNama` (forms.getValues) saat
+  // mount, sedangkan effect baru jalan SETELAH commit dan forms.setValue tidak
+  // memicu re-render. Setelah Add, mode tetap 'add' sehingga effect melewati
+  // pengisian -> Edit langsung sesudah Add membuka LookUp dengan teks kosong.
+  const fillFormFromRow = (rowData?: IBiaya) => {
+    if (!rowData) return;
+    forms.setValue('id', rowData?.id);
+    forms.setValue('nama', rowData?.nama);
+    forms.setValue('keterangan', rowData?.keterangan);
+
+    forms.setValue('coa', rowData?.coa);
+    forms.setValue('coa_text', rowData?.coa_text);
+
+    forms.setValue('coahut', rowData?.coahut);
+    forms.setValue('coahut_text', rowData?.coahut_text);
+
+    forms.setValue('jenisorder_id', String(rowData?.jenisorder_id ?? ''));
+    forms.setValue('jenisorderan_text', rowData?.jenisorderan_text);
+
+    forms.setValue('statusaktif', rowData?.statusaktif ?? '');
+    forms.setValue('text', rowData?.text);
+  };
+
   useEffect(() => {
-    const rowData = rows[selectedRow];
     if (selectedRow !== null && rows.length > 0 && mode !== 'add') {
-      forms.setValue('id', rowData?.id);
-      forms.setValue('nama', rowData?.nama);
-      forms.setValue('keterangan', rowData?.keterangan);
-
-      forms.setValue('coa', rowData?.coa);
-      forms.setValue('coa_text', rowData?.coa_text);
-
-      forms.setValue('coahut', rowData?.coahut);
-      forms.setValue('coahut_text', rowData?.coahut_text);
-
-      forms.setValue('jenisorder_id', String(rowData?.jenisorder_id ?? ''));
-      forms.setValue('jenisorderan_text', rowData?.jenisorderan_text);
-
-      forms.setValue('statusaktif', rowData?.statusaktif ?? '');
-      forms.setValue('text', rowData?.text);
+      fillFormFromRow(rows[selectedRow]);
     }
     // JANGAN set/reset form saat mode 'add' di sini — resetAddForm() di handleAdd menanganinya
   }, [forms, selectedRow, rows, mode]);

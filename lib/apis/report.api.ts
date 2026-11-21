@@ -84,6 +84,20 @@ export const generateBiayaExtraHeaderReportFn = async (
   return response.data;
 };
 
+export const generateHariliburReportFn = async (
+  payload: BuktiJobPayload
+): Promise<ReportJobResponse> => {
+  const response = await api2.post('/harilibur/report', payload);
+  return response.data;
+};
+
+export const generateTujuankapalReportFn = async (
+  payload: BuktiJobPayload
+): Promise<ReportJobResponse> => {
+  const response = await api2.post('/tujuankapal/report', payload);
+  return response.data;
+};
+
 /**
  * Payload export Excel per transaksi — satu bukti beserta rinciannya, jadi
  * yang dikirim hanya id barisnya (sama seperti cetak bukti).
@@ -343,6 +357,20 @@ export const generateJabatanExportFn = async (
   payload: ExportJobPayload
 ): Promise<ReportJobResponse> => {
   const response = await api2.post('/jabatan/export', payload);
+  return response.data;
+};
+
+export const generateHariliburExportFn = async (
+  payload: ExportJobPayload
+): Promise<ReportJobResponse> => {
+  const response = await api2.post('/harilibur/export', payload);
+  return response.data;
+};
+
+export const generateTujuankapalExportFn = async (
+  payload: ExportJobPayload
+): Promise<ReportJobResponse> => {
+  const response = await api2.post('/tujuankapal/export', payload);
   return response.data;
 };
 

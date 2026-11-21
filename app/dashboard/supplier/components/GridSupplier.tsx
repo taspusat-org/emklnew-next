@@ -2607,6 +2607,8 @@ const GridSupplier = () => {
           submitText: 'OK'
         });
       } else {
+        dispatch(setClearLookup(false));
+        fillFormFromRow(rows[selectedRow]);
         setPopOver(true);
         setMode('edit');
       }
@@ -2677,6 +2679,8 @@ const GridSupplier = () => {
             });
           } else {
             setMode('delete');
+            dispatch(setClearLookup(false));
+            fillFormFromRow(rows[selectedRow]);
             setPopOver(true);
           }
         }
@@ -2748,6 +2752,8 @@ const GridSupplier = () => {
   const handleView = () => {
     if (selectedRow !== null) {
       setMode('view');
+      dispatch(setClearLookup(false));
+      fillFormFromRow(rows[selectedRow]);
       setPopOver(true);
     }
   };
@@ -3201,52 +3207,61 @@ const GridSupplier = () => {
     };
   }, []);
 
+  // Isi form dari baris terpilih. Dipanggil SINKRON sebelum modal dibuka (bukan
+  // hanya lewat effect): LookUp membaca `lookupNama` (forms.getValues) saat
+  // mount, sedangkan effect baru jalan SETELAH commit dan forms.setValue tidak
+  // memicu re-render. Setelah Add, mode tetap 'add' sehingga effect melewati
+  // pengisian -> Edit langsung sesudah Add membuka LookUp dengan teks kosong.
+  const fillFormFromRow = (rowData?: Supplier) => {
+    if (!rowData) return;
+    forms.setValue('id', rowData?.id);
+    forms.setValue('nama', rowData?.nama);
+    forms.setValue('keterangan', rowData?.keterangan);
+    forms.setValue('contactperson', rowData?.contactperson);
+    forms.setValue('ktp', rowData?.ktp);
+    forms.setValue('alamat', rowData?.alamat);
+    forms.setValue('coa', rowData?.coa);
+    forms.setValue('coa_nama', rowData?.coa_nama);
+    forms.setValue('coapiu', rowData?.coapiu);
+    forms.setValue('coapiu_nama', rowData?.coapiu_nama);
+    forms.setValue('coahut', rowData?.coahut);
+    forms.setValue('coahut_nama', rowData?.coahut_nama);
+    forms.setValue('coagiro', rowData?.coagiro);
+    forms.setValue('coagiro_nama', rowData?.coagiro_nama);
+    forms.setValue('kota', rowData?.kota);
+    forms.setValue('kodepos', rowData?.kodepos);
+    forms.setValue('telp', rowData?.telp);
+    forms.setValue('email', rowData?.email);
+    forms.setValue('fax', rowData?.fax);
+    forms.setValue('web', rowData?.web);
+    forms.setValue('creditterm', Number(rowData?.creditterm));
+    forms.setValue('credittermplus', Number(rowData?.credittermplus));
+    forms.setValue('npwp', rowData?.npwp);
+    forms.setValue('alamatfakturpajak', rowData?.alamatfakturpajak);
+    forms.setValue('namapajak', rowData?.namapajak);
+    forms.setValue(
+      'nominalpph21',
+      rowData.nominalpph21 == null
+        ? undefined
+        : formatCurrency(rowData?.nominalpph21)
+    );
+    forms.setValue(
+      'nominalpph23',
+      rowData.nominalpph23 == null
+        ? undefined
+        : formatCurrency(rowData?.nominalpph23)
+    );
+    forms.setValue('noskb', rowData?.noskb);
+    forms.setValue('tglskb', rowData?.tglskb);
+    forms.setValue('nosk', rowData?.nosk);
+    forms.setValue('tglsk', rowData?.tglsk);
+    forms.setValue('statusaktif', rowData?.statusaktif ?? '');
+    forms.setValue('statusaktif_nama', rowData?.statusaktif_nama ?? '');
+  };
+
   useEffect(() => {
-    const rowData = rows[selectedRow];
     if (selectedRow !== null && rows.length > 0 && mode !== 'add') {
-      forms.setValue('id', rowData?.id);
-      forms.setValue('nama', rowData?.nama);
-      forms.setValue('keterangan', rowData?.keterangan);
-      forms.setValue('contactperson', rowData?.contactperson);
-      forms.setValue('ktp', rowData?.ktp);
-      forms.setValue('alamat', rowData?.alamat);
-      forms.setValue('coa', rowData?.coa);
-      forms.setValue('coa_nama', rowData?.coa_nama);
-      forms.setValue('coapiu', rowData?.coapiu);
-      forms.setValue('coapiu_nama', rowData?.coapiu_nama);
-      forms.setValue('coahut', rowData?.coahut);
-      forms.setValue('coahut_nama', rowData?.coahut_nama);
-      forms.setValue('coagiro', rowData?.coagiro);
-      forms.setValue('coagiro_nama', rowData?.coagiro_nama);
-      forms.setValue('kota', rowData?.kota);
-      forms.setValue('kodepos', rowData?.kodepos);
-      forms.setValue('telp', rowData?.telp);
-      forms.setValue('email', rowData?.email);
-      forms.setValue('fax', rowData?.fax);
-      forms.setValue('web', rowData?.web);
-      forms.setValue('creditterm', Number(rowData?.creditterm));
-      forms.setValue('credittermplus', Number(rowData?.credittermplus));
-      forms.setValue('npwp', rowData?.npwp);
-      forms.setValue('alamatfakturpajak', rowData?.alamatfakturpajak);
-      forms.setValue('namapajak', rowData?.namapajak);
-      forms.setValue(
-        'nominalpph21',
-        rowData.nominalpph21 == null
-          ? undefined
-          : formatCurrency(rowData?.nominalpph21)
-      );
-      forms.setValue(
-        'nominalpph23',
-        rowData.nominalpph23 == null
-          ? undefined
-          : formatCurrency(rowData?.nominalpph23)
-      );
-      forms.setValue('noskb', rowData?.noskb);
-      forms.setValue('tglskb', rowData?.tglskb);
-      forms.setValue('nosk', rowData?.nosk);
-      forms.setValue('tglsk', rowData?.tglsk);
-      forms.setValue('statusaktif', rowData?.statusaktif ?? '');
-      forms.setValue('statusaktif_nama', rowData?.statusaktif_nama ?? '');
+      fillFormFromRow(rows[selectedRow]);
     }
     // JANGAN set/reset form saat mode 'add' di sini — resetAddForm() di handleAdd menanganinya
   }, [forms, selectedRow, rows, mode, popOver]);

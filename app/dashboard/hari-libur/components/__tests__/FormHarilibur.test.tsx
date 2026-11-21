@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom';
-import Form from '../FormOffdays';
-import { offdaysSchema } from '@/lib/validations/offday.validation';
+import Form from '../FormHarilibur';
+import { HariliburSchema } from '@/lib/validations/harilibur.validation';
 import {
   renderForm,
   getBtn,
@@ -46,10 +46,10 @@ jest.mock('@/components/custom-ui/calendar-check', () =>
   require('@/lib/test-utils/uiMocks').genericComponentModule()
 );
 
-const schema = offdaysSchema;
+const schema = HariliburSchema;
 const validData = buildValidObject(schema);
 
-describe('FormOffdays', () => {
+describe('FormHarilibur', () => {
   test('renders SAVE and Cancel buttons', () => {
     renderForm(Form, { schema, defaultValues: validData });
     expect(saveButton()).toBeInTheDocument();
@@ -64,7 +64,10 @@ describe('FormOffdays', () => {
   });
 
   test('cancel triggers handleClose', async () => {
-    const { handleClose } = renderForm(Form, { schema, defaultValues: validData });
+    const { handleClose } = renderForm(Form, {
+      schema,
+      defaultValues: validData
+    });
     await userEvent.click(getBtn('Cancel'));
     expect(handleClose).toHaveBeenCalled();
   });

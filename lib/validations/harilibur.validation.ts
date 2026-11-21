@@ -2,7 +2,8 @@ import { REQUIRED_FIELD } from '@/constants/validation';
 import { z } from 'zod';
 import { dynamicRequiredMessage } from '../utils';
 
-export const offdaysSchema = z.object({
+export const HariliburSchema = z.object({
+  id: z.string().nullable().optional(),
   tgl: z
     .string()
     .nonempty({ message: dynamicRequiredMessage('TANGGAL') })
@@ -14,15 +15,12 @@ export const offdaysSchema = z.object({
       {
         message: 'FORMAT TANGGAL TIDAK VALID'
       }
-    ), // Tanggal wajib diisi
+    ),
   keterangan: z
     .string()
     .nonempty({ message: dynamicRequiredMessage('KETERANGAN') }),
-  statusaktif: z.string().nullable().optional(), // Email wajib diisi
-  // cabang_id itu uuid TEXT (harilibur.cabang_id), bukan angka. Dengan
-  // z.number() nilai dari LookUp selalu ditolak sehingga SAVE batal diam-diam.
-  cabang_id: z.string().nullable().optional(),
-  // teks tampilan LookUp; dibuang service backend agar tak ikut ke INSERT
+  statusaktif: z.string().nullable().optional(),
+  cabang_id: z.string().nonempty({ message: dynamicRequiredMessage('CABANG') }),
   cabang_nama: z.string().nullable().optional()
 });
-export type OffdayInput = z.infer<typeof offdaysSchema>;
+export type HariliburInput = z.infer<typeof HariliburSchema>;
