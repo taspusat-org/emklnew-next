@@ -110,6 +110,15 @@ interface Filter {
   sortDirection: 'asc' | 'desc';
 }
 
+const emptyFilters = {
+  nama: '',
+  keterangan: '',
+  statusaktif: '',
+  modifiedby: '',
+  created_at: '',
+  updated_at: ''
+};
+
 const GridDaftarbl = () => {
   const { theme, resolvedTheme } = useTheme();
   const isDark = theme === 'dark' || resolvedTheme === 'dark';
@@ -2478,6 +2487,7 @@ const GridDaftarbl = () => {
   };
 
   useEffect(() => {
+    const rowData = rows[selectedRow];
     if (selectedRow !== null && rows.length > 0 && mode !== 'add') {
       forms.setValue('id', rowData?.id ?? '');
       forms.setValue('uuid', rowData?.uuid);

@@ -66,6 +66,7 @@ export const useCreateAsalKapal = () => {
 };
 
 export const useDeleteAsalKapal = () => {
+  const { setError } = useFormError();
   const queryClient = useQueryClient();
 
   return useMutation(deleteAsalKapalFn, {
@@ -89,6 +90,7 @@ export const useDeleteAsalKapal = () => {
   });
 };
 export const useUpdateAsalKapal = () => {
+  const { setError } = useFormError();
   const queryClient = useQueryClient();
 
   return useMutation(updateAsalKapalFn, {
