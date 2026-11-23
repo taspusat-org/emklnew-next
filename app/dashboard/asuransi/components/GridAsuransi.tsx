@@ -21,7 +21,7 @@ import { ImSpinner2 } from 'react-icons/im';
 import ActionButton from '@/components/custom-ui/ActionButton';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import FormBank from './FormAsuransi';
+import FormAsuransi from './FormAsuransi';
 import { useQueryClient } from 'react-query';
 import {
   AsuransiInput,
@@ -4047,7 +4047,7 @@ const GridAsuransi = () => {
           )}
         </div>
       </div>
-      <FormBank
+      <FormAsuransi
         key={addFormKey}
         popOver={popOver}
         handleClose={handleClose}

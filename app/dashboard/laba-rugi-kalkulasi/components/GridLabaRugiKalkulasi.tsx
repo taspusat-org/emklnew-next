@@ -3230,7 +3230,16 @@ const GridLabaRugiKalkulasi = () => {
 
   return (
     <div className={`flex h-[100%] w-full justify-center`}>
-      <div className="flex h-[100%] w-full flex-col rounded-sm border border-border bg-background">
+      <div
+        onKeyDownCapture={handleGridInputNavigationKeyDownCapture}
+        onWheelCapture={() => {
+          interactionModeRef.current = 'pointer';
+        }}
+        onPointerDownCapture={() => {
+          interactionModeRef.current = 'pointer';
+        }}
+        className="flex h-[100%] w-full flex-col rounded-sm border border-border bg-background"
+      >
         <div className="flex h-[38px] w-full flex-row items-center justify-between rounded-t-sm border-b border-border bg-background-grid-header px-2">
           <div className="flex flex-row items-center">
             <label htmlFor="" className="text-xs">
