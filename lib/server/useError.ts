@@ -18,6 +18,7 @@ import {
   storeErrorFn,
   updateErrorFn
 } from '../apis/error.api';
+import { useAlert } from '../store/client/useAlert';
 
 export const useGetAllError = (
   filters: {
