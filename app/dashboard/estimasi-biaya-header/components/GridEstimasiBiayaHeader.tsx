@@ -80,12 +80,14 @@ import {
 import {
   checkValidationEstimasiBiayaFn,
   getAllEstimasiBiayaHeaderFn,
-  getEstimasiBiayaDetailBiayaByIdFn,
-  getEstimasiBiayaHeaderByIdFn
+  getEstimasiBiayaDetailBiayaByIdFn
 } from '@/lib/apis/estimasibiayaheader.api';
 import { useReportPdfContext } from '@/hooks/ReportPdfProvider';
 import { useGridRowNavigation } from '@/hooks/use-grid-row-navigation';
-import { generateEstimasiBiayaExportFn } from '@/lib/apis/report.api';
+import {
+  generateEstimasiBiayaExportFn,
+  generateEstimasiBiayaReportFn
+} from '@/lib/apis/report.api';
 import FilterOptions from '@/components/custom-ui/FilterOptions';
 import DraggableColumn from '@/components/custom-ui/DraggableColumns';
 import { highlightText } from '@/components/custom-ui/HighlightText';
@@ -130,7 +132,7 @@ const GridEstimasiBiayaHeader = () => {
   const dispatch = useDispatch();
   const queryClient = useQueryClient();
   const { clearError } = useFormError();
-  const { generateExport } = useReportPdfContext();
+  const { generateReport, generateExport } = useReportPdfContext();
   const { theme, resolvedTheme } = useTheme();
   const isDark = theme === 'dark' || resolvedTheme === 'dark';
   const { user } = useSelector((state: RootState) => state.auth);
@@ -1782,7 +1784,7 @@ const GridEstimasiBiayaHeader = () => {
         variant: 'danger',
         submitText: 'OK'
       });
-      return; // Stop execution if no rows are selected
+      return;
     }
     if (checkedRows.size > 1) {
       alert({
@@ -1790,198 +1792,23 @@ const GridEstimasiBiayaHeader = () => {
         variant: 'danger',
         submitText: 'OK'
       });
-      return; // Stop execution if no rows are selected
+      return;
     }
+
     const rowId = Array.from(checkedRows)[0];
 
-    try {
-      dispatch(setProcessing());
-
-      //TANGGAL
-      const now = new Date();
-      const pad = (n: any) => n.toString().padStart(2, '0');
-      const tglcetak = `${pad(now.getDate())}-${pad(
-        now.getMonth() + 1
-      )}-${now.getFullYear()} ${pad(now.getHours())}:${pad(
-        now.getMinutes()
-      )}:${pad(now.getSeconds())}`;
-
-      const response = await getEstimasiBiayaHeaderByIdFn(rowId);
-
-      if (response.data.header.length === 0) {
-        alert({
-          title: 'DATA TIDAK TERSEDIA!',
-          variant: 'danger',
-          submitText: 'OK'
-        });
-        return;
-      }
-
-      // const reportRows = response.data.map((row: any) => ({
-      //   ...row,
-      //   judullaporan: 'PT. TRANSPORINDO AGUNG SEJAHTERA',
-      //   usercetak: user.username,
-      //   tglcetak,
-      //   judul: `ESTIMASI BIAYA`
-      // }));
-
-      const header = response.data.header[0];
-      const mergedHeaderWithDetailBiaya = response.data.detailbiaya.map(
-        (item: any) => ({
-          ...header,
-          header_nominal: header.nominal,
-          judullaporan: 'PT. TRANSPORINDO AGUNG SEJAHTERA',
-          usercetak: user.username,
-          tglcetak,
-          judul: `ESTIMASI BIAYA`,
-          ...item,
-          detailbiaya_nominal: item.nominal
-        })
-      );
-
-      sessionStorage.setItem('dataId', rowId as unknown as string);
-      // Dynamically import Stimulsoft and generate the PDF report
-      import('stimulsoft-reports-js/Scripts/stimulsoft.blockly.editor')
-        .then((module) => {
-          const { Stimulsoft } = module;
-          Stimulsoft.Base.StiFontCollection.addOpentypeFontFile(
-            '/fonts/tahoma.ttf',
-            'Tahoma'
-          ); // Regular
-          Stimulsoft.Base.StiFontCollection.addOpentypeFontFile(
-            '/fonts/tahomabd.ttf',
-            'Tahoma'
-          ); // Bold
-          Stimulsoft.Base.StiLicense.Key =
-            '6vJhGtLLLz2GNviWmUTrhSqnOItdDwjBylQzQcAOiHksEid1Z5nN/hHQewjPL/4/AvyNDbkXgG4Am2U6dyA8Ksinqp' +
-            '6agGqoHp+1KM7oJE6CKQoPaV4cFbxKeYmKyyqjF1F1hZPDg4RXFcnEaYAPj/QLdRHR5ScQUcgxpDkBVw8XpueaSFBs' +
-            'JVQs/daqfpFiipF1qfM9mtX96dlxid+K/2bKp+e5f5hJ8s2CZvvZYXJAGoeRd6iZfota7blbsgoLTeY/sMtPR2yutv' +
-            'gE9TafuTEhj0aszGipI9PgH+A/i5GfSPAQel9kPQaIQiLw4fNblFZTXvcrTUjxsx0oyGYhXslAAogi3PILS/DpymQQ' +
-            '0XskLbikFsk1hxoN5w9X+tq8WR6+T9giI03Wiqey+h8LNz6K35P2NJQ3WLn71mqOEb9YEUoKDReTzMLCA1yJoKia6Y' +
-            'JuDgUf1qamN7rRICPVd0wQpinqLYjPpgNPiVqrkGW0CQPZ2SE2tN4uFRIWw45/IITQl0v9ClCkO/gwUtwtuugegrqs' +
-            'e0EZ5j2V4a1XDmVuJaS33pAVLoUgK0M8RG72';
-
-          const report = new Stimulsoft.Report.StiReport();
-          const dataSet = new Stimulsoft.System.Data.DataSet('Data');
-
-          // Load the report template (MRT file)
-          report.loadFile('/reports/LaporanEstimasiBiaya.mrt');
-          report.dictionary.dataSources.clear();
-          dataSet.readJson({
-            data: mergedHeaderWithDetailBiaya,
-            detail: response.data.detailinvoice
-          });
-
-          report.regData(dataSet.dataSetName, '', dataSet);
-          report.dictionary.synchronize();
-
-          // Render the report asynchronously
-
-          report.renderAsync(() => {
-            // Export the report to PDF asynchronously
-            report.exportDocumentAsync((pdfData: any) => {
-              const pdfBlob = new Blob([new Uint8Array(pdfData)], {
-                type: 'application/pdf'
-              });
-              const pdfUrl = URL.createObjectURL(pdfBlob);
-
-              // Store the Blob URL in sessionStorage
-              sessionStorage.setItem('pdfUrl', pdfUrl);
-
-              // Navigate to the report page
-              window.open('/reports/estimasibiayaheader', '_blank');
-            }, Stimulsoft.Report.StiExportFormat.Pdf);
-          });
-        })
-        .catch((error) => {
-          console.error('Failed to load Stimulsoft:', error);
-        });
-    } catch (error) {
-      dispatch(setProcessed());
-    } finally {
-      dispatch(setProcessed());
-    }
+    await generateReport({
+      label: 'Estimasi Biaya',
+      payload: {
+        mrtName: 'LaporanEstimasiBiaya.mrt',
+        id: String(rowId),
+        judullaporan: 'PT. TRANSPORINDO AGUNG SEJAHTERA'
+      },
+      apiFn: generateEstimasiBiayaReportFn,
+      // Tombol Export di viewer memakai filter grid yang sama.
+      onExport: () => handleExportExcel()
+    });
   };
-
-  // const handleReport = async () => {
-  //   if (checkedRows.size === 0) {
-  //     alert({
-  //       title: 'PILIH DATA YANG INGIN DI CETAK!',
-  //       variant: 'danger',
-  //       submitText: 'OK'
-  //     });
-  //     return; // Stop execution if no rows are selected
-  //   }
-  //   if (checkedRows.size > 1) {
-  //     alert({
-  //       title: 'HANYA BISA MEMILIH SATU DATA!',
-  //       variant: 'danger',
-  //       submitText: 'OK'
-  //     });
-  //     return; // Stop execution if no rows are selected
-  //   }
-
-  //   const rowId = Array.from(checkedRows)[0];
-
-  //   try {
-  //     dispatch(setProcessing()); // Show loading overlay when the request starts
-
-  //     const now = new Date();
-  //     const pad = (n: any) => n.toString().padStart(2, '0');
-  //     const tglcetak = `${pad(now.getDate())}-${pad(
-  //       now.getMonth() + 1
-  //     )}-${now.getFullYear()} ${pad(now.getHours())}:${pad(
-  //       now.getMinutes()
-  //     )}:${pad(now.getSeconds())}`;
-
-  //     const { page, limit, ...filtersWithoutLimit } = filters;
-  //     const response = await getEstimasiBiayaHeaderByIdFn(rowId);
-
-  //     if (response.data.header.length === 0) {
-  //       alert({
-  //         title: 'DATA TIDAK TERSEDIA!',
-  //         variant: 'danger',
-  //         submitText: 'OK'
-  //       });
-  //     } else {
-  //       // const reportRows = response.data.header.map((row: any) => ({
-  //       //   ...row,
-  //       //   judullaporan: 'PT. TRANSPORINDO AGUNG SEJAHTERA',
-  //       //   usercetak: user.username,
-  //       //   tglcetak,
-  //       //   judul: `ESTIMASI BIAYA`,
-  //       // }));
-  //       // console.log('reportRows', reportRows);
-
-  //       const header = response.data.header[0]
-  //       const mergedHeaderWithDetailBiaya = response.data.detailbiaya.map((item:any) => ({
-  //         ...header,
-  //         header_nominal: header.nominal,
-  //         judullaporan: 'PT. TRANSPORINDO AGUNG SEJAHTERA',
-  //         usercetak: user.username,
-  //         tglcetak,
-  //         judul: `ESTIMASI BIAYA`,
-  //         ...item,
-  //         detailbiaya_nominal: item.nominal
-  //       }));
-
-  //       console.log('mergedRows', mergedHeaderWithDetailBiaya);
-
-  //       dispatch(setReportData(mergedHeaderWithDetailBiaya));
-  //       dispatch(setDetailDataReport(response.data.detailinvoice));
-  //       window.open('/reports/designer', '_blank');
-  //     }
-  //   } catch (error) {
-  //     console.error('Error generating report:', error);
-  //     alert({
-  //       title: 'Terjadi kesalahan saat memuat data!',
-  //       variant: 'danger',
-  //       submitText: 'OK'
-  //     });
-  //   } finally {
-  //     dispatch(setProcessed()); // Hide loading overlay when the request is finished
-  //   }
-  // };
 
   const onSuccess = async (
     indexOnPage: any,
