@@ -2,7 +2,7 @@ import { REQUIRED_FIELD } from '@/constants/validation';
 import { z } from 'zod';
 import { dynamicRequiredMessage } from '../utils';
 
-export const tujuankapalSchema = z.object({
+export const TujuankapalSchema = z.object({
   id: z.string().nullable().optional(),
   nama: z.string().nonempty({ message: dynamicRequiredMessage('NAMA') }),
   kode: z
@@ -15,10 +15,15 @@ export const tujuankapalSchema = z.object({
     .string()
     .trim()
     .nonempty({ message: dynamicRequiredMessage('KETERANGAN') }), // Keterangan wajib diisi
+
   cabang_id: z.string().nullable().optional(),
-  namacabang: z.string().nullable().optional(),
+  cabang_nama: z.string().nullable().optional(),
+
   statusaktif: z.string().min(1, `${REQUIRED_FIELD}`),
-  statusaktif_nama: z.string().nullable().optional()
+  text: z.string().nullable().optional(),
+  memo: z.string().nullable().optional(),
+
+  info: z.string().nullable().optional()
 });
 
-export type TujuankapalInput = z.infer<typeof tujuankapalSchema>;
+export type TujuankapalInput = z.infer<typeof TujuankapalSchema>;

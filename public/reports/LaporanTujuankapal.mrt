@@ -59,9 +59,9 @@
             "Type": "System.String"
           },
           "5": {
-            "Name": "namacabang",
-            "NameInSource": "namacabang",
-            "Alias": "namacabang",
+            "Name": "cabang_nama",
+            "NameInSource": "cabang_nama",
+            "Alias": "cabang_nama",
             "Type": "System.String"
           },
           "6": {
@@ -714,7 +714,7 @@
               },
               "MaxNumberOfLines": 6,
               "Text": {
-                "Value": "{data.namacabang}"
+                "Value": "{data.cabang_nama}"
               },
               "VertAlignment": "Center",
               "Font": "Tahoma;;;",

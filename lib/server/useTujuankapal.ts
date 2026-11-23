@@ -9,21 +9,16 @@ import {
 } from '../apis/tujuankapal.api';
 import { useAlert } from '../store/client/useAlert';
 import { useFormError } from '../hooks/formErrorContext';
+import { filterTujuankapal } from '../types/tujuankapal.type';
 
 export const useGetTujuankapal = (
   filters: {
-    filters?: {
-      cabang_id?: string;
-      nama?: string;
-      keterangan?: string;
-      namacabang?: string;
-      text?: string;
-    };
+    filters?: Partial<typeof filterTujuankapal>;
     page?: number;
     sortBy?: string;
     sortDirection?: string;
     limit?: number;
-    search?: string; // Kata kunci pencarian
+    search?: string;
   } = {},
   signal?: AbortSignal
 ) => {
@@ -31,37 +26,56 @@ export const useGetTujuankapal = (
     ['tujuankapal', filters],
     async () => await getTujuankapalFn(filters, signal),
     {
-      enabled: !signal?.aborted
+      enabled: !signal?.aborted && (filters.page ?? 1) >= 1,
+      staleTime: 0,
+      cacheTime: 0
     }
   );
 };
 
 export const useCreateTujuankapal = () => {
   const { setError } = useFormError();
-  const queryClient = useQueryClient();
   const { alert } = useAlert();
 
   return useMutation(storeTujuankapalFn, {
-    onSuccess: () => {
-      void queryClient.invalidateQueries('tujuankapal');
-      // toast({
-      //   title: 'Proses Berhasil',
-      //   description: 'Data Berhasil Ditambahkan'
-      // });
-    },
     onError: (error: AxiosError) => {
       const errorResponse = error.response?.data as IErrorResponse;
 
       if (errorResponse !== undefined) {
-        // Menangani error berdasarkan path
         const errorFields = errorResponse.message || [];
 
         if (errorResponse.statusCode === 400 && Array.isArray(errorFields)) {
-          // Iterasi error message dan set error di form
           errorFields?.forEach((err: { path: string[]; message: string }) => {
-            const path = err.path[0]; // Ambil path error pertama (misalnya 'nama', 'akuntansi_id')
+            const path = err.path[0];
+            setError(path, err.message);
+          });
+        } else {
+          alert({
+            title: errorResponse.message ?? 'Gagal',
+            variant: 'danger',
+            submitText: 'OK'
+          });
+        }
+      }
+    }
+  });
+};
 
-            setError(path, err.message); // Update error di context
+export const useUpdateTujuankapal = () => {
+  const { setError } = useFormError();
+  const { alert } = useAlert();
+
+  return useMutation(updateTujuankapalFn, {
+    onError: (error: AxiosError) => {
+      const errorResponse = error.response?.data as IErrorResponse;
+
+      if (errorResponse !== undefined) {
+        const errorFields = errorResponse.message || [];
+
+        if (errorResponse.statusCode === 400 && Array.isArray(errorFields)) {
+          errorFields?.forEach((err: { path: string[]; message: string }) => {
+            const path = err.path[0];
+            setError(path, err.message);
           });
         } else {
           alert({
@@ -78,65 +92,22 @@ export const useCreateTujuankapal = () => {
 export const useDeleteTujuankapal = () => {
   const { setError } = useFormError();
   const queryClient = useQueryClient();
+  const { alert } = useAlert();
 
   return useMutation(deleteTujuankapalFn, {
     onSuccess: () => {
       void queryClient.invalidateQueries('tujuankapal');
-      // toast({
-      //   title: 'Proses Berhasil.',
-      //   description: 'Data Berhasil Dihapus.'
-      // });
     },
     onError: (error: AxiosError) => {
       const errorResponse = error.response?.data as IErrorResponse;
 
       if (errorResponse !== undefined) {
-        // Menangani error berdasarkan path
         const errorFields = errorResponse.message || [];
 
         if (errorResponse.statusCode === 400 && Array.isArray(errorFields)) {
-          // Iterasi error message dan set error di form
           errorFields?.forEach((err: { path: string[]; message: string }) => {
-            const path = err.path[0]; // Ambil path error pertama (misalnya 'nama', 'akuntansi_id')
-            console.log('path', path);
-            setError(path, err.message); // Update error di context
-          });
-        } else {
-          alert({
-            title: errorResponse.message ?? 'Gagal',
-            variant: 'danger',
-            submitText: 'OK'
-          });
-        }
-      }
-    }
-  });
-};
-export const useUpdateTujuankapal = () => {
-  const { setError } = useFormError();
-  const queryClient = useQueryClient();
-
-  return useMutation(updateTujuankapalFn, {
-    onSuccess: () => {
-      void queryClient.invalidateQueries('tujuankapal');
-      // toast({
-      //   title: 'Proses Berhasil.',
-      //   description: 'Data Berhasil Diubah.'
-      // });
-    },
-    onError: (error: AxiosError) => {
-      const errorResponse = error.response?.data as IErrorResponse;
-
-      if (errorResponse !== undefined) {
-        // Menangani error berdasarkan path
-        const errorFields = errorResponse.message || [];
-
-        if (errorResponse.statusCode === 400 && Array.isArray(errorFields)) {
-          // Iterasi error message dan set error di form
-          errorFields?.forEach((err: { path: string[]; message: string }) => {
-            const path = err.path[0]; // Ambil path error pertama (misalnya 'nama', 'akuntansi_id')
-
-            setError(path, err.message); // Update error di context
+            const path = err.path[0];
+            setError(path, err.message);
           });
         } else {
           alert({

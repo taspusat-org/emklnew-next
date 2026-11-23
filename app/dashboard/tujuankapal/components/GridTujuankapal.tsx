@@ -4,10 +4,12 @@ import React, {
   useMemo,
   useRef,
   useState,
-  useCallback
+  useLayoutEffect,
+  useCallback,
+  memo
 } from 'react';
-import { debounce } from 'lodash';
 import 'react-data-grid/lib/styles.scss';
+
 import DataGrid, {
   CellClickArgs,
   CellKeyDownArgs,
@@ -19,11 +21,11 @@ import { ImSpinner2 } from 'react-icons/im';
 import ActionButton from '@/components/custom-ui/ActionButton';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import FormTujuanKapal from './FormTujuankapal';
+import FormTujuankapal from './FormTujuankapal';
 import { useQueryClient } from 'react-query';
 import {
   TujuankapalInput,
-  tujuankapalSchema
+  TujuankapalSchema
 } from '@/lib/validations/tujuankapal.validation';
 
 import {
@@ -33,7 +35,6 @@ import {
   useUpdateTujuankapal
 } from '@/lib/server/useTujuankapal';
 
-import { syncAcosFn } from '@/lib/apis/acos.api';
 import { useSelector } from 'react-redux';
 import { RootState } from '@/lib/store/store';
 import {
@@ -59,16 +60,14 @@ import {
 import DraggableColumn from '@/components/custom-ui/DraggableColumns';
 import { highlightText } from '@/components/custom-ui/HighlightText';
 import { useTheme } from 'next-themes';
-import { HiDocument } from 'react-icons/hi2';
-import { setReportData } from '@/lib/store/reportSlice/reportSlice';
 import { useDispatch } from 'react-redux';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useAlert } from '@/lib/store/client/useAlert';
 import { Button } from '@/components/ui/button';
 import Image from 'next/image';
 import IcClose from '@/public/image/x.svg';
-import ReportDesignerMenu from '@/app/reports/menu/page';
-import { ITujuanKapal } from '@/lib/types/tujuankapal.type';
+import { setHeaderData } from '@/lib/store/headerSlice/headerSlice';
+import { ITujuankapal, filterTujuankapal } from '@/lib/types/tujuankapal.type';
 import { number } from 'zod';
 import {
   clearOpenName,
@@ -80,51 +79,96 @@ import {
 } from '@/lib/store/loadingSlice/loadingSlice';
 import { useFormError } from '@/lib/hooks/formErrorContext';
 import FilterOptions from '@/components/custom-ui/FilterOptions';
-import { getTujuankapalFn } from '@/lib/apis/tujuankapal.api';
-import FilterInput from '@/components/custom-ui/FilterInput';
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger
 } from '@/components/ui/tooltip';
-interface Filter {
-  page: number;
-  limit: number;
-  search: string;
-  filters: {
-    nama: string;
-    kode: string;
-    keterangan: string;
-    created_at: string;
-    updated_at: string;
-    statusaktif: string;
-    namacabang: string;
-    modifiedby: string;
-  };
-  sortBy: string;
-  sortDirection: 'asc' | 'desc';
-}
+import { debounce } from 'lodash';
+import FilterInput from '@/components/custom-ui/FilterInput';
 import {
   cancelPreviousRequest,
+  formatCurrency,
   handleContextMenu,
   loadGridConfig,
   resetGridConfig,
   saveGridConfig
 } from '@/lib/utils';
-import { EmptyRowsRenderer } from '@/components/EmptyRows';
-import { LoadRowsRenderer } from '@/components/LoadRows';
+
+import {
+  getTujuankapalFn,
+  exportTujuankapalFn
+} from '@/lib/apis/tujuankapal.api';
+import { useReportProgress } from '@/components/custom-ui/ReportProgressProvider';
+import { loadStimulsoftScript } from '@/lib/loadStimulsoft';
+import { setReportData } from '@/lib/store/reportSlice/reportSlice';
+import {
+  generateTujuankapalExportFn,
+  generateTujuankapalReportFn
+} from '@/lib/apis/report.api';
+import { useReportPdfContext } from '@/hooks/ReportPdfProvider';
+import {
+  HEADER_ROW_HEIGHT,
+  LIMIT,
+  ROW_HEIGHT,
+  NOMOR_CELL_BOX
+} from '@/constants/constant';
+
+interface Filter {
+  page: number;
+  limit: number;
+  search: string;
+
+  filters: typeof filterTujuankapal;
+  sortBy: string;
+  sortDirection: 'asc' | 'desc';
+}
 
 const GridTujuankapal = () => {
   const { theme, resolvedTheme } = useTheme();
   const isDark = theme === 'dark' || resolvedTheme === 'dark';
-  const [isFilteringRows, setIsFilteringRows] = useState(false);
   const [selectedRow, setSelectedRow] = useState<number>(0);
   const [selectedCol, setSelectedCol] = useState<number>(0);
   const [isFirstLoad, setIsFirstLoad] = useState(true);
 
   const [totalPages, setTotalPages] = useState(1);
   const [popOver, setPopOver] = useState<boolean>(false);
+  const [addFormKey, setAddFormKey] = useState<number>(0);
+  const { generateReport } = useReportPdfContext();
+
+  const [isTransitioning, setIsTransitioning] = useState(false);
+  const [isAfterMutation, setIsAfterMutation] = useState(false);
+  const [shouldBulkFetch, setShouldBulkFetch] = useState(true);
+  const scrollPositionRef = useRef<number>(0);
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const prevRowsLengthRef = useRef<number>(0);
+  const prevMinPageRef = useRef<number>(1);
+  const hasAdjustedScrollRef = useRef<boolean>(false);
+  const [isFetching, setIsFetching] = useState(false);
+  const [isScrolling, setIsScrolling] = useState(false);
+  const isScrollingRef = useRef(false);
+  const [scrollDirection, setScrollDirection] = useState<'up' | 'down' | null>(
+    null
+  );
+  const pendingSelectIdxRef = useRef<number>(1);
+  const suppressScrollRef = useRef(false);
+  const isPageTransitionRef = useRef(false);
+  const { start } = useReportProgress();
+  const { generateExport } = useReportPdfContext();
+
+  const lastScrollTopRef = useRef<number>(0);
+  const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const pendingScrollAdjustment = useRef<number>(0);
+  const [visiblePages, setVisiblePages] = useState<number[]>([1, 2, 3, 4, 5]);
+  const minVisiblePage = useMemo(
+    () => Math.min(...visiblePages),
+    [visiblePages]
+  );
+  const [pageDataCache, setPageDataCache] = useState<
+    Map<number, ITujuankapal[]>
+  >(new Map());
+
   const { mutateAsync: createTujuankapal, isLoading: isLoadingCreate } =
     useCreateTujuankapal();
   const { mutateAsync: updateTujuankapal, isLoading: isLoadingUpdate } =
@@ -133,6 +177,7 @@ const GridTujuankapal = () => {
   const [inputValue, setInputValue] = useState<string>('');
   const [hasMore, setHasMore] = useState(true);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const lastDispatchedId = useRef<number | null>(null);
   const { mutateAsync: deleteTujuankapal, isLoading: isLoadingDelete } =
     useDeleteTujuankapal();
   const [columnsOrder, setColumnsOrder] = useState<readonly number[]>([]);
@@ -140,7 +185,7 @@ const GridTujuankapal = () => {
     {}
   );
   const [mode, setMode] = useState<string>('');
-
+  const [isFilteringRows, setIsFilteringRows] = useState(false);
   const [dataGridKey, setDataGridKey] = useState(0);
 
   const contextMenuRef = useRef<HTMLDivElement | null>(null);
@@ -150,28 +195,53 @@ const GridTujuankapal = () => {
   } | null>(null);
   const [fetchedPages, setFetchedPages] = useState<Set<number>>(new Set([1]));
   const queryClient = useQueryClient();
+  const [bulkStartPage, setBulkStartPage] = useState(1);
+
   const [isFetchingManually, setIsFetchingManually] = useState(false);
-  const [rows, setRows] = useState<ITujuanKapal[]>([]);
+  const [rows, setRows] = useState<ITujuankapal[]>([]);
   const [isDataUpdated, setIsDataUpdated] = useState(false);
-  const resizeDebounceTimeout = useRef<NodeJS.Timeout | null>(null); // Timer debounce untuk resize
+  const resizeDebounceTimeout = useRef<NodeJS.Timeout | null>(null);
   const prevPageRef = useRef(currentPage);
   const dispatch = useDispatch();
   const [checkedRows, setCheckedRows] = useState<Set<string>>(new Set());
   const [isAllSelected, setIsAllSelected] = useState(false);
   const { alert } = useAlert();
   const { user, cabang_id } = useSelector((state: RootState) => state.auth);
+  const getLookup = useSelector((state: RootState) => state.lookup.data);
+  const selectedRowRef = useRef<number>(0);
+  useEffect(() => {
+    selectedRowRef.current = selectedRow;
+  }, [selectedRow]);
+  const pendingFocusIdRef = useRef<string | null>(null);
+  const suppressRefetchRef = useRef(false);
+  const activeFilterInputRef = useRef<HTMLElement | null>(null);
+  const [selectedCellKey, setSelectedCellKey] = useState<string>('nama');
+  const streamBufferRef = useRef<Map<number, ITujuankapal[]>>(new Map());
+  const prefetchingPagesRef = useRef<Set<string>>(new Set());
+  const STREAM_BUFFER_SIZE = 5;
+  const WINDOW_SIZE = 5;
+  const jumpToLastRef = useRef(false);
+  const jumpToFirstRef = useRef(false);
+  const interactionModeRef = useRef<'keyboard' | 'pointer'>('pointer');
+  const reanchorFromKeyboardRef = useRef(false);
+  const shiftSelectionForWindow = (deltaRows: number) => {
+    const next = Math.max(0, selectedRowRef.current + deltaRows);
+    selectedRowRef.current = next;
+    reanchorFromKeyboardRef.current = interactionModeRef.current === 'keyboard';
+  };
+
   const forms = useForm<TujuankapalInput>({
-    resolver:
-      mode === 'delete'
-        ? undefined // Tidak pakai resolver saat delete
-        : zodResolver(tujuankapalSchema),
+    resolver: mode === 'delete' ? undefined : zodResolver(TujuankapalSchema),
     mode: 'onSubmit',
     defaultValues: {
+      id: '',
       nama: '',
       kode: '',
+      cabang_id: '',
+      cabang_nama: '',
       keterangan: '',
       statusaktif: '',
-      cabang_id: null
+      info: ''
     }
   });
   const {
@@ -182,317 +252,220 @@ const GridTujuankapal = () => {
   const router = useRouter();
   const [filters, setFilters] = useState<Filter>({
     page: 1,
-    limit: 30,
-    filters: {
-      nama: '',
-      kode: '',
-      keterangan: '',
-      created_at: '',
-      updated_at: '',
-      namacabang: '',
-      statusaktif: '',
-      modifiedby: ''
-    },
+    limit: LIMIT,
     search: '',
+    filters: filterTujuankapal,
     sortBy: 'nama',
     sortDirection: 'asc'
   });
   const gridRef = useRef<DataGridHandle>(null);
   const [prevFilters, setPrevFilters] = useState<Filter>(filters);
+  const effectiveLimit = shouldBulkFetch ? filters.limit * 5 : filters.limit;
   const inputColRefs = useRef<{ [key: string]: HTMLInputElement | null }>({});
   const abortControllerRef = useRef<AbortController | null>(null);
   const { data: allTujuankapal, isLoading: isLoadingTujuankapal } =
     useGetTujuankapal(
       {
         ...filters,
-        page: currentPage
+        page: shouldBulkFetch ? bulkStartPage : currentPage,
+        limit: effectiveLimit
       },
       abortControllerRef.current?.signal
     );
 
-  const debouncedFilterUpdate = useRef(
-    debounce((colKey: string, value: string) => {
-      setFilters((prev) => ({
-        ...prev,
-        filters: { ...prev.filters, [colKey]: value },
-        page: 1,
-        search: ''
-      }));
-      setCheckedRows(new Set());
-      setIsAllSelected(false);
-      setRows([]);
-      setCurrentPage(1);
-      setSelectedRow(0);
-    }, 300) // Bisa dikurangi jadi 250-300ms
-  ).current;
+  const currentMinPage =
+    visiblePages.length > 0 ? Math.min(...visiblePages) : 1;
+  const startRow = (currentMinPage - 1) * filters.limit + 1;
 
-  const handleFilterInputChange = useCallback(
-    (colKey: string, value: string) => {
-      cancelPreviousRequest(abortControllerRef);
-      setInputValue(''); // Reset global search input saat filter kolom diubah
-      debouncedFilterUpdate(colKey, value);
-    },
-    []
-  );
-  const handleClearFilter = useCallback((colKey: string) => {
-    cancelPreviousRequest(abortControllerRef);
-    debouncedFilterUpdate.cancel(); // Cancel pending updates
-    setFilters((prev) => ({
-      ...prev,
-      filters: { ...prev.filters, [colKey]: '' },
-      page: 1
-    }));
-    setCheckedRows(new Set());
-    setIsAllSelected(false);
-    setRows([]);
-    setCurrentPage(1);
-  }, []);
-  const handleColumnFilterChange = (
-    colKey: keyof Filter['filters'],
-    value: string
-  ) => {
-    // 1. cari index di array columns asli
-    const originalIndex = columns.findIndex((col) => col.key === colKey);
-
-    // 2. hitung index tampilan berdasar columnsOrder
-    //    jika belum ada reorder (columnsOrder kosong), fallback ke originalIndex
-    const displayIndex =
-      columnsOrder.length > 0
-        ? columnsOrder.findIndex((idx) => idx === originalIndex)
-        : originalIndex;
-
-    // update filter seperti biasa…
-    setFilters((prev) => ({
-      ...prev,
-      filters: { ...prev.filters, [colKey]: value },
-      search: '',
-      page: 1
-    }));
-    setInputValue('');
-    setCheckedRows(new Set());
-    setIsAllSelected(false);
-    // 3. focus sel di grid pakai displayIndex
-    setTimeout(() => {
-      gridRef?.current?.selectCell({ rowIdx: 0, idx: displayIndex });
-    }, 100);
-
-    // 4. focus input filter
-    setTimeout(() => {
-      const ref = inputColRefs.current[colKey];
-      ref?.focus();
-    }, 200);
-
-    setSelectedRow(0);
+  const resetBufferingCache = () => {
+    setShouldBulkFetch(true);
+    setBulkStartPage(1);
+    setPageDataCache(new Map());
+    setVisiblePages([1, 2, 3, 4, 5]);
+    setIsFetching(false);
+    streamBufferRef.current = new Map();
+    prefetchingPagesRef.current = new Set();
   };
 
-  const { clearError } = useFormError();
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    cancelPreviousRequest(abortControllerRef);
-    const searchValue = e.target.value;
-    setInputValue(searchValue);
-    setCurrentPage(1);
-    setFilters((prev) => ({
-      ...prev,
-      filters: {
-        nama: '',
-        kode: '',
-        keterangan: '',
-        created_at: '',
-        updated_at: '',
-        namacabang: '',
-        statusaktif: '',
-        modifiedby: ''
-      },
-      search: searchValue,
-      page: 1
-    }));
-    setCheckedRows(new Set());
-    setIsAllSelected(false);
-    setTimeout(() => {
-      gridRef?.current?.selectCell({ rowIdx: 0, idx: 1 });
-    }, 100);
-
-    setTimeout(() => {
-      if (inputRef.current) {
-        inputRef.current.focus();
-      }
-    }, 200);
-
-    setSelectedRow(0);
-    setCurrentPage(1);
-    setRows([]);
-  };
-  const handleSort = (column: string) => {
-    const originalIndex = columns.findIndex((col) => col.key === column);
-
-    // 2. hitung index tampilan berdasar columnsOrder
-    //    jika belum ada reorder (columnsOrder kosong), fallback ke originalIndex
-    const displayIndex =
-      columnsOrder.length > 0
-        ? columnsOrder.findIndex((idx) => idx === originalIndex)
-        : originalIndex;
-    const newSortOrder =
-      filters.sortBy === column && filters.sortDirection === 'asc'
-        ? 'desc'
-        : 'asc';
-
-    setFilters((prevFilters) => ({
-      ...prevFilters,
-      sortBy: column,
-      sortDirection: newSortOrder,
-      page: 1
-    }));
-    setTimeout(() => {
-      gridRef?.current?.selectCell({ rowIdx: 0, idx: displayIndex });
-    }, 200);
-    setSelectedRow(0);
-
-    setCurrentPage(1);
-    setFetchedPages(new Set([1]));
-    setRows([]);
-  };
-  useEffect(() => {
-    if (isSubmitSuccessful) {
-      // reset();
-      // Pastikan fokus terjadi setelah repaint
-      requestAnimationFrame(() => setFocus('nama'));
-    }
-  }, [isSubmitSuccessful, setFocus]);
-  const handleRowSelect = (rowId: number) => {
-    setCheckedRows((prev) => {
-      const updated = new Set(prev);
-      if (updated.has(rowId)) {
-        updated.delete(rowId);
-      } else {
-        updated.add(rowId);
-      }
-
-      setIsAllSelected(updated.size === rows.length);
-      return updated;
-    });
-  };
-  const handleSelectAll = () => {
-    if (isAllSelected) {
-      setCheckedRows(new Set());
-    } else {
-      const allIds = rows.map((row) => row.id);
-      setCheckedRows(new Set(allIds));
-    }
-    setIsAllSelected(!isAllSelected);
-  };
-
-  const handleFilterRows = (val: string) => {
-    setIsFilteringRows(true);
-    // setLocalSelectedValue(val);
-    // onChange?.(val);
-    setTimeout(() => {
-      setIsFilteringRows(false);
-    }, 1000);
-  };
-
-  const handleClearInput = () => {
-    setFilters((prev) => ({
-      ...prev,
-      filters: {
-        ...prev.filters
-      },
-      search: '',
-      page: 1
-    }));
-    setInputValue('');
-  };
-  const columns = useMemo((): Column<ITujuanKapal>[] => {
+  const columns = useMemo((): Column<ITujuankapal>[] => {
     return [
       {
         key: 'nomor',
         name: 'NO',
-        width: 50,
+        width: 40,
         headerCellClass: 'column-headers',
-        renderHeaderCell: (column: any) => (
-          <div className="flex h-full flex-col items-center gap-1">
-            <div className="headers-cell h-[50%] items-center justify-center text-center">
-              <p className="text-sm font-normal">No.</p>
+        renderHeaderCell: () => (
+          <div className="flex h-full w-full flex-col gap-1">
+            <div
+              className="headers-cell h-[50%] w-full"
+              onContextMenu={(event) =>
+                setContextMenu(handleContextMenu(event))
+              }
+            >
+              <p className="w-full text-center text-sm font-normal">No.</p>
             </div>
 
-            <div
-              className="flex h-[50%] w-full cursor-pointer items-center justify-center"
-              onClick={() => {
-                setFilters({
-                  ...filters,
-                  search: '',
-                  filters: {
-                    nama: '',
-                    kode: '',
-                    keterangan: '',
-                    namacabang: '',
-                    created_at: '',
-                    updated_at: '',
-                    statusaktif: '',
-                    modifiedby: ''
-                  }
-                }),
-                  setInputValue('');
-                setTimeout(() => {
-                  gridRef?.current?.selectCell({ rowIdx: 0, idx: 1 });
-                }, 0);
-              }}
-            >
-              <FaTimes className="bg-red-500 text-white" />
+            <div className={`h-[50%] w-[calc(100%+2px)] ${NOMOR_CELL_BOX}`}>
+              <div className="flex justify-center">
+                <Checkbox
+                  checked={isAllSelected}
+                  onCheckedChange={() => handleSelectAll()}
+                  id="header-checkbox"
+                />
+              </div>
+              <div
+                className="flex cursor-pointer items-center justify-center"
+                onClick={() => {
+                  setFilters({
+                    ...filters,
+                    search: '',
+                    filters: {
+                      nama: '',
+                      kode: '',
+                      cabang_id: '',
+                      cabang_nama: '',
+                      keterangan: '',
+                      statusaktif: '',
+                      modifiedby: '',
+                      created_at: '',
+                      updated_at: ''
+                    }
+                  }),
+                    setInputValue('');
+                  setTimeout(() => {
+                    gridRef?.current?.selectCell({ rowIdx: 0, idx: 1 });
+                  }, 0);
+                }}
+              >
+                <FaTimes className="bg-red-500 text-white" />
+              </div>
             </div>
           </div>
         ),
         renderCell: (props: any) => {
-          const rowIndex = rows.findIndex((row) => row.id === props.row.id);
+          const rowId = props.row.id;
+          const localIndex = rows.findIndex((row) => row.id === rowId);
+          const absoluteNumber =
+            localIndex === -1
+              ? '—'
+              : (minVisiblePage - 1) * filters.limit + localIndex + 1;
           return (
-            <div className="flex h-full w-full cursor-pointer items-center justify-center text-sm">
-              {rowIndex + 1}
+            <div
+              className={`-ml-[5px] h-full w-[calc(100%+9px)] cursor-pointer ${NOMOR_CELL_BOX}`}
+            >
+              <div className="flex justify-center">
+                <Checkbox
+                  checked={checkedRows.has(rowId)}
+                  onCheckedChange={() => handleRowSelect(rowId)}
+                  id={`row-checkbox-${rowId}`}
+                />
+              </div>
+              <div className="flex justify-center text-sm">
+                {absoluteNumber}
+              </div>
+            </div>
+          );
+        }
+      },
+
+      {
+        key: 'statusaktif',
+        name: 'Status Aktif',
+        resizable: true,
+        draggable: true,
+        width: 70,
+        headerCellClass: 'column-headers',
+        renderHeaderCell: (column: any) => (
+          <div
+            title="STATUS AKTIF"
+            className="flex h-full cursor-pointer flex-col items-center gap-1"
+          >
+            <div
+              className="headers-cell h-[50%] px-8"
+              onClick={() => handleSort('statusaktif')}
+              onContextMenu={(event) =>
+                setContextMenu(handleContextMenu(event))
+              }
+            >
+              <p
+                className={`text-sm ${
+                  filters.sortBy === 'statusaktif' ? 'font-bold' : 'font-normal'
+                }`}
+              >
+                Status Aktif
+              </p>
+              <div className="ml-2">
+                {filters.sortBy === 'statusaktif' &&
+                filters.sortDirection === 'asc' ? (
+                  <FaSortUp className="font-bold" />
+                ) : filters.sortBy === 'statusaktif' &&
+                  filters.sortDirection === 'desc' ? (
+                  <FaSortDown className="font-bold" />
+                ) : (
+                  <FaSort className="text-zinc-400" />
+                )}
+              </div>
+            </div>
+            <div className="relative h-[50%] w-full px-1">
+              <FilterOptions
+                columnKey={column.column.key}
+                endpoint="parameter"
+                value="id"
+                label="text"
+                filterBy={{ grp: 'STATUS AKTIF', subgrp: 'STATUS AKTIF' }}
+                onChange={(value) =>
+                  handleFilterInputChange('statusaktif', value)
+                }
+              />
+            </div>
+          </div>
+        ),
+        renderCell: (props: any) => {
+          const memoData = props.row.memo ? JSON.parse(props.row.memo) : null;
+          if (memoData) {
+            return (
+              <div
+                title={memoData.MEMO}
+                className="flex h-full w-full items-center justify-center py-1"
+              >
+                <div
+                  className="m-0 flex h-full w-fit cursor-pointer items-center justify-center p-0"
+                  style={{
+                    backgroundColor: memoData.WARNA,
+                    color: memoData.WARNATULISAN,
+                    padding: '2px 6px',
+                    borderRadius: '2px',
+                    textAlign: 'left',
+                    fontWeight: '600'
+                  }}
+                >
+                  <p style={{ fontSize: '13px', color: memoData.WARNATULISAN }}>
+                    {memoData.SINGKATAN}
+                  </p>
+                </div>
+              </div>
+            );
+          }
+
+          return (
+            <div title="N/A" className="text-xs text-gray-500">
+              N/A
             </div>
           );
         }
       },
       {
-        key: 'select',
-        name: '',
-        width: 50,
-        headerCellClass: 'column-headers',
-        renderHeaderCell: (column: any) => (
-          <div className="flex h-full cursor-pointer flex-col items-center gap-1">
-            <div
-              className="headers-cell h-[50%]"
-              onContextMenu={(event) =>
-                setContextMenu(handleContextMenu(event))
-              }
-            ></div>
-            <div className="flex h-[50%] w-full items-center justify-center">
-              <Checkbox
-                checked={isAllSelected}
-                onCheckedChange={() => handleSelectAll()}
-                id="header-checkbox"
-                className="mb-2"
-              />
-            </div>
-          </div>
-        ),
-        renderCell: ({ row }: { row: ITujuanKapal }) => (
-          <div className="flex h-full items-center justify-center">
-            <Checkbox
-              checked={checkedRows.has(row.id)}
-              onCheckedChange={() => handleRowSelect(row.id)}
-              id={`row-checkbox-${row.id}`}
-            />
-          </div>
-        )
-      },
-
-      {
         key: 'nama',
         name: 'Nama',
         resizable: true,
         draggable: true,
-        width: 300,
+        width: 200,
         headerCellClass: 'column-headers',
         renderHeaderCell: (column: any) => (
-          <div className="flex h-full cursor-pointer flex-col items-center gap-1">
+          <div
+            title="NAMA"
+            className="flex h-full cursor-pointer flex-col items-center gap-1"
+          >
             <div
               className="headers-cell h-[50%] px-8"
               onClick={() => handleSort('nama')}
@@ -536,33 +509,27 @@ const GridTujuankapal = () => {
           const columnFilter = filters.filters.nama || '';
           const cellValue = props.row.nama || '';
           return (
-            <TooltipProvider delayDuration={0}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="m-0 flex h-full cursor-pointer items-center p-0 text-sm">
-                    {highlightText(cellValue, filters.search, columnFilter)}
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent
-                  side="right"
-                  className="rounded-none border border-zinc-400 bg-white text-sm text-zinc-900"
-                >
-                  <p>{cellValue}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <div
+              title={cellValue}
+              className="m-0 flex h-full cursor-pointer items-center p-0 text-sm"
+            >
+              {highlightText(cellValue, filters.search, columnFilter)}
+            </div>
           );
         }
       },
       {
         key: 'kode',
-        name: 'kode',
+        name: 'Kode',
         resizable: true,
         draggable: true,
-        width: 70,
+        width: 200,
         headerCellClass: 'column-headers',
         renderHeaderCell: (column: any) => (
-          <div className="flex h-full cursor-pointer flex-col items-center gap-1">
+          <div
+            title="KODE"
+            className="flex h-full cursor-pointer flex-col items-center gap-1"
+          >
             <div
               className="headers-cell h-[50%] px-8"
               onClick={() => handleSort('kode')}
@@ -575,7 +542,7 @@ const GridTujuankapal = () => {
                   filters.sortBy === 'kode' ? 'font-bold' : 'font-normal'
                 }`}
               >
-                kode
+                Kode
               </p>
               <div className="ml-2">
                 {filters.sortBy === 'kode' &&
@@ -606,52 +573,46 @@ const GridTujuankapal = () => {
           const columnFilter = filters.filters.kode || '';
           const cellValue = props.row.kode || '';
           return (
-            <TooltipProvider delayDuration={0}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="m-0 flex h-full cursor-pointer items-center p-0 text-sm">
-                    {highlightText(cellValue, filters.search, columnFilter)}
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent
-                  side="right"
-                  className="rounded-none border border-zinc-400 bg-white text-sm text-zinc-900"
-                >
-                  <p>{cellValue}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <div
+              title={cellValue}
+              className="m-0 flex h-full cursor-pointer items-center p-0 text-sm"
+            >
+              {highlightText(cellValue, filters.search, columnFilter)}
+            </div>
           );
         }
       },
       {
-        key: 'cabang',
-        name: 'Nama Cabang',
+        key: 'cabang_nama',
+        name: 'CABANG',
         resizable: true,
         draggable: true,
-        width: 200,
+        width: 80,
         headerCellClass: 'column-headers',
         renderHeaderCell: (column: any) => (
-          <div className="flex h-full cursor-pointer flex-col items-center gap-1">
+          <div
+            title="CABANG"
+            className="flex h-full cursor-pointer flex-col items-center gap-1"
+          >
             <div
               className="headers-cell h-[50%] px-8"
-              onClick={() => handleSort('namacabang')}
+              onClick={() => handleSort('cabang_nama')}
               onContextMenu={(event) =>
                 setContextMenu(handleContextMenu(event))
               }
             >
               <p
                 className={`text-sm ${
-                  filters.sortBy === 'namacabang' ? 'font-bold' : 'font-normal'
+                  filters.sortBy === 'cabang_nama' ? 'font-bold' : 'font-normal'
                 }`}
               >
-                Nama Cabang
+                CABANG
               </p>
               <div className="ml-2">
-                {filters.sortBy === 'namacabang' &&
+                {filters.sortBy === 'cabang_nama' &&
                 filters.sortDirection === 'asc' ? (
                   <FaSortUp className="font-bold" />
-                ) : filters.sortBy === 'namacabang' &&
+                ) : filters.sortBy === 'cabang_nama' &&
                   filters.sortDirection === 'desc' ? (
                   <FaSortDown className="font-bold" />
                 ) : (
@@ -661,38 +622,29 @@ const GridTujuankapal = () => {
             </div>
             <div className="relative h-[50%] w-full px-1">
               <FilterInput
-                colKey="namacabang"
-                value={filters.filters.namacabang || ''}
+                colKey="cabang_nama"
+                value={filters.filters.cabang_nama || ''}
                 onChange={(value) =>
-                  handleFilterInputChange('namacabang', value)
+                  handleFilterInputChange('cabang_nama', value)
                 }
-                onClear={() => handleClearFilter('namacabang')}
+                onClear={() => handleClearFilter('cabang_nama')}
                 inputRef={(el) => {
-                  inputColRefs.current['namacabang'] = el;
+                  inputColRefs.current['cabang_nama'] = el;
                 }}
               />
             </div>
           </div>
         ),
         renderCell: (props: any) => {
-          const columnFilter = filters.filters.namacabang || '';
-          const cellValue = props.row.namacabang || '';
+          const columnFilter = filters.filters.cabang_nama || '';
+          const cellValue = props.row.cabang_nama || '';
           return (
-            <TooltipProvider delayDuration={0}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="m-0 flex h-full cursor-pointer items-center p-0 text-sm">
-                    {highlightText(cellValue, filters.search, columnFilter)}
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent
-                  side="right"
-                  className="rounded-none border border-zinc-400 bg-white text-sm text-zinc-900"
-                >
-                  <p>{cellValue}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <div
+              title={cellValue}
+              className="m-0 flex h-full cursor-pointer items-center p-0 text-sm"
+            >
+              {highlightText(cellValue, filters.search, columnFilter)}
+            </div>
           );
         }
       },
@@ -701,12 +653,15 @@ const GridTujuankapal = () => {
         name: 'Keterangan',
         resizable: true,
         draggable: true,
-        width: 200,
+        width: 300,
         headerCellClass: 'column-headers',
         renderHeaderCell: (column: any) => (
-          <div className="flex h-full cursor-pointer flex-col items-center gap-1">
+          <div
+            title="KETERANGAN"
+            className="flex h-full cursor-pointer flex-col items-center gap-1"
+          >
             <div
-              className="headers-cell h-[50%]"
+              className="headers-cell h-[50%] px-8"
               onClick={() => handleSort('keterangan')}
               onContextMenu={(event) =>
                 setContextMenu(handleContextMenu(event))
@@ -731,7 +686,6 @@ const GridTujuankapal = () => {
                 )}
               </div>
             </div>
-
             <div className="relative h-[50%] w-full px-1">
               <FilterInput
                 colKey="keterangan"
@@ -751,111 +705,16 @@ const GridTujuankapal = () => {
           const columnFilter = filters.filters.keterangan || '';
           const cellValue = props.row.keterangan || '';
           return (
-            <TooltipProvider delayDuration={0}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="m-0 flex h-full cursor-pointer items-center p-0 text-sm">
-                    {highlightText(cellValue, filters.search, columnFilter)}
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent
-                  side="right"
-                  className="rounded-none border border-zinc-400 bg-white text-sm text-zinc-900"
-                >
-                  <p>{cellValue}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <div
+              title={cellValue}
+              className="m-0 flex h-full cursor-pointer items-center p-0 text-sm"
+            >
+              {highlightText(cellValue, filters.search, columnFilter)}
+            </div>
           );
         }
       },
-      {
-        key: 'statusaktif',
-        name: 'STATUS AKTIF',
-        resizable: true,
-        draggable: true,
-        width: 150,
-        headerCellClass: 'column-headers',
-        renderHeaderCell: (column: any) => (
-          <div className="flex h-full cursor-pointer flex-col items-center gap-1">
-            <div
-              className="headers-cell h-[50%]"
-              onClick={() => handleSort('statusaktif')}
-              onContextMenu={(event) =>
-                setContextMenu(handleContextMenu(event))
-              }
-            >
-              <p
-                className={`text-sm ${
-                  filters.sortBy === 'statusaktif' ? 'font-bold' : 'font-normal'
-                }`}
-              >
-                Status Aktif
-              </p>
-              <div className="ml-2">
-                {filters.sortBy === 'statusaktif' &&
-                filters.sortDirection === 'asc' ? (
-                  <FaSortUp className="font-bold" />
-                ) : filters.sortBy === 'statusaktif' &&
-                  filters.sortDirection === 'desc' ? (
-                  <FaSortDown className="font-bold" />
-                ) : (
-                  <FaSort className="text-zinc-400" />
-                )}
-              </div>
-            </div>
-            <div className="relative h-[50%] w-full px-1">
-              <FilterOptions
-                columnKey={column.column.key}
-                endpoint="parameter"
-                value="id"
-                label="text"
-                filterBy={{ grp: 'STATUS AKTIF', subgrp: 'STATUS AKTIF' }}
-                selectedValue={filters.filters.statusaktif}
-                onChange={(value) =>
-                  handleColumnFilterChange('statusaktif', value)
-                } // Menangani perubahan nilai di parent
-              />
-            </div>
-          </div>
-        ),
-        renderCell: (props: any) => {
-          const memoData = props.row.memo ? JSON.parse(props.row.memo) : null;
-          if (memoData) {
-            return (
-              <TooltipProvider delayDuration={0}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <div className="flex h-full w-full items-center justify-center py-1">
-                      <div
-                        className="m-0 flex h-full w-fit cursor-pointer items-center justify-center p-0"
-                        style={{
-                          backgroundColor: memoData.WARNA,
-                          color: memoData.WARNATULISAN,
-                          padding: '2px 6px',
-                          borderRadius: '2px',
-                          textAlign: 'left',
-                          fontWeight: '600'
-                        }}
-                      >
-                        <p style={{ fontSize: '13px' }}>{memoData.SINGKATAN}</p>
-                      </div>
-                    </div>
-                  </TooltipTrigger>
-                  <TooltipContent
-                    side="right"
-                    className="rounded-none border border-zinc-400 bg-white text-sm text-zinc-900"
-                  >
-                    <p>{memoData.MEMO}</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            );
-          }
 
-          return <div className="text-xs text-gray-500">N/A</div>; // Tampilkan 'N/A' jika memo tidak tersedia
-        }
-      },
       {
         key: 'modifiedby',
         name: 'Modified By',
@@ -864,9 +723,12 @@ const GridTujuankapal = () => {
 
         headerCellClass: 'column-headers',
 
-        width: 150,
+        width: 100,
         renderHeaderCell: (column: any) => (
-          <div className="flex h-full cursor-pointer flex-col items-center gap-1">
+          <div
+            title="MODIFIED BY"
+            className="flex h-full cursor-pointer flex-col items-center gap-1"
+          >
             <div
               className="headers-cell h-[50%]"
               onClick={() => handleSort('modifiedby')}
@@ -913,21 +775,12 @@ const GridTujuankapal = () => {
           const columnFilter = filters.filters.modifiedby || '';
           const cellValue = props.row.modifiedby || '';
           return (
-            <TooltipProvider delayDuration={0}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="m-0 flex h-full cursor-pointer items-center p-0 text-sm">
-                    {highlightText(cellValue, filters.search, columnFilter)}
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent
-                  side="right"
-                  className="rounded-none border border-zinc-400 bg-white text-sm text-zinc-900"
-                >
-                  <p>{cellValue}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <div
+              title={cellValue}
+              className="m-0 flex h-full cursor-pointer items-center p-0 text-sm"
+            >
+              {highlightText(cellValue, filters.search, columnFilter)}
+            </div>
           );
         }
       },
@@ -937,9 +790,12 @@ const GridTujuankapal = () => {
         resizable: true,
         draggable: true,
         headerCellClass: 'column-headers',
-        width: 200,
+        width: 170,
         renderHeaderCell: (column: any) => (
-          <div className="flex h-full cursor-pointer flex-col items-center gap-1">
+          <div
+            title="CREATED AT"
+            className="flex h-full cursor-pointer flex-col items-center gap-1"
+          >
             <div
               className="headers-cell h-[50%]"
               onClick={() => handleSort('created_at')}
@@ -986,25 +842,15 @@ const GridTujuankapal = () => {
           const columnFilter = filters.filters.created_at || '';
           const cellValue = props.row.created_at || '';
           return (
-            <TooltipProvider delayDuration={0}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="m-0 flex h-full cursor-pointer items-center p-0 text-sm">
-                    {highlightText(cellValue, filters.search, columnFilter)}
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent
-                  side="right"
-                  className="rounded-none border border-zinc-400 bg-white text-sm text-zinc-900"
-                >
-                  <p>{cellValue}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <div
+              title={cellValue}
+              className="m-0 flex h-full cursor-pointer items-center p-0 text-sm"
+            >
+              {highlightText(cellValue, filters.search, columnFilter)}
+            </div>
           );
         }
       },
-
       {
         key: 'updated_at',
         name: 'Updated At',
@@ -1013,9 +859,12 @@ const GridTujuankapal = () => {
 
         headerCellClass: 'column-headers',
 
-        width: 150,
+        width: 170,
         renderHeaderCell: (column: any) => (
-          <div className="flex h-full cursor-pointer flex-col items-center gap-1">
+          <div
+            title="UPDATED AT"
+            className="flex h-full cursor-pointer flex-col items-center gap-1"
+          >
             <div
               className="headers-cell h-[50%]"
               onClick={() => handleSort('updated_at')}
@@ -1062,45 +911,213 @@ const GridTujuankapal = () => {
           const columnFilter = filters.filters.updated_at || '';
           const cellValue = props.row.updated_at || '';
           return (
-            <TooltipProvider delayDuration={0}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="m-0 flex h-full cursor-pointer items-center p-0 text-sm">
-                    {highlightText(cellValue, filters.search, columnFilter)}
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent
-                  side="right"
-                  className="rounded-none border border-zinc-400 bg-white text-sm text-zinc-900"
-                >
-                  <p>{cellValue}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <div
+              title={cellValue}
+              className="m-0 flex h-full cursor-pointer items-center p-0 text-sm"
+            >
+              {highlightText(cellValue, filters.search, columnFilter)}
+            </div>
           );
         }
       }
     ];
-  }, [filters, rows, checkedRows]);
+  }, [filters, checkedRows, isAllSelected, rows, minVisiblePage]);
+
+  const debouncedFilterUpdate = useRef(
+    debounce((updates: Record<string, string>) => {
+      setFilters((prev) => ({
+        ...prev,
+        filters: { ...prev.filters, ...updates },
+        page: 1
+      }));
+      setCheckedRows(new Set());
+      setIsAllSelected(false);
+      setRows([]);
+      setCurrentPage(1);
+      setSelectedRow(0);
+      resetBufferingCache();
+      // gridRef?.current?.scrollToCell?.({ rowIdx: 0, idx: 0 });
+    }, 300)
+  ).current;
+
+  const pendingUpdates = useRef<Record<string, string>>({});
+
+  const handleFilterInputChange = useCallback(
+    (colKey: string, value: string) => {
+      cancelPreviousRequest(abortControllerRef);
+      pendingUpdates.current[colKey] = value;
+
+      // ✅ Hanya track jika activeElement memang filter input kolom ini
+      const active = document.activeElement as HTMLElement | null;
+      if (
+        active &&
+        (active.classList.contains('filter-input') ||
+          active.tagName === 'INPUT') &&
+        active !== inputRef.current // bukan global search
+      ) {
+        activeFilterInputRef.current = active;
+      }
+
+      const originalIndex = columns.findIndex((col) => col.key === colKey);
+      const displayIndex =
+        columnsOrder.length > 0
+          ? columnsOrder.findIndex((idx) => idx === originalIndex)
+          : originalIndex;
+      pendingSelectIdxRef.current = displayIndex >= 0 ? displayIndex : 1;
+
+      debouncedFilterUpdate(pendingUpdates.current);
+    },
+    [columns, columnsOrder]
+  );
+  const handleClearFilter = useCallback((colKey: string) => {
+    cancelPreviousRequest(abortControllerRef);
+    debouncedFilterUpdate.cancel();
+    pendingUpdates.current[colKey] = '';
+
+    const originalIndex = columns.findIndex((col) => col.key === colKey);
+    const displayIndex =
+      columnsOrder.length > 0
+        ? columnsOrder.findIndex((idx) => idx === originalIndex)
+        : originalIndex;
+    pendingSelectIdxRef.current = displayIndex >= 0 ? displayIndex : 1;
+
+    setFilters((prev) => ({
+      ...prev,
+      filters: { ...prev.filters, [colKey]: '' },
+      page: 1
+    }));
+    setCheckedRows(new Set());
+    setIsAllSelected(false);
+    setRows([]);
+    setCurrentPage(1);
+    resetBufferingCache();
+  }, []);
+
+  const { clearError } = useFormError();
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    cancelPreviousRequest(abortControllerRef);
+    const searchValue = e.target.value;
+
+    activeFilterInputRef.current = inputRef.current;
+    pendingSelectIdxRef.current = 1;
+
+    setInputValue(searchValue);
+    setCurrentPage(1);
+    setFilters((prev) => ({
+      ...prev,
+      ...filters,
+      search: searchValue,
+      page: 1
+    }));
+
+    setCheckedRows(new Set());
+    setIsAllSelected(false);
+    resetBufferingCache();
+    setSelectedRow(0);
+    setCurrentPage(1);
+    setRows([]);
+  };
+
+  const handleSort = (column: string) => {
+    const originalIndex = columns.findIndex((col) => col.key === column);
+
+    const displayIndex =
+      columnsOrder.length > 0
+        ? columnsOrder.findIndex((idx) => idx === originalIndex)
+        : originalIndex;
+
+    activeFilterInputRef.current = null;
+    pendingSelectIdxRef.current = displayIndex >= 0 ? displayIndex : 1;
+
+    const newSortOrder =
+      filters.sortBy === column && filters.sortDirection === 'asc'
+        ? 'desc'
+        : 'asc';
+
+    setFilters((prevFilters) => ({
+      ...prevFilters,
+      sortBy: column,
+      sortDirection: newSortOrder,
+      page: 1
+    }));
+    resetBufferingCache();
+    setTimeout(() => {
+      gridRef?.current?.scrollToCell({ rowIdx: 0, idx: displayIndex });
+    }, 200);
+    setSelectedRow(0);
+    setCurrentPage(1);
+    setFetchedPages(new Set([1]));
+    setRows([]);
+  };
+
+  const handleRowSelect = (rowId: number) => {
+    setCheckedRows((prev) => {
+      const updated = new Set(prev);
+      if (updated.has(rowId)) {
+        updated.delete(rowId);
+      } else {
+        updated.add(rowId);
+      }
+
+      setIsAllSelected(updated.size === rows.length);
+      return updated;
+    });
+  };
+  const handleSelectAll = () => {
+    if (isAllSelected) {
+      setCheckedRows(new Set());
+    } else {
+      const allIds = rows.map((row) => row.id);
+      setCheckedRows(new Set(allIds));
+    }
+    setIsAllSelected(!isAllSelected);
+  };
+
+  const handleFilterRows = (val: string) => {
+    setIsFilteringRows(true);
+    // setLocalSelectedValue(val);
+    // onChange?.(val);
+    setTimeout(() => {
+      setIsFilteringRows(false);
+    }, 1000);
+  };
+
+  const handleClearInput = () => {
+    cancelPreviousRequest(abortControllerRef);
+    debouncedFilterUpdate.cancel();
+    activeFilterInputRef.current = null;
+    pendingSelectIdxRef.current = 1;
+    setFilters((prev) => ({
+      ...prev,
+      filters: {
+        ...prev.filters
+      },
+      search: '',
+      page: 1
+    }));
+    setCheckedRows(new Set());
+    setIsAllSelected(false);
+    setRows([]);
+    setCurrentPage(1);
+    resetBufferingCache();
+    gridRef?.current?.scrollToCell?.({ rowIdx: 0, idx: 0 });
+    setInputValue('');
+  };
 
   const onColumnResize = (index: number, width: number) => {
-    // 1) Dapatkan key kolom yang di-resize
     const columnKey = columns[columnsOrder[index]].key;
 
-    // 2) Update state width seketika (biar kolom langsung responsif)
     const newWidthMap = { ...columnsWidth, [columnKey]: width };
     setColumnsWidth(newWidthMap);
 
-    // 3) Bersihkan timeout sebelumnya agar tidak menumpuk
     if (resizeDebounceTimeout.current) {
       clearTimeout(resizeDebounceTimeout.current);
     }
 
-    // 4) Set ulang timer: hanya ketika 300ms sejak resize terakhir berlalu,
-    //    saveGridConfig akan dipanggil
     resizeDebounceTimeout.current = setTimeout(() => {
       saveGridConfig(
-        user.id,
+        String(user?.id),
         'GridTujuankapal',
         [...columnsOrder],
         newWidthMap
@@ -1119,498 +1136,470 @@ const GridTujuankapal = () => {
       const newOrder = [...prevOrder];
       newOrder.splice(targetIndex, 0, newOrder.splice(sourceIndex, 1)[0]);
 
-      saveGridConfig(user.id, 'GridTujuankapal', [...newOrder], columnsWidth);
+      saveGridConfig(
+        String(user?.id),
+        'GridTujuankapal',
+        [...newOrder],
+        columnsWidth
+      );
       return newOrder;
     });
   };
-  function isAtTop({ currentTarget }: React.UIEvent<HTMLDivElement>): boolean {
-    return currentTarget.scrollTop <= 10;
-  }
-  function isAtBottom(event: React.UIEvent<HTMLDivElement>): boolean {
-    const { currentTarget } = event;
-    if (!currentTarget) return false;
 
-    return (
-      currentTarget.scrollTop + currentTarget.clientHeight >=
-      currentTarget.scrollHeight - 2
-    );
-  }
   async function handleScroll(event: React.UIEvent<HTMLDivElement>) {
-    if (isLoadingTujuankapal || !hasMore || rows.length === 0) return;
+    if (
+      isLoadingTujuankapal ||
+      rows.length === 0 ||
+      isTransitioning ||
+      isFetching
+    )
+      return;
 
-    const findUnfetchedPage = (pageOffset: number) => {
-      let page = currentPage + pageOffset;
-      while (page > 0 && fetchedPages.has(page)) {
-        page += pageOffset;
-      }
-      return page > 0 ? page : null;
-    };
+    const { currentTarget } = event;
+    const scrollTop = currentTarget.scrollTop;
+    const scrollHeight = currentTarget.scrollHeight;
+    const clientHeight = currentTarget.clientHeight;
 
-    if (isAtBottom(event)) {
-      const nextPage = findUnfetchedPage(1);
+    const hasScrolled = Math.abs(scrollTop - lastScrollTopRef.current) > 5;
+    if (!hasScrolled) {
+      return;
+    }
 
-      if (nextPage && nextPage <= totalPages && !fetchedPages.has(nextPage)) {
-        setCurrentPage(nextPage);
-        setIsAllSelected(false);
+    lastScrollTopRef.current = scrollTop;
+    isScrollingRef.current = true;
+    setIsScrolling(true);
+
+    if (scrollTimeoutRef.current) {
+      clearTimeout(scrollTimeoutRef.current);
+    }
+
+    scrollTimeoutRef.current = setTimeout(() => {
+      isScrollingRef.current = false;
+      setIsScrolling(false);
+    }, 150);
+
+    scrollPositionRef.current = scrollTop;
+    scrollContainerRef.current = currentTarget;
+
+    const rowHeight = 27;
+    const firstVisibleRow = Math.floor(scrollTop / rowHeight);
+    const lastVisibleRow = Math.floor((scrollTop + clientHeight) / rowHeight);
+
+    const THRESHOLD_ROWS = 50;
+
+    // SCROLL KE BAWAH
+    const rowsRemainingBelow = rows.length - lastVisibleRow;
+
+    if (rowsRemainingBelow <= THRESHOLD_ROWS) {
+      const maxPage = Math.max(...visiblePages);
+      const nextPage = maxPage + 1;
+
+      if (nextPage <= totalPages && !isFetching && isScrollingRef.current) {
+        if (streamBufferRef.current.has(nextPage)) {
+          setIsFetching(true);
+          setIsTransitioning(true);
+          hasAdjustedScrollRef.current = false;
+
+          const bufferedData = streamBufferRef.current.get(nextPage)!;
+
+          setPageDataCache((prev) => {
+            const updated = new Map(prev);
+            updated.set(nextPage, bufferedData);
+            return updated;
+          });
+
+          streamBufferRef.current = new Map(streamBufferRef.current);
+          streamBufferRef.current.delete(nextPage);
+
+          isPageTransitionRef.current = true;
+          pendingScrollAdjustment.current = -(filters.limit * ROW_HEIGHT);
+          shiftSelectionForWindow(-filters.limit);
+          setVisiblePages((prevVisible) => {
+            const removedPage = prevVisible[0];
+            const newPages = [...prevVisible.slice(1), nextPage];
+
+            setPageDataCache((prev) => {
+              const updated = new Map(prev);
+              updated.delete(removedPage);
+              return updated;
+            });
+
+            return newPages;
+          });
+
+          setTimeout(() => {
+            setIsTransitioning(false);
+            setIsFetching(false);
+          }, 50);
+
+          const pagesToPrefetch = Array.from(
+            { length: STREAM_BUFFER_SIZE },
+            (_, i) => nextPage + 1 + i
+          );
+          prefetchPages(pagesToPrefetch);
+        } else if (!pageDataCache.has(nextPage)) {
+          setIsFetching(true);
+          setIsTransitioning(true);
+          hasAdjustedScrollRef.current = false;
+          setCurrentPage(nextPage);
+        }
       }
     }
 
-    if (isAtTop(event)) {
-      const prevPage = findUnfetchedPage(-1);
-      if (prevPage && !fetchedPages.has(prevPage)) {
-        setCurrentPage(prevPage);
+    // SCROLL KE ATAS
+    if (firstVisibleRow <= THRESHOLD_ROWS) {
+      const minPage = Math.min(...visiblePages);
+      const prevPage = minPage - 1;
+
+      if (prevPage >= 1 && !isFetching && isScrollingRef.current) {
+        if (streamBufferRef.current.has(prevPage)) {
+          setIsFetching(true);
+          setIsTransitioning(true);
+          hasAdjustedScrollRef.current = false;
+
+          const bufferedData = streamBufferRef.current.get(prevPage)!;
+
+          setPageDataCache((prev) => {
+            const updated = new Map(prev);
+            updated.set(prevPage, bufferedData);
+            return updated;
+          });
+
+          streamBufferRef.current = new Map(streamBufferRef.current);
+          streamBufferRef.current.delete(prevPage);
+
+          isPageTransitionRef.current = true;
+          pendingScrollAdjustment.current = filters.limit * ROW_HEIGHT;
+          shiftSelectionForWindow(filters.limit);
+          setVisiblePages((prevVisible) => {
+            const removedPage = prevVisible[4];
+            const newPages = [prevPage, ...prevVisible.slice(0, 4)];
+
+            setPageDataCache((prev) => {
+              const updated = new Map(prev);
+              updated.delete(removedPage);
+              return updated;
+            });
+
+            return newPages;
+          });
+
+          setTimeout(() => {
+            setIsTransitioning(false);
+            setIsFetching(false);
+          }, 50);
+
+          const pagesToPrefetch = Array.from(
+            { length: STREAM_BUFFER_SIZE },
+            (_, i) => prevPage - 1 - i
+          ).filter((p) => p >= 1);
+          prefetchPages(pagesToPrefetch);
+        } else if (!pageDataCache.has(prevPage)) {
+          setIsFetching(true);
+          setIsTransitioning(true);
+          hasAdjustedScrollRef.current = false;
+          setCurrentPage(0);
+          setTimeout(() => setCurrentPage(prevPage), 0);
+        }
       }
     }
   }
 
-  function handleCellClick(args: { row: ITujuanKapal }) {
+  function handleCellClick(args: { row: ITujuankapal }) {
     const clickedRow = args.row;
     const rowIndex = rows.findIndex((r) => r.id === clickedRow.id);
     if (rowIndex !== -1) {
       setSelectedRow(rowIndex);
     }
   }
-  async function handleKeyDown(
-    args: CellKeyDownArgs<ITujuanKapal>,
-    event: React.KeyboardEvent
-  ) {
-    const visibleRowCount = 10;
-    const firstDataRowIndex = 0;
-    const selectedRowId = rows[selectedRow]?.id;
-
-    if (event.key === 'ArrowDown') {
-      setSelectedRow((prev) => {
-        if (prev === null) return firstDataRowIndex;
-        const nextRow = Math.min(prev + 1, rows.length - 1);
-        return nextRow;
-      });
-    } else if (event.key === 'ArrowUp') {
-      setSelectedRow((prev) => {
-        if (prev === null) return firstDataRowIndex;
-        const newRow = Math.max(prev - 1, firstDataRowIndex);
-        return newRow;
-      });
-    } else if (event.key === 'ArrowRight') {
-      setSelectedCol((prev) => {
-        return Math.min(prev + 1, columns.length - 1);
-      });
-    } else if (event.key === 'ArrowLeft') {
-      setSelectedCol((prev) => {
-        return Math.max(prev - 1, 0);
-      });
-    } else if (event.key === 'PageDown') {
-      setSelectedRow((prev) => {
-        if (prev === null) return firstDataRowIndex;
-
-        const nextRow = Math.min(prev + visibleRowCount - 2, rows.length - 1);
-        return nextRow;
-      });
-    } else if (event.key === 'PageUp') {
-      setSelectedRow((prev) => {
-        if (prev === null) return firstDataRowIndex;
-
-        const newRow = Math.max(prev - visibleRowCount + 2, firstDataRowIndex);
-        return newRow;
-      });
-    } else if (event.key === ' ') {
-      // Handle spacebar keydown to toggle row selection
-      if (selectedRowId !== undefined) {
-        handleRowSelect(selectedRowId); // Toggling the selection of the row
-      }
+  const orderedColumns = useMemo(() => {
+    if (Array.isArray(columnsOrder) && columnsOrder.length > 0) {
+      return columnsOrder
+        .map((orderIndex) => columns[orderIndex])
+        .filter((col) => col !== undefined);
     }
-  }
-  const onSuccess = async (
-    indexOnPage: any,
-    pageNumber: any,
-    keepOpenModal: any = false
-  ) => {
-    dispatch(setClearLookup(true));
-    clearError();
-    setIsFetchingManually(true);
-    try {
-      if (keepOpenModal) {
-        forms.reset();
-        setPopOver(true);
-      } else {
-        forms.reset();
-        setPopOver(false);
-        setIsFetchingManually(true);
-      }
-      if (mode !== 'delete') {
-        const response = await api2.get(`/redis/get/tujuankapal-allItems`);
-        // Set the rows only if the data has changed
-        if (JSON.stringify(response.data) !== JSON.stringify(rows)) {
-          setRows(response.data);
-          setIsDataUpdated(true);
-          setCurrentPage(pageNumber);
-          setFetchedPages(new Set([pageNumber]));
-          setSelectedRow(indexOnPage);
-          setTimeout(() => {
-            gridRef?.current?.selectCell({
-              rowIdx: indexOnPage,
-              idx: 1
-            });
-          }, 200);
-        }
-      }
+    return columns;
+  }, [columns, columnsOrder]);
 
-      setIsDataUpdated(false);
-    } catch (error) {
-      console.error('Error during onSuccess:', error);
-      setIsFetchingManually(false);
-      setIsDataUpdated(false);
-    }
-  };
-  const onSubmit = async (values: TujuankapalInput, keepOpenModal = false) => {
-    clearError();
-    const selectedRowId = rows[selectedRow]?.id;
-    try {
-      dispatch(setProcessing());
-      if (mode === 'delete') {
-        if (selectedRowId) {
-          await deleteTujuankapal(selectedRowId as unknown as string, {
-            onSuccess: () => {
-              setPopOver(false);
-              setRows((prevRows) =>
-                prevRows.filter((row) => row.id !== selectedRowId)
-              );
-              if (selectedRow === 0) {
-                setSelectedRow(selectedRow);
-                gridRef?.current?.selectCell({ rowIdx: selectedRow, idx: 1 });
-              } else {
-                setSelectedRow(selectedRow - 1);
-                gridRef?.current?.selectCell({
-                  rowIdx: selectedRow - 1,
-                  idx: 1
-                });
-              }
-            }
-          });
-        }
-        return;
-      }
-      if (mode === 'add') {
-        const newOrder = await createTujuankapal(
-          {
-            ...values,
-            ...filters // Kirim filter ke body/payload
-          },
-          {
-            onSuccess: (data) =>
-              onSuccess(data.itemIndex, data.pageNumber, keepOpenModal)
-          }
-        );
+  const finalColumns = useMemo(() => {
+    return orderedColumns.map((col) => ({
+      ...col,
+      width: columnsWidth[col.key] ?? col.width
+    }));
+  }, [orderedColumns, columnsWidth]);
+  const moveSelectionBy = useCallback(
+    (delta: number, focusBackTo?: HTMLElement | null) => {
+      if (rows.length === 0) return;
 
-        if (newOrder !== undefined && newOrder !== null) {
-        }
-        return;
-      }
-      if (selectedRowId && mode === 'edit') {
-        await updateTujuankapal(
-          {
-            id: selectedRowId as unknown as string,
-            fields: { ...values, ...filters }
-          },
-          { onSuccess: (data) => onSuccess(data.itemIndex, data.pageNumber) }
-        );
-        queryClient.invalidateQueries('tujuankapal');
-      }
-    } catch (error: any) {
-      if (error?.response?.status === 400) {
-        const errorFields = error.response?.data?.message;
-        if (Array.isArray(errorFields)) {
-          errorFields.forEach((err: { path: string[]; message: string }) => {
-            const fieldName = err.path?.[0];
-            if (fieldName) {
-              forms.setError(fieldName as keyof TujuankapalInput, {
-                type: 'server',
-                message: err.message
-              });
-            }
-          });
-        }
-      } else {
-        console.error(error);
-      }
-    } finally {
-      dispatch(setProcessed());
-    }
-  };
+      interactionModeRef.current = 'keyboard';
 
-  const handleEdit = () => {
-    if (selectedRow !== null) {
-      const rowData = rows[selectedRow];
-      setPopOver(true);
-      setMode('edit');
-    }
-  };
-  const handleDelete = () => {
-    if (selectedRow !== null) {
-      setMode('delete');
-      setPopOver(true);
-    }
-  };
-  const handleView = () => {
-    if (selectedRow !== null) {
-      setMode('view');
-      setPopOver(true);
-    }
-  };
-
-  // const handleExport = async () => {
-  //   try {
-  //     const { page, limit, ...filtersWithoutLimit } = filters;
-
-  //     const response = await exportMenuFn(filtersWithoutLimit); // Kirim data tanpa pagination
-
-  //     // Buat link untuk mendownload file
-  //     const link = document.createElement('a');
-  //     const url = window.URL.createObjectURL(response);
-  //     link.href = url;
-  //     link.download = `laporan_menu${Date.now()}.xlsx`; // Nama file yang diunduh
-  //     link.click(); // Trigger download
-
-  //     // Revoke URL setelah download
-  //     window.URL.revokeObjectURL(url);
-  //   } catch (error) {
-  //     console.error('Error exporting user data:', error);
-  //   }
-  // };
-
-  // const handleExportBySelect = async () => {
-  //   if (checkedRows.size === 0) {
-  //     alert({
-  //       title: 'PILIH DATA YANG INGIN DI CETAK!',
-  //       variant: 'danger',
-  //       submitText: 'OK'
-  //     });
-  //     return; // Stop execution if no rows are selected
-  //   }
-
-  //   // Mengubah checkedRows menjadi format JSON
-  //   const jsonCheckedRows = Array.from(checkedRows).map((id) => ({ id }));
-  //   try {
-  //     const response = await exportMenuBySelectFn(jsonCheckedRows);
-
-  //     // Buat link untuk mendownload file
-  //     const link = document.createElement('a');
-  //     const url = window.URL.createObjectURL(response);
-  //     link.href = url;
-  //     link.download = `laporan_menu${Date.now()}.xlsx`; // Nama file yang diunduh
-  //     link.click(); // Trigger download
-
-  //     // Revoke URL setelah download
-  //     window.URL.revokeObjectURL(url);
-  //   } catch (error) {
-  //     console.error('Error exporting menu data:', error);
-  //     alert({
-  //       title: 'Failed to generate the export. Please try again.',
-  //       variant: 'danger',
-  //       submitText: 'OK'
-  //     });
-  //   }
-  // };
-
-  const handleReport = async () => {
-    try {
-      dispatch(setProcessing());
-      const now = new Date();
-      const pad = (n: any) => n.toString().padStart(2, '0');
-      const tglcetak = `${pad(now.getDate())}-${pad(
-        now.getMonth() + 1
-      )}-${now.getFullYear()} ${pad(now.getHours())}:${pad(
-        now.getMinutes()
-      )}:${pad(now.getSeconds())}`;
-      const { page, limit, ...filtersWithoutLimit } = filters;
-
-      const response = await getTujuankapalFn(filtersWithoutLimit);
-      const reportRows = response.data.map((row) => ({
-        ...row,
-        judullaporan: 'Laporan Tujuan Kapal',
-        usercetak: user.username,
-        tglcetak: tglcetak,
-        judul: 'PT.TRANSPORINDO AGUNG SEJAHTERA'
-      }));
-      sessionStorage.setItem(
-        'filtersWithoutLimit',
-        JSON.stringify(filtersWithoutLimit)
+      const nextRow = Math.min(
+        Math.max(selectedRowRef.current + delta, 0),
+        rows.length - 1
       );
-      // Dynamically import Stimulsoft and generate the PDF report
-      import('stimulsoft-reports-js/Scripts/stimulsoft.blockly.editor')
-        .then((module) => {
-          const { Stimulsoft } = module;
-          Stimulsoft.Base.StiFontCollection.addOpentypeFontFile(
-            '/fonts/tahoma.ttf',
-            'Tahoma'
-          ); // Regular
-          Stimulsoft.Base.StiFontCollection.addOpentypeFontFile(
-            '/fonts/tahomabd.ttf',
-            'Tahoma'
-          ); // Bold
-          Stimulsoft.Base.StiLicense.Key =
-            '6vJhGtLLLz2GNviWmUTrhSqnOItdDwjBylQzQcAOiHksEid1Z5nN/hHQewjPL/4/AvyNDbkXgG4Am2U6dyA8Ksinqp' +
-            '6agGqoHp+1KM7oJE6CKQoPaV4cFbxKeYmKyyqjF1F1hZPDg4RXFcnEaYAPj/QLdRHR5ScQUcgxpDkBVw8XpueaSFBs' +
-            'JVQs/daqfpFiipF1qfM9mtX96dlxid+K/2bKp+e5f5hJ8s2CZvvZYXJAGoeRd6iZfota7blbsgoLTeY/sMtPR2yutv' +
-            'gE9TafuTEhj0aszGipI9PgH+A/i5GfSPAQel9kPQaIQiLw4fNblFZTXvcrTUjxsx0oyGYhXslAAogi3PILS/DpymQQ' +
-            '0XskLbikFsk1hxoN5w9X+tq8WR6+T9giI03Wiqey+h8LNz6K35P2NJQ3WLn71mqOEb9YEUoKDReTzMLCA1yJoKia6Y' +
-            'JuDgUf1qamN7rRICPVd0wQpinqLYjPpgNPiVqrkGW0CQPZ2SE2tN4uFRIWw45/IITQl0v9ClCkO/gwUtwtuugegrqs' +
-            'e0EZ5j2V4a1XDmVuJaS33pAVLoUgK0M8RG72';
+      selectedRowRef.current = nextRow;
 
-          const report = new Stimulsoft.Report.StiReport();
-          const dataSet = new Stimulsoft.System.Data.DataSet('Data');
+      const idxFromKey = finalColumns.findIndex(
+        (c) => c.key === selectedCellKey
+      );
+      const idx = idxFromKey >= 0 ? idxFromKey : 0;
 
-          // Load the report template (MRT file)
-          report.loadFile('/reports/LaporanTujuankapal.mrt');
-          report.dictionary.dataSources.clear();
-          dataSet.readJson({ data: reportRows });
-          report.regData(dataSet.dataSetName, '', dataSet);
-          report.dictionary.synchronize();
+      gridRef.current?.scrollToCell?.({ rowIdx: nextRow, idx });
+      gridRef.current?.selectCell?.({ rowIdx: nextRow, idx });
 
-          // Render the report asynchronously
-          report.renderAsync(() => {
-            // Export the report to PDF asynchronously
-            report.exportDocumentAsync((pdfData: any) => {
-              const pdfBlob = new Blob([new Uint8Array(pdfData)], {
-                type: 'application/pdf'
-              });
-              const pdfUrl = URL.createObjectURL(pdfBlob);
+      if (focusBackTo && typeof window !== 'undefined') {
+        const start =
+          focusBackTo instanceof HTMLInputElement
+            ? focusBackTo.selectionStart
+            : null;
+        const end =
+          focusBackTo instanceof HTMLInputElement
+            ? focusBackTo.selectionEnd
+            : null;
 
-              // Store the Blob URL in sessionStorage
-              sessionStorage.setItem('pdfUrl', pdfUrl);
-
-              // Navigate to the report page
-              window.open('/reports/tujuankapal', '_blank');
-            }, Stimulsoft.Report.StiExportFormat.Pdf);
-          });
-        })
-        .catch((error) => {
-          console.error('Failed to load Stimulsoft:', error);
+        window.requestAnimationFrame(() => {
+          if (!document.contains(focusBackTo)) return;
+          focusBackTo.focus({ preventScroll: true });
+          if (
+            focusBackTo instanceof HTMLInputElement &&
+            start !== null &&
+            end !== null
+          ) {
+            focusBackTo.setSelectionRange(start, end);
+          }
         });
-    } catch (error) {
-      dispatch(setProcessed());
-    } finally {
-      dispatch(setProcessed());
+      }
+    },
+    [rows.length, finalColumns, selectedCellKey]
+  );
+
+  const moveSelectionColumnBy = useCallback(
+    (delta: number, focusBackTo?: HTMLElement | null) => {
+      if (rows.length === 0) return;
+      if (finalColumns.length === 0) return;
+
+      const currentIdxFromKey = finalColumns.findIndex(
+        (c) => c.key === selectedCellKey
+      );
+      const currentIdx = currentIdxFromKey >= 0 ? currentIdxFromKey : 0;
+
+      const nextIdx = Math.min(
+        Math.max(currentIdx + delta, 0),
+        finalColumns.length - 1
+      );
+
+      const nextKey = finalColumns[nextIdx]?.key;
+      if (nextKey) setSelectedCellKey(String(nextKey));
+
+      const rowIdx = Math.min(
+        Math.max(selectedRowRef.current, 0),
+        rows.length - 1
+      );
+
+      gridRef.current?.scrollToCell?.({ rowIdx, idx: nextIdx });
+      gridRef.current?.selectCell?.({ rowIdx, idx: nextIdx });
+
+      if (focusBackTo && typeof window !== 'undefined') {
+        const start =
+          focusBackTo instanceof HTMLInputElement
+            ? focusBackTo.selectionStart
+            : null;
+        const end =
+          focusBackTo instanceof HTMLInputElement
+            ? focusBackTo.selectionEnd
+            : null;
+
+        window.requestAnimationFrame(() => {
+          if (!document.contains(focusBackTo)) return;
+          focusBackTo.focus({ preventScroll: true });
+          if (
+            focusBackTo instanceof HTMLInputElement &&
+            start !== null &&
+            end !== null
+          ) {
+            focusBackTo.setSelectionRange(start, end);
+          }
+        });
+      }
+    },
+    [rows.length, finalColumns, selectedCellKey]
+  );
+  const selectColumnEdge = useCallback(
+    (edge: 'first' | 'last', focusBackTo?: HTMLElement | null) => {
+      if (rows.length === 0) return;
+      if (finalColumns.length === 0) return;
+
+      const nextIdx = edge === 'first' ? 0 : finalColumns.length - 1;
+      const nextKey = finalColumns[nextIdx]?.key;
+      if (nextKey) setSelectedCellKey(String(nextKey));
+
+      const rowIdx = Math.min(
+        Math.max(selectedRowRef.current, 0),
+        rows.length - 1
+      );
+
+      gridRef.current?.scrollToCell?.({ rowIdx, idx: nextIdx });
+      gridRef.current?.selectCell?.({ rowIdx, idx: nextIdx });
+
+      if (focusBackTo && typeof window !== 'undefined') {
+        const start =
+          focusBackTo instanceof HTMLInputElement
+            ? focusBackTo.selectionStart
+            : null;
+        const end =
+          focusBackTo instanceof HTMLInputElement
+            ? focusBackTo.selectionEnd
+            : null;
+
+        window.requestAnimationFrame(() => {
+          if (!document.contains(focusBackTo)) return;
+          focusBackTo.focus({ preventScroll: true });
+          if (
+            focusBackTo instanceof HTMLInputElement &&
+            start !== null &&
+            end !== null
+          ) {
+            focusBackTo.setSelectionRange(start, end);
+          }
+        });
+      }
+    },
+    [rows.length, finalColumns]
+  );
+  const handleGoToFirstPage = useCallback(() => {
+    jumpToFirstRef.current = true;
+    setRows([]);
+    setCurrentPage(1);
+    resetBufferingCache();
+  }, []);
+
+  const handleGoToLastPage = useCallback(async () => {
+    if (totalPages < 1) return;
+
+    jumpToLastRef.current = true;
+    setRows([]);
+
+    if (totalPages <= WINDOW_SIZE) {
+      resetBufferingCache();
+      return;
     }
-  };
 
-  // const handleReport = async () => {
-  //   const rowId = Array.from(checkedRows)[0];
-  //   const now = new Date();
-  //   const pad = (n: any) => n.toString().padStart(2, '0');
-  //   const tglcetak = `${pad(now.getDate())}-${pad(
-  //     now.getMonth() + 1
-  //   )}-${now.getFullYear()} ${pad(now.getHours())}:${pad(
-  //     now.getMinutes()
-  //   )}:${pad(now.getSeconds())}`;
-  //   const { page, limit, ...filtersWithoutLimit } = filters;
-  //   dispatch(setProcessing()); // Show loading overlay when the request starts
+    setIsFetching(true);
+    setShouldBulkFetch(false);
+    setBulkStartPage(1);
+    setPageDataCache(new Map());
+    streamBufferRef.current = new Map();
+    prefetchingPagesRef.current = new Set();
 
-  //   try {
-  //     // const response = await getPengeluaranHeaderByIdFn(
-  //     //   rowId,
-  //     //   filtersWithoutLimit
-  //     // );
+    const startPage = totalPages - WINDOW_SIZE + 1;
+    const pagesToFetch = Array.from(
+      { length: WINDOW_SIZE },
+      (_, i) => startPage + i
+    );
 
-  //     const response = await getTujuankapalFn(filtersWithoutLimit);
-  //     const reportRows = response.data.map((row) => ({
-  //       ...row,
-  //       judullaporan: 'Laporan Container',
-  //       usercetak: user.username,
-  //       tglcetak: tglcetak,
-  //       judul: 'PT.TRANSPORINDO AGUNG SEJAHTERA'
-  //     }));
+    try {
+      const results = await Promise.all(
+        pagesToFetch.map((p) =>
+          getTujuankapalFn({ ...filters, page: p, limit: filters.limit })
+        )
+      );
 
-  //     // const responseDetail = await getPengeluaranDetailFn(rowId);
-  //     // const totalNominal = responseDetail.data.reduce(
-  //     //   (sum: number, i: any) => sum + Number(i.nominal || 0),
-  //     //   0
-  //     // );
-  //     if (response.data === null || response.data.length === 0) {
-  //       alert({
-  //         title: 'DATA TIDAK TERSEDIA!',
-  //         variant: 'danger',
-  //         submitText: 'OK'
-  //       });
-  //     } else {
-  //       const reportRows = response.data.map((row: any) => ({
-  //         ...row,
-  //         judullaporan: 'Laporan Pengeluaran',
-  //         usercetak: user.username,
-  //         tglcetak,
-  //         // terbilang: numberToTerbilang(totalNominal),
-  //         judul: `Bukti Pengeluaran KAS EMKL`
-  //       }));
+      const newCache = new Map<number, ITujuankapal[]>();
+      results.forEach((res, i) => {
+        if (res?.data && res.data.length > 0) {
+          newCache.set(pagesToFetch[i], res.data);
+        }
+      });
 
-  //       dispatch(setReportData(reportRows));
-  //       // dispatch(setDetailDataReport(responseDetail.data));
-  //       window.open('/reports/designer', '_blank');
-  //     }
-  //   } catch (error) {
-  //     console.error('Error generating report:', error);
-  //     alert({
-  //       title: 'Terjadi kesalahan saat memuat data!',
-  //       variant: 'danger',
-  //       submitText: 'OK'
-  //     });
-  //   } finally {
-  //     dispatch(setProcessed()); // Hide loading overlay when the request is finished
-  //   }
-  // };
+      setPageDataCache(newCache);
+      setVisiblePages(pagesToFetch);
+      setCurrentPage(totalPages);
+    } catch (err) {
+      console.error('Failed to load last pages:', err);
+    } finally {
+      setIsFetching(false);
+    }
+  }, [totalPages, filters]);
 
-  // const handleReportBySelect = async () => {
-  //   if (checkedRows.size === 0) {
-  //     alert({
-  //       title: 'PILIH DATA YANG INGIN DI CETAK!',
-  //       variant: 'danger',
-  //       submitText: 'OK'
-  //     });
-  //     return; // Stop execution if no rows are selected
-  //   }
+  const handleGridInputNavigationKeyDownCapture = useCallback(
+    (event: React.KeyboardEvent<HTMLElement>) => {
+      const target = event.target as HTMLElement | null;
 
-  //   const jsonCheckedRows = Array.from(checkedRows).map((id) => ({ id }));
-  //   try {
-  //     const response = await reportMenuBySelectFn(jsonCheckedRows);
-  //     const reportRows = response.map((row: any) => ({
-  //       ...row,
-  //       judullaporan: 'Laporan Menu',
-  //       usercetak: user.username,
-  //       tglcetak: new Date().toLocaleDateString(),
-  //       judul: 'PT.TRANSPORINDO AGUNG SEJAHTERA'
-  //     }));
-  //     dispatch(setReportData(reportRows));
-  //     window.open('/reports/menu', '_blank');
-  //   } catch (error) {
-  //     console.error('Error generating report:', error);
-  //     alert({
-  //       title: 'Failed to generate the report. Please try again.',
-  //       variant: 'danger',
-  //       submitText: 'OK'
-  //     });
-  //   }
-  // };
+      if (
+        event.key === 'ArrowDown' ||
+        event.key === 'ArrowUp' ||
+        event.key === 'PageDown' ||
+        event.key === 'PageUp'
+      ) {
+        interactionModeRef.current = 'keyboard';
+      }
 
-  document.querySelectorAll('.column-headers').forEach((element) => {
-    element.classList.remove('c1kqdw7y7-0-0-beta-47');
-  });
-  function getRowClass(row: ITujuanKapal) {
-    const rowIndex = rows.findIndex((r) => r.id === row.id);
-    return rowIndex === selectedRow ? 'selected-row' : '';
-  }
+      if (event.ctrlKey && event.key === 'Home') {
+        event.preventDefault();
+        event.stopPropagation();
+        handleGoToFirstPage();
+        return;
+      }
 
-  function rowKeyGetter(row: ITujuanKapal) {
-    return row.id;
-  }
+      if (event.ctrlKey && event.key === 'End') {
+        event.preventDefault();
+        event.stopPropagation();
+        handleGoToLastPage();
+        return;
+      }
 
-  const handleResequence = () => {
-    router.push('/dashboard/resequence');
-  };
+      const isFilterInput =
+        target instanceof HTMLElement &&
+        target.classList.contains('filter-input');
+      const isGlobalSearchInput =
+        !!inputRef.current && target === inputRef.current;
 
-  const handleClose = () => {
-    setPopOver(false);
-    setMode('');
-    clearError();
-    forms.reset();
-  };
+      if (!isFilterInput && !isGlobalSearchInput) return;
+
+      const visibleRowCount = 8;
+
+      if (event.key === 'ArrowDown') {
+        event.preventDefault();
+        event.stopPropagation();
+        moveSelectionBy(1, target);
+      } else if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        event.stopPropagation();
+        moveSelectionBy(-1, target);
+      } else if (event.key === 'PageDown') {
+        event.preventDefault();
+        event.stopPropagation();
+        moveSelectionBy(visibleRowCount, target);
+      } else if (event.key === 'PageUp') {
+        event.preventDefault();
+        event.stopPropagation();
+        moveSelectionBy(-visibleRowCount, target);
+      } else if (event.key === 'ArrowRight') {
+        event.preventDefault();
+        event.stopPropagation();
+        moveSelectionColumnBy(1, target);
+      } else if (event.key === 'ArrowLeft') {
+        event.preventDefault();
+        event.stopPropagation();
+        moveSelectionColumnBy(-1, target);
+      } else if (event.key === 'Home') {
+        event.preventDefault();
+        event.stopPropagation();
+        selectColumnEdge('first', target);
+      } else if (event.key === 'End') {
+        event.preventDefault();
+        event.stopPropagation();
+        selectColumnEdge('last', target);
+      }
+    },
+    [
+      moveSelectionBy,
+      moveSelectionColumnBy,
+      selectColumnEdge,
+      handleGoToFirstPage,
+      handleGoToLastPage
+    ]
+  );
   const statusAktifDefaultRef = useRef<{ id: string; text: string } | null>(
     null
   );
@@ -1639,45 +1628,782 @@ const GridTujuankapal = () => {
       nama: '',
       kode: '',
       keterangan: '',
-      statusaktif: aktif.id,
-      statusaktif_nama: aktif.text,
-      cabang_id: null
+      cabang_id: '',
+      cabang_nama: '',
+      statusaktif: '',
+      info: ''
     });
   };
 
-  const handleAdd = async () => {
+  const onSuccess = async (
+    indexOnPage: number,
+    fetchedPages: number[],
+    pagedData: Record<string, ITujuankapal[]>,
+    pageNumber: number,
+    keepOpenModal = false,
+    focusId: string | null = null
+  ) => {
+    clearError();
+    setIsFetchingManually(true);
+    pendingFocusIdRef.current = focusId ?? null;
     try {
-      // Jalankan API sinkronisasi
-      const syncResponse = await syncAcosFn();
-      setMode('add');
+      if (keepOpenModal) {
+        await resetAddForm();
+        setAddFormKey((k) => k + 1);
+        setPopOver(true);
+      } else {
+        dispatch(setClearLookup(true));
+        forms.reset();
+        setPopOver(false);
+      }
+      if (mode !== 'delete') {
+        suppressRefetchRef.current = true;
+        const response = await api2.get(
+          `/redis/get/tujuankapal-page-${pageNumber}`
+        );
+        setRows([]);
+        setRows(response.data);
+        const loadedRows: ITujuankapal[] = Array.isArray(response.data)
+          ? response.data
+          : [];
+        const focusIdx =
+          focusId != null
+            ? loadedRows.findIndex((r) => String(r.id) === String(focusId))
+            : -1;
+        const targetIndex = focusIdx >= 0 ? focusIdx : indexOnPage;
+        setIsDataUpdated(true);
+        setVisiblePages(fetchedPages);
+        setSelectedRow(targetIndex);
+        setPageDataCache(
+          new Map(
+            Object.entries(pagedData).map(([key, value]) => [
+              Number(key),
+              value as ITujuankapal[]
+            ])
+          )
+        );
+        setCurrentPage(pageNumber);
 
-      setPopOver(true);
+        const updatedBuffer = new Map(streamBufferRef.current);
+        Object.entries(pagedData).forEach(([key, value]) => {
+          updatedBuffer.set(Number(key), value as ITujuankapal[]);
+        });
+        streamBufferRef.current = updatedBuffer;
 
-      await resetAddForm();
+        setTimeout(() => {
+          gridRef?.current?.selectCell({
+            rowIdx: targetIndex,
+            idx: 1
+          });
+        }, 200);
+
+        if (focusId != null) {
+          [120, 320, 620].forEach((d) =>
+            setTimeout(() => {
+              pendingFocusIdRef.current = String(focusId);
+            }, d)
+          );
+          setTimeout(() => {
+            if (String(pendingFocusIdRef.current) === String(focusId)) {
+              pendingFocusIdRef.current = null;
+            }
+          }, 950);
+        }
+
+        setTimeout(() => {
+          suppressRefetchRef.current = false;
+        }, 1000);
+      }
+
+      setIsDataUpdated(false);
     } catch (error) {
-      console.error('Error syncing ACOS:', error);
+      console.error('Error during onSuccess:', error);
+      setIsFetchingManually(false);
+      setIsDataUpdated(false);
+    }
+  };
+  const onSubmit = async (values: TujuankapalInput, keepOpenModal = false) => {
+    clearError();
+    const selectedRowId = rows[selectedRow]?.id;
+    try {
+      dispatch(setProcessing());
+      if (mode === 'delete') {
+        if (selectedRowId) {
+          await deleteTujuankapal(selectedRowId as unknown as string, {
+            onSuccess: () => {
+              setPopOver(false);
+              setRows((prevRows) =>
+                prevRows.filter((row) => row.id !== selectedRowId)
+              );
+
+              setPageDataCache((prevCache) => {
+                const updated = new Map(prevCache);
+                updated.forEach((pageRows, pageNum) => {
+                  const filtered = pageRows.filter(
+                    (row) => row.id !== selectedRowId
+                  );
+                  if (filtered.length !== pageRows.length) {
+                    updated.set(pageNum, filtered);
+                  }
+                });
+                return updated;
+              });
+
+              const newBuffer = new Map(streamBufferRef.current);
+              newBuffer.forEach((pageRows, pageNum) => {
+                const filtered = pageRows.filter(
+                  (row) => row.id !== selectedRowId
+                );
+                if (filtered.length !== pageRows.length) {
+                  newBuffer.set(pageNum, filtered);
+                }
+              });
+              streamBufferRef.current = newBuffer;
+
+              const nextFocusRow =
+                rows[selectedRow + 1] ?? rows[selectedRow - 1];
+              if (nextFocusRow) {
+                pendingFocusIdRef.current = String(nextFocusRow.id);
+              } else {
+                setSelectedRow(0);
+                selectedRowRef.current = 0;
+              }
+            }
+          });
+        }
+        return;
+      }
+      if (mode === 'add') {
+        const newOrder = await createTujuankapal(
+          {
+            ...values,
+            ...filters
+          },
+          {
+            onSuccess: (data) =>
+              onSuccess(
+                data.itemIndex,
+                data.fetchedPages,
+                data.pagedData,
+                data.pageNumber,
+                keepOpenModal,
+                data.newItem?.id ?? null
+              )
+          }
+        );
+
+        if (newOrder !== undefined && newOrder !== null) {
+        }
+        return;
+      }
+      if (selectedRowId && mode === 'edit') {
+        await updateTujuankapal(
+          {
+            id: selectedRowId as unknown as string,
+            fields: { ...values, ...filters }
+          },
+          {
+            onSuccess: (data: any) =>
+              onSuccess(
+                data.itemIndex,
+                data.fetchedPages,
+                data.pagedData,
+                data.pageNumber,
+                false,
+                data.updatedItem?.id ?? null
+              )
+          }
+        );
+      }
+    } catch (error: any) {
+      if (error?.response?.status !== 400) {
+        console.error(error);
+      }
+    } finally {
+      dispatch(setProcessed());
     }
   };
 
+  const handleEdit = () => {
+    if (selectedRow !== null) {
+      const rowData = rows[selectedRow];
+      setPopOver(true);
+      setMode('edit');
+    }
+  };
+  const handleDelete = () => {
+    if (selectedRow !== null) {
+      setMode('delete');
+      setPopOver(true);
+    }
+  };
+  const handleView = () => {
+    if (selectedRow !== null) {
+      setMode('view');
+      setPopOver(true);
+    }
+  };
+
+  const handleReport = async () => {
+    const { page, limit, ...filtersWithoutLimit } = filters;
+
+    await generateReport({
+      label: 'Tujuan Kapal',
+      payload: {
+        mrtName: 'LaporanTujuankapal.mrt',
+        judullaporan: 'Laporan Tujuan Kapal',
+        search: filtersWithoutLimit.search,
+        filters: filtersWithoutLimit.filters,
+        sortBy: filtersWithoutLimit.sortBy,
+        sortDirection: filtersWithoutLimit.sortDirection
+      },
+      apiFn: generateTujuankapalReportFn,
+      onExport: () => handleExportExcel()
+    });
+  };
+
+  // const handleReport = async () => {
+  //   const rowId = Array.from(checkedRows)[0];
+  //   const now = new Date();
+  //   const pad = (n: any) => n.toString().padStart(2, '0');
+  //   const tglcetak = `${pad(now.getDate())}-${pad(
+  //     now.getMonth() + 1
+  //   )}-${now.getFullYear()} ${pad(now.getHours())}:${pad(
+  //     now.getMinutes()
+  //   )}:${pad(now.getSeconds())}`;
+  //   const { page, limit, ...filtersWithoutLimit } = filters;
+  //   dispatch(setProcessing()); // Show loading overlay when the request starts
+
+  //   try {
+  //     // const response = await getPengeluaranHeaderByIdFn(
+  //     //   rowId,
+  //     //   filtersWithoutLimit
+  //     // );
+
+  //     const response = await getTujuankapalFn(filtersWithoutLimit);
+  //     const reportRows = response.data.map((row) => ({
+  //       ...row,
+  //       judullaporan: 'Laporan Tujuankapal',
+  //       usercetak: user.username,
+  //       tglcetak: tglcetak,
+  //       judul: 'PT.TRANSPORINDO AGUNG SEJAHTERA'
+  //     }));
+
+  //     // const responseDetail = await getPengeluaranDetailFn(rowId);
+  //     // const totalNominal = responseDetail.data.reduce(
+  //     //   (sum: number, i: any) => sum + Number(i.nominal || 0),
+  //     //   0
+  //     // );
+  //     if (response.data === null || response.data.length === 0) {
+  //       alert({
+  //         title: 'DATA TIDAK TERSEDIA!',
+  //         variant: 'danger',
+  //         submitText: 'OK'
+  //       });
+  //     } else {
+  //       const reportRows = response.data.map((row: any) => ({
+  //         ...row,
+  //         judullaporan: 'Laporan Tujuankapal',
+  //         usercetak: user.username,
+  //         tglcetak,
+  //         // terbilang: numberToTerbilang(totalNominal),
+  //         judul: `Laporan Tujuankapal`
+  //       }));
+  //       console.log('reportRows', reportRows);
+  //       dispatch(setReportData(reportRows));
+  //       // dispatch(setDetailDataReport(responseDetail.data));
+  //       window.open('/reports/designer', '_blank');
+  //     }
+  //   } catch (error) {
+  //     console.error('Error generating report:', error);
+  //     alert({
+  //       title: 'Terjadi kesalahan saat memuat data!',
+  //       variant: 'danger',
+  //       submitText: 'OK'
+  //     });
+  //   } finally {
+  //     dispatch(setProcessed()); // Hide loading overlay when the request is finished
+  //   }
+  // };
+
+  const handleExportExcel = async () => {
+    const { page, limit, ...filtersWithoutLimit } = filters;
+
+    await generateExport({
+      label: 'Export Tujuan Kapal',
+      payload: {
+        search: filtersWithoutLimit.search,
+        filters: filtersWithoutLimit.filters,
+        sortBy: filtersWithoutLimit.sortBy,
+        sortDirection: filtersWithoutLimit.sortDirection
+      },
+      apiFn: generateTujuankapalExportFn
+    });
+  };
+
+  document.querySelectorAll('.column-headers').forEach((element) => {
+    element.classList.remove('c1kqdw7y7-0-0-beta-47');
+  });
+  function getRowClass(row: ITujuankapal) {
+    const rowIndex = rows.findIndex((r) => r.id === row.id);
+    return rowIndex === selectedRow ? 'selected-row' : '';
+  }
+
+  function rowKeyGetter(row: ITujuankapal) {
+    return row.id;
+  }
+
+  function EmptyRowsRenderer() {
+    return (
+      <div
+        className="flex h-full w-full items-center justify-center"
+        style={{ textAlign: 'center', gridColumn: '1/-1' }}
+      >
+        NO ROWS DATA FOUND
+      </div>
+    );
+  }
+  const handleResequence = () => {
+    router.push('/dashboard/resequence');
+  };
+  function LoadRowsRenderer() {
+    return (
+      <div>
+        <ImSpinner2 className="animate-spin text-3xl text-primary" />
+      </div>
+    );
+  }
+  const handleClose = () => {
+    setPopOver(false);
+    setMode('');
+    clearError();
+    forms.reset();
+  };
+  const handleAdd = async () => {
+    try {
+      setMode('add');
+      await resetAddForm();
+      setPopOver(true);
+    } catch (error) {
+      console.error('Error add tujuankapal:', error);
+    }
+  };
+
+  const prefetchPages = useCallback(
+    async (
+      pagesToFetch: number[],
+      existingCache?: Map<number, ITujuankapal[]>,
+      knownTotalPages?: number
+    ) => {
+      const cacheToCheck = existingCache ?? pageDataCache;
+      const effectiveTotalPages = knownTotalPages ?? totalPages;
+
+      const validPages = pagesToFetch.filter(
+        (p) =>
+          p >= 1 &&
+          p <= effectiveTotalPages &&
+          !streamBufferRef.current.has(p) &&
+          !cacheToCheck.has(p) &&
+          !prefetchingPagesRef.current.has(p)
+      );
+
+      if (validPages.length === 0) return;
+
+      validPages.forEach((p) => prefetchingPagesRef.current.add(p));
+
+      await Promise.allSettled(
+        validPages.map(async (pageNum) => {
+          try {
+            const data = await getTujuankapalFn({
+              ...filters,
+              page: pageNum,
+              limit: filters.limit
+            });
+
+            if (data?.data && data.data.length > 0) {
+              console.log(
+                `[StreamBuffer] ✅ Berhasil masuk cache: Page ${pageNum}`
+              );
+              streamBufferRef.current = new Map(streamBufferRef.current);
+              streamBufferRef.current.set(pageNum, data.data);
+            }
+          } catch (err) {
+            console.warn(
+              `[StreamBuffer] Prefetch page ${pageNum} failed:`,
+              err
+            );
+          } finally {
+            prefetchingPagesRef.current.delete(pageNum);
+          }
+        })
+      );
+    },
+    [filters, totalPages, pageDataCache]
+  );
   useEffect(() => {
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        forms.reset(); // Reset the form when the Escape key is pressed
-        setMode(''); // Reset the mode to empty
-        setPopOver(false);
-        dispatch(clearOpenName());
-        clearError();
+    setIsFirstLoad(true);
+  }, []);
+
+  useEffect(() => {
+    if (isFirstLoad && gridRef.current && rows.length > 0) {
+      setSelectedRow(0);
+      gridRef.current.selectCell({ rowIdx: 0, idx: 1 });
+      setIsFirstLoad(false);
+    }
+  }, [rows, isFirstLoad]);
+  useEffect(() => {
+    if (user?.id) {
+      loadGridConfig(
+        String(user?.id),
+        'GridTujuankapal',
+        columns,
+        setColumnsOrder,
+        setColumnsWidth
+      );
+    }
+  }, [user]);
+
+  useEffect(() => {
+    if (isSubmitSuccessful) {
+      // reset();
+      // Pastikan fokus terjadi setelah repaint
+      requestAnimationFrame(() => setFocus('nama'));
+    }
+  }, [isSubmitSuccessful, setFocus]);
+
+  // useEffect(() => {
+  //   if (isFirstLoad) {
+  //     setFilters((prevFilters) => ({
+  //       ...prevFilters,
+  //       filters: {
+  //         ...prevFilters.filters
+  //       },
+  //       page: 1
+  //     }));
+  //     resetBufferingCache(); // ADDED
+  //   }
+  // }, [filters, isFirstLoad]);
+
+  // 1. Bulk Fetch Initialization
+  useEffect(() => {
+    const handleBulkFetch = async () => {
+      if (
+        !shouldBulkFetch ||
+        !allTujuankapal ||
+        isDataUpdated ||
+        isAfterMutation ||
+        suppressRefetchRef.current
+      ) {
+        return;
+      }
+
+      const bulkData = allTujuankapal.data || [];
+      if (bulkData.length === 0) return;
+
+      const pageSize = filters.limit;
+      const newCache = new Map<number, ITujuankapal[]>();
+      const wasJumpingToLast = jumpToLastRef.current;
+
+      const logicalStartPage = (bulkStartPage - 1) * WINDOW_SIZE + 1;
+      for (let i = 0; i < WINDOW_SIZE; i++) {
+        const pageNum = logicalStartPage + i;
+        const startIdx = i * pageSize;
+        const endIdx = startIdx + pageSize;
+        const pageData = bulkData.slice(startIdx, endIdx);
+
+        if (pageData.length > 0) {
+          newCache.set(pageNum, pageData);
+        }
+      }
+
+      setPageDataCache(newCache);
+      setVisiblePages(
+        Array.from({ length: WINDOW_SIZE }, (_, i) => logicalStartPage + i)
+      );
+
+      const totalItems = allTujuankapal.pagination?.totalItems || 0;
+      const totalPgs = Math.ceil(totalItems / filters.limit) || 1;
+
+      setTotalPages(totalPgs);
+      setHasMore(bulkData.length === filters.limit * WINDOW_SIZE);
+      setShouldBulkFetch(false);
+      setIsFirstLoad(false);
+      setIsFetching(false);
+
+      const lastLogicalPage = Math.min(
+        logicalStartPage + WINDOW_SIZE - 1,
+        totalPgs
+      );
+      const initialPrefetch = Array.from(
+        { length: STREAM_BUFFER_SIZE },
+        (_, i) => lastLogicalPage + 1 + i
+      ).filter((p) => p <= totalPgs);
+
+      if (initialPrefetch.length > 0) {
+        prefetchPages(initialPrefetch, newCache, totalPgs);
+      }
+
+      if (wasJumpingToLast) {
+        setCurrentPage(lastLogicalPage);
       }
     };
+    handleBulkFetch();
+  }, [
+    allTujuankapal,
+    shouldBulkFetch,
+    isDataUpdated,
+    isAfterMutation,
+    filters.limit,
+    bulkStartPage
+  ]);
 
-    // Add event listener for keydown when the component is mounted
-    document.addEventListener('keydown', handleEscape);
+  // 2. Pagination Fetch & Scroll Adjustment
+  useEffect(() => {
+    if (
+      shouldBulkFetch ||
+      isDataUpdated ||
+      isAfterMutation ||
+      suppressRefetchRef.current
+    ) {
+      return;
+    }
 
-    // Cleanup event listener when the component is unmounted or the effect is re-run
-    return () => {
-      document.removeEventListener('keydown', handleEscape);
+    if (!allTujuankapal) return;
+
+    const newRows = allTujuankapal.data || [];
+
+    const scrollContainer = scrollContainerRef.current;
+    const scrollBeforeUpdate = scrollContainer
+      ? {
+          scrollTop: scrollContainer.scrollTop,
+          scrollHeight: scrollContainer.scrollHeight,
+          clientHeight: scrollContainer.clientHeight
+        }
+      : null;
+
+    setPageDataCache((prevCache) => {
+      const newCache = new Map(prevCache);
+      newCache.set(currentPage, newRows);
+      return newCache;
+    });
+
+    isPageTransitionRef.current = true;
+    const maxVisible = Math.max(...visiblePages);
+    const minVisible = Math.min(...visiblePages);
+
+    // --- SCROLL KE BAWAH ---
+    if (currentPage > maxVisible && currentPage <= maxVisible + 1) {
+      const removedPage = visiblePages[0];
+      pendingScrollAdjustment.current = -(filters.limit * ROW_HEIGHT);
+      shiftSelectionForWindow(-filters.limit);
+
+      setPageDataCache((prev) => {
+        const updated = new Map(prev);
+        updated.delete(removedPage);
+        return updated;
+      });
+      setVisiblePages((prevVisible) => [...prevVisible.slice(1), currentPage]);
+    } else if (currentPage < minVisible && currentPage >= minVisible - 1) {
+      // --- SCROLL KE ATAS ---
+      const removedPage = visiblePages[visiblePages.length - 1];
+      pendingScrollAdjustment.current = filters.limit * ROW_HEIGHT;
+      shiftSelectionForWindow(filters.limit);
+
+      setPageDataCache((prev) => {
+        const updated = new Map(prev);
+        updated.delete(removedPage);
+        return updated;
+      });
+      setVisiblePages((prevVisible) => [
+        currentPage,
+        ...prevVisible.slice(0, WINDOW_SIZE - 1)
+      ]);
+    }
+
+    if (allTujuankapal.pagination?.totalPages) {
+      setTotalPages(allTujuankapal.pagination.totalPages);
+    }
+
+    setHasMore(newRows.length === filters.limit);
+    setPrevFilters(filters);
+
+    setTimeout(() => {
+      setIsTransitioning(false);
+      setIsFetching(false);
+      const maxVis = Math.max(...visiblePages);
+      const minVis = Math.min(...visiblePages);
+
+      // Tentukan arah: jika currentPage > maxVisible sebelumnya = scroll down, sebaliknya up
+      const isScrollDown = currentPage >= maxVis;
+      const pagesToPrefetch = isScrollDown
+        ? Array.from(
+            { length: STREAM_BUFFER_SIZE },
+            (_, i) => currentPage + 1 + i
+          ).filter((p) => p <= totalPages)
+        : Array.from(
+            { length: STREAM_BUFFER_SIZE },
+            (_, i) => currentPage - 1 - i
+          ).filter((p) => p >= 1);
+
+      if (pagesToPrefetch.length > 0) {
+        setTimeout(() => prefetchPages(pagesToPrefetch), 200);
+      }
+    }, 100);
+  }, [
+    allTujuankapal,
+    currentPage,
+    filters,
+    isDataUpdated,
+    shouldBulkFetch,
+    isAfterMutation
+  ]);
+
+  // 3. Row Combiner (Mapping cache to rows state)
+  useEffect(() => {
+    const combinedRows: ITujuankapal[] = [];
+    visiblePages?.forEach((page) => {
+      const pageData = pageDataCache.get(page);
+      if (pageData) combinedRows.push(...pageData);
+    });
+
+    if (combinedRows.length > 0) {
+      const newMinPage = Math.min(...visiblePages);
+      setRows(combinedRows);
+      prevMinPageRef.current = newMinPage;
+      prevRowsLengthRef.current = combinedRows.length;
+
+      if (pendingFocusIdRef.current != null) {
+        const fid = pendingFocusIdRef.current;
+        pendingFocusIdRef.current = null;
+        const fidx = combinedRows.findIndex(
+          (r) => String(r.id) === String(fid)
+        );
+        if (fidx >= 0) {
+          selectedRowRef.current = fidx;
+          setSelectedRow(fidx);
+          setTimeout(() => {
+            gridRef.current?.scrollToCell?.({ rowIdx: fidx, idx: 1 });
+            gridRef.current?.selectCell?.({ rowIdx: fidx, idx: 1 });
+          }, 50);
+        }
+        return;
+      }
+
+      if (jumpToFirstRef.current) {
+        // Ctrl+Home — selalu idx 0
+        jumpToFirstRef.current = false;
+        setSelectedRow(0);
+        setTimeout(() => {
+          gridRef.current?.scrollToCell?.({ rowIdx: 0, idx: 0 });
+          gridRef.current?.selectCell?.({ rowIdx: 0, idx: 0 });
+        }, 50);
+      } else if (jumpToLastRef.current) {
+        jumpToLastRef.current = false;
+        const lastIdx = combinedRows.length - 1;
+        setSelectedRow(lastIdx);
+        setTimeout(() => {
+          gridRef.current?.scrollToCell?.({ rowIdx: lastIdx, idx: 0 });
+          gridRef.current?.selectCell?.({ rowIdx: lastIdx, idx: 0 });
+        }, 50);
+      } else if (isPageTransitionRef.current) {
+        isPageTransitionRef.current = false;
+        const targetRow = Math.min(
+          Math.max(selectedRowRef.current, 0),
+          combinedRows.length - 1
+        );
+        selectedRowRef.current = targetRow;
+        setSelectedRow(targetRow);
+      } else {
+        const targetIdx = pendingSelectIdxRef.current;
+        const inputToRestore = activeFilterInputRef.current;
+
+        setTimeout(() => {
+          if (
+            inputToRestore &&
+            document.contains(inputToRestore) &&
+            (inputToRestore.classList.contains('filter-input') ||
+              inputToRestore.tagName === 'INPUT')
+          ) {
+            inputToRestore.focus({ preventScroll: true });
+            requestAnimationFrame(() => {
+              gridRef.current?.scrollToCell?.({ rowIdx: 0, idx: targetIdx });
+              gridRef.current?.selectCell?.({ rowIdx: 0, idx: targetIdx });
+              requestAnimationFrame(() => {
+                if (inputToRestore && document.contains(inputToRestore)) {
+                  inputToRestore.focus({ preventScroll: true });
+                }
+              });
+            });
+          } else {
+            gridRef.current?.scrollToCell?.({ rowIdx: 0, idx: targetIdx });
+            gridRef.current?.selectCell?.({ rowIdx: 0, idx: targetIdx });
+          }
+        }, 50);
+      }
+    }
+  }, [visiblePages, pageDataCache]);
+
+  useLayoutEffect(() => {
+    if (pendingScrollAdjustment.current !== 0 && scrollContainerRef.current) {
+      const container = scrollContainerRef.current;
+
+      // Geser scroll seketika (Sync)
+      container.scrollTop += pendingScrollAdjustment.current;
+
+      // Update referensi agar sistem tidak mengira user scroll manual
+      scrollPositionRef.current = container.scrollTop;
+      lastScrollTopRef.current = container.scrollTop;
+      hasAdjustedScrollRef.current = true;
+
+      // Reset
+      pendingScrollAdjustment.current = 0;
+
+      if (reanchorFromKeyboardRef.current) {
+        const targetRow = selectedRowRef.current;
+        const idxFromKey = finalColumns.findIndex(
+          (c) => c.key === selectedCellKey
+        );
+        const idx = idxFromKey >= 0 ? idxFromKey : 1;
+        gridRef.current?.selectCell?.({ rowIdx: targetRow, idx });
+      }
+      reanchorFromKeyboardRef.current = false;
+    }
+  }, [rows]);
+
+  useEffect(() => {
+    if (rows.length > 0 && selectedRow !== null) {
+      const selectedRowData = rows[selectedRow];
+      // dispatch(setHeaderData(selectedRowData));
+      if (selectedRowData?.id !== lastDispatchedId.current) {
+        dispatch(setHeaderData(selectedRowData));
+        lastDispatchedId.current = selectedRowData?.id;
+      }
+    }
+  }, [rows, selectedRow, dispatch]);
+  useEffect(() => {
+    const preventScrollOnSpace = (event: KeyboardEvent) => {
+      if (
+        event.key === ' ' &&
+        !(
+          event.target instanceof HTMLInputElement ||
+          event.target instanceof HTMLTextAreaElement
+        )
+      ) {
+        event.preventDefault();
+      }
     };
-  }, [forms]);
+    document.addEventListener('keydown', preventScrollOnSpace);
+    return () => {
+      document.removeEventListener('keydown', preventScrollOnSpace);
+    };
+  }, []);
+
+  useEffect(() => {
+    window.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      window.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
 
   const handleClickOutside = (event: MouseEvent) => {
     if (
@@ -1688,93 +2414,12 @@ const GridTujuankapal = () => {
     }
   };
 
-  const orderedColumns = useMemo(() => {
-    if (Array.isArray(columnsOrder) && columnsOrder.length > 0) {
-      // filter key columns dengan key yg ada di columnsWidth
-      const filteredColumns = columns.filter((col) =>
-        Object.prototype.hasOwnProperty.call(columnsWidth, col.key)
-      );
-      // Mapping dan filter untuk menghindari undefined
-      return columnsOrder
-        .map((orderIndex) => filteredColumns[orderIndex])
-        .filter((col) => col !== undefined);
-    }
-    return columns;
-  }, [columns, columnsOrder]);
-
-  // Update properti width pada setiap kolom berdasarkan state columnsWidth
-  const finalColumns = useMemo(() => {
-    return orderedColumns.map((col) => ({
-      ...col,
-      width: columnsWidth[col.key] ?? col.width
-    }));
-  }, [orderedColumns, columnsWidth]);
-
-  useEffect(() => {
-    loadGridConfig(
-      user.id,
-      'GridTujuankapal',
-      columns,
-      setColumnsOrder,
-      setColumnsWidth
-    );
-  }, []);
-
-  useEffect(() => {
-    setIsFirstLoad(true);
-  }, []);
-  useEffect(() => {
-    if (isFirstLoad && gridRef.current && rows.length > 0) {
-      setSelectedRow(0);
-      gridRef.current.selectCell({ rowIdx: 0, idx: 1 });
-      setIsFirstLoad(false);
-    }
-  }, [rows, isFirstLoad]);
-
-  useEffect(() => {
-    if (!allTujuankapal || isDataUpdated) return;
-
-    const newRows = allTujuankapal.data || [];
-
-    setRows((prevRows) => {
-      // Reset data if filter changes (first page)
-      if (currentPage === 1 || filters !== prevFilters) {
-        setCurrentPage(1); // Reset currentPage to 1
-        setFetchedPages(new Set([1])); // Reset fetchedPages to [1]
-        return newRows; // Use the fetched new rows directly
-      }
-
-      // Add new data to the bottom for infinite scroll
-      if (!fetchedPages.has(currentPage)) {
-        return [...prevRows, ...newRows];
-      }
-
-      return prevRows;
-    });
-
-    if (allTujuankapal.pagination.totalPages) {
-      setTotalPages(allTujuankapal.pagination.totalPages);
-    }
-
-    setHasMore(newRows.length === filters.limit);
-    setFetchedPages((prev) => new Set(prev).add(currentPage));
-    setPrevFilters(filters);
-  }, [allTujuankapal, currentPage, filters, isFetchingManually, isDataUpdated]);
-
   useEffect(() => {
     const headerCells = document.querySelectorAll('.rdg-header-row .rdg-cell');
     headerCells.forEach((cell) => {
       cell.setAttribute('tabindex', '-1');
     });
   }, []);
-  useEffect(() => {
-    if (gridRef.current && dataGridKey) {
-      setTimeout(() => {
-        gridRef.current?.selectCell({ rowIdx: 0, idx: 1 });
-        setIsFirstLoad(false);
-      }, 0);
-    }
-  }, [dataGridKey]);
   useEffect(() => {
     const preventScrollOnSpace = (event: KeyboardEvent) => {
       // Cek apakah target yang sedang fokus adalah input atau textarea
@@ -1805,28 +2450,31 @@ const GridTujuankapal = () => {
     };
   }, []);
 
+  // --- Reset Flag Transisi saat selesai
+  useEffect(() => {
+    if (!isTransitioning && !isFetching) {
+      setTimeout(() => {
+        hasAdjustedScrollRef.current = false;
+      }, 200);
+    }
+  }, [isTransitioning, isFetching]);
+
   useEffect(() => {
     const rowData = rows[selectedRow];
-
-    if (
-      selectedRow !== null &&
-      rows.length > 0 &&
-      mode !== 'add' // Only fill the form if not in addMode
-    ) {
-      forms.setValue('id', rowData?.id ? String(rowData?.id) : null);
+    if (selectedRow !== null && rows.length > 0 && mode !== 'add') {
+      forms.setValue('id', rowData?.id ?? '');
       forms.setValue('nama', rowData?.nama);
       forms.setValue('kode', rowData?.kode);
       forms.setValue('keterangan', rowData?.keterangan);
-      forms.setValue(
-        'cabang_id',
-        rowData?.cabang_id ? String(rowData?.cabang_id) : null
-      );
-      forms.setValue('namacabang', rowData?.namacabang);
+
+      forms.setValue('cabang_id', rowData?.cabang_id);
+      forms.setValue('cabang_nama', rowData?.cabang_nama);
+
       forms.setValue('statusaktif', rowData?.statusaktif ?? '');
-      forms.setValue('statusaktif_nama', rowData?.text || '');
+      forms.setValue('text', rowData?.text ?? '');
     }
-    // JANGAN forms.reset() saat mode 'add' di sini — resetAddForm() di handleAdd menanganinya
   }, [forms, selectedRow, rows, mode]);
+
   useEffect(() => {
     // Initialize the refs based on columns dynamically
     columns.forEach((col) => {
@@ -1835,14 +2483,45 @@ const GridTujuankapal = () => {
       }
     });
   }, []);
+
+  useEffect(() => {
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        clearError();
+        forms.reset(); // Reset the form when the Escape key is pressed
+        setMode(''); // Reset the mode to empty
+        setPopOver(false);
+        dispatch(clearOpenName());
+      }
+    };
+
+    // Add event listener for keydown when the component is mounted
+    document.addEventListener('keydown', handleEscape);
+
+    // Cleanup event listener when the component is unmounted or the effect is re-run
+    return () => {
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [forms]);
+
   useEffect(() => {
     return () => {
       debouncedFilterUpdate.cancel();
     };
   }, []);
+
   return (
     <div className={`flex h-[100%] w-full justify-center`}>
-      <div className="flex h-[100%] w-full flex-col rounded-sm border border-border bg-background">
+      <div
+        onKeyDownCapture={handleGridInputNavigationKeyDownCapture}
+        onWheelCapture={() => {
+          interactionModeRef.current = 'pointer';
+        }}
+        onPointerDownCapture={() => {
+          interactionModeRef.current = 'pointer';
+        }}
+        className="flex h-[100%] w-full flex-col rounded-sm border border-border bg-background"
+      >
         <div className="flex h-[38px] w-full flex-row items-center justify-between rounded-t-sm border-b border-border bg-background-grid-header px-2">
           <div className="flex flex-row items-center">
             <label htmlFor="" className="text-xs">
@@ -1908,7 +2587,7 @@ const GridTujuankapal = () => {
             <DraggableColumn
               defaultColumns={columns}
               saveColumns={finalColumns}
-              userId={user.id}
+              userId={String(user?.id)}
               gridName="GridTujuankapal"
               setColumnsOrder={setColumnsOrder}
               setColumnsWidth={setColumnsWidth}
@@ -1925,19 +2604,20 @@ const GridTujuankapal = () => {
           ref={gridRef}
           columns={finalColumns}
           rows={rows}
-          rowKeyGetter={rowKeyGetter}
           rowClass={getRowClass}
+          rowKeyGetter={rowKeyGetter}
           onCellClick={handleCellClick}
-          headerRowHeight={70}
-          rowHeight={30}
-          className={`${isDark ? 'rdg-dark' : 'rdg-light'} fill-grid`}
-          enableVirtualization={false}
-          onColumnResize={onColumnResize}
-          onColumnsReorder={onColumnsReorder}
-          onScroll={handleScroll}
           onSelectedCellChange={(args) => {
+            setSelectedCellKey(args.column.key);
             handleCellClick({ row: args.row });
           }}
+          headerRowHeight={HEADER_ROW_HEIGHT}
+          rowHeight={ROW_HEIGHT}
+          className={`${isDark ? 'rdg-dark' : 'rdg-light'} fill-grid`}
+          enableVirtualization={true}
+          onColumnResize={onColumnResize}
+          onColumnsReorder={onColumnsReorder}
+          onScroll={suppressScrollRef.current ? undefined : handleScroll}
           renderers={{
             noRowsFallback: <EmptyRowsRenderer />
           }}
@@ -1954,59 +2634,23 @@ const GridTujuankapal = () => {
             totalItems={
               allTujuankapal ? allTujuankapal.pagination.totalItems : 0
             }
+            startRow={startRow}
             customActions={[
               {
                 label: 'Print',
                 icon: <FaPrint />,
+                shortcut: 'P',
                 onClick: () => handleReport(),
                 className: 'bg-cyan-500 hover:bg-cyan-700'
+              },
+              {
+                label: 'Export',
+                icon: <FaFileExport />,
+                shortcut: 'X',
+                onClick: () => handleExportExcel(),
+                className: 'bg-green-600 hover:bg-green-700'
               }
             ]}
-            // customActions={[
-            //   {
-            //     label: 'Resequence',
-            //     icon: <FaPlus />, // Custom icon
-            //     onClick: () => handleResequence(),
-            //     variant: 'success', // Optional styling variant
-            //     className: 'bg-purple-700 hover:bg-purple-800' // Additional styling
-            //   }
-            // ]}
-            // dropdownMenus={[
-            //   {
-            //     label: 'Report',
-            //     icon: <FaPrint />,
-            //     className: 'bg-cyan-500 hover:bg-cyan-700',
-            //     actions: [
-            //       {
-            //         label: 'REPORT ALL',
-            //         onClick: () => handleReport(),
-            //         className: 'bg-cyan-500 hover:bg-cyan-700'
-            //       },
-            //       {
-            //         label: 'REPORT BY SELECT',
-            //         onClick: () => handleReportBySelect(),
-            //         className: 'bg-cyan-500 hover:bg-cyan-700'
-            //       }
-            //     ]
-            //   },
-            //   {
-            //     label: 'Export',
-            //     icon: <FaFileExport />,
-            //     className: 'bg-green-600 hover:bg-green-700',
-            //     actions: [
-            //       {
-            //         label: 'EXPORT ALL',
-            //         onClick: () => handleExport(),
-            //         className: 'bg-green-600 hover:bg-green-700'
-            //       },
-            //       {
-            //         label: 'EXPORT BY SELECT',
-            //         onClick: () => handleExportBySelect(),
-            //         className: 'bg-green-600 hover:bg-green-700'
-            //       }
-            //     ]
-            //   }
-            // ]}
           />
           {isLoadingTujuankapal ? <LoadRowsRenderer /> : null}
           {contextMenu && (
@@ -2025,11 +2669,11 @@ const GridTujuankapal = () => {
             >
               <Button
                 variant="default"
-                // onClick={resetGridConfig}
                 onClick={() => {
                   resetGridConfig(
-                    user.id,
+                    String(user?.id),
                     'GridTujuankapal',
+
                     columns,
                     setColumnsOrder,
                     setColumnsWidth
@@ -2045,15 +2689,18 @@ const GridTujuankapal = () => {
           )}
         </div>
       </div>
-      <FormTujuanKapal
+      <FormTujuankapal
+        key={addFormKey}
         popOver={popOver}
         handleClose={handleClose}
         setPopOver={setPopOver}
         isLoadingUpdate={isLoadingUpdate}
         isLoadingDelete={isLoadingDelete}
         forms={forms}
-        mode={mode}
-        onSubmit={forms.handleSubmit(onSubmit as any)}
+        mode={mode as any}
+        onSubmit={(keepOpenModal: boolean) =>
+          forms.handleSubmit((values) => onSubmit(values, keepOpenModal))()
+        }
         isLoadingCreate={isLoadingCreate}
       />
     </div>

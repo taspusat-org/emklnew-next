@@ -18,6 +18,18 @@ import { Textarea } from '@/components/ui/textarea';
 import { IoMdClose } from 'react-icons/io';
 import { setSubmitClicked } from '@/lib/store/lookupSlice/lookupSlice';
 
+interface FormatTujuankapalProps {
+  popOver: boolean;
+  setPopOver: (value: boolean) => void;
+  forms: any;
+  onSubmit: any;
+  mode: any;
+  handleClose: () => void;
+  isLoadingCreate: boolean;
+  isLoadingUpdate: boolean;
+  isLoadingDelete: boolean;
+}
+
 const FormTujuanKapal = ({
   popOver,
   setPopOver,
@@ -28,20 +40,25 @@ const FormTujuanKapal = ({
   isLoadingCreate,
   isLoadingUpdate,
   isLoadingDelete
-}: any) => {
+}: FormatTujuankapalProps) => {
+  const formRef = useRef<HTMLFormElement | null>(null); // Ref untuk form
+  const openName = useSelector((state: RootState) => state.lookup.openName);
+  const dispatch = useDispatch();
+
   const lookUpPropsCabang = [
     {
-      columns: [{ key: 'nama', name: 'NAMACABANG' }],
+      columns: [{ key: 'nama', name: 'NAMA CABANG' }],
       // filterby: { class: 'system', method: 'get' },
       labelLookup: 'CABANG LOOKUP',
+      required: false,
       selectedRequired: false,
       endpoint: 'cabang',
-      label: 'NAMACABANG',
+      label: 'NAMA CABANG',
       singleColumn: true,
       pageSize: 20,
-      dataToPost: 'id',
       showOnButton: true,
-      postData: 'nama'
+      postData: 'nama',
+      dataToPost: 'id'
     }
   ];
   const lookUpPropsStatusAktif = [
@@ -60,86 +77,6 @@ const FormTujuanKapal = ({
       postData: 'text'
     }
   ];
-  const formRef = useRef<HTMLFormElement | null>(null); // Ref untuk form
-  const openName = useSelector((state: RootState) => state.lookup.openName);
-  const dispatch = useDispatch();
-  useEffect(() => {
-    // Fungsi untuk menangani pergerakan fokus berdasarkan tombol
-    const handleKeyDown = (event: KeyboardEvent) => {
-      // Jika popOverDate ada nilainya, jangan lakukan apa-apa
-      if (openName) {
-        return;
-      }
-
-      const form = formRef.current;
-
-      if (!form) return;
-
-      const inputs = Array.from(
-        form.querySelectorAll('input, select, textarea, button')
-      ).filter(
-        (element) =>
-          element.id !== 'image-dropzone' &&
-          element.tagName !== 'BUTTON' &&
-          !element.hasAttribute('readonly') // Pengecualian jika input readonly
-      ) as HTMLElement[]; // Ambil semua input dalam form kecuali button dan readonly inputs
-
-      const focusedElement = document.activeElement as HTMLElement;
-
-      // Cek apakah elemen yang difokuskan adalah dropzone
-      const isImageDropzone =
-        document.querySelector('input#image-dropzone') === focusedElement;
-      const isFileInput =
-        document.querySelector('input#file-input') === focusedElement;
-
-      if (isImageDropzone || isFileInput) return; // Jangan pindah fokus jika elemen fokus adalah dropzone atau input file
-
-      let nextElement: HTMLElement | null = null;
-
-      if (event.key === 'ArrowDown' || event.key === 'Tab') {
-        nextElement = getNextFocusableElement(inputs, focusedElement, 'down');
-        if (event.key === 'Tab') {
-          event.preventDefault(); // Cegah default tab behavior jika ingin mengontrol pergerakan fokus
-        }
-      } else if (
-        event.key === 'ArrowUp' ||
-        (event.shiftKey && event.key === 'Tab')
-      ) {
-        nextElement = getNextFocusableElement(inputs, focusedElement, 'up');
-      }
-      // Jika ditemukan input selanjutnya, pindahkan fokus
-      if (nextElement) {
-        nextElement.focus();
-      }
-    };
-
-    // Fungsi untuk mendapatkan elemen input selanjutnya berdasarkan arah (down atau up)
-    const getNextFocusableElement = (
-      inputs: HTMLElement[],
-      currentElement: HTMLElement,
-      direction: 'up' | 'down'
-    ): HTMLElement | null => {
-      const index = Array.from(inputs).indexOf(currentElement as any);
-
-      if (direction === 'down') {
-        // Jika sudah di input terakhir, tidak perlu pindah fokus
-        if (index === inputs.length - 1) {
-          return null; // Tidak ada elemen selanjutnya
-        }
-        return inputs[index + 1]; // Fokus pindah ke input setelahnya
-      } else {
-        return inputs[index - 1]; // Fokus pindah ke input sebelumnya
-      }
-    };
-
-    // Menambahkan event listener untuk keydown
-    document.addEventListener('keydown', handleKeyDown);
-
-    // Membersihkan event listener ketika komponen tidak lagi digunakan
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [openName]); // Tambahkan popOverDate sebagai dependensi
 
   return (
     <Dialog open={popOver} onOpenChange={setPopOver}>
@@ -249,27 +186,33 @@ const FormTujuanKapal = ({
                       </FormItem>
                     )}
                   />
-                  <div className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
-                    <div className="w-full lg:w-[15%]">
-                      <FormLabel className="text-sm font-semibold">
-                        Nama Cabang
-                      </FormLabel>
-                    </div>
-                    <div className="w-full lg:w-[85%]">
-                      {lookUpPropsCabang.map((props, index) => (
-                        <LookUp
-                          key={index}
-                          {...props}
-                          lookupValue={(id) =>
-                            forms.setValue('cabang_id', id ? String(id) : null)
-                          }
-                          inputLookupValue={forms.getValues('cabang_id')}
-                          lookupNama={forms.getValues('namacabang')}
-                          disabled={mode === 'view' || mode === 'delete'}
-                        />
-                      ))}
-                    </div>
-                  </div>
+
+                  <FormField
+                    name="cabang_nama"
+                    control={forms.control}
+                    render={({ field }) => (
+                      <FormItem className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
+                        <FormLabel className="text-sm font-semibold lg:w-[15%]">
+                          Nama Cabang
+                        </FormLabel>
+                        <div className="flex flex-col lg:w-[85%]">
+                          {lookUpPropsCabang.map((props, index) => (
+                            <LookUp
+                              key={index}
+                              {...props}
+                              lookupValue={(id) =>
+                                forms.setValue('cabang_id', id)
+                              }
+                              lookupNama={forms.getValues('cabang_nama')}
+                              disabled={mode === 'view' || mode === 'delete'}
+                            />
+                          ))}
+                          <FormMessage />
+                        </div>
+                      </FormItem>
+                    )}
+                  />
+
                   <div className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
                     <div className="w-full lg:w-[15%]">
                       <FormLabel
@@ -285,10 +228,12 @@ const FormTujuanKapal = ({
                           key={index}
                           {...props}
                           lookupValue={(id) =>
-                            forms.setValue('statusaktif', id, { shouldValidate: true })
+                            forms.setValue('statusaktif', id, {
+                              shouldValidate: true
+                            })
                           }
                           inputLookupValue={forms.getValues('statusaktif')}
-                          lookupNama={forms.getValues('statusaktif_nama')}
+                          lookupNama={forms.getValues('text')}
                           disabled={mode === 'view' || mode === 'delete'}
                         />
                       ))}
