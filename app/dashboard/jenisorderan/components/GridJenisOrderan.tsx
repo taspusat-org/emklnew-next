@@ -111,6 +111,16 @@ interface Filter {
   sortDirection: 'asc' | 'desc';
 }
 
+const emptyFilters = {
+  nama: '',
+  keterangan: '',
+  statusaktif: '',
+  format_nama: '',
+  modifiedby: '',
+  created_at: '',
+  updated_at: ''
+};
+
 const GridJenisOrderan = () => {
   const { theme, resolvedTheme } = useTheme();
   const isDark = theme === 'dark' || resolvedTheme === 'dark';
@@ -2556,6 +2566,7 @@ const GridJenisOrderan = () => {
   };
 
   useEffect(() => {
+    const rowData = rows[selectedRow];
     if (selectedRow !== null && rows.length > 0 && mode !== 'add') {
       forms.setValue('id', rowData?.id ?? '');
       forms.setValue('uuid', rowData?.uuid);
