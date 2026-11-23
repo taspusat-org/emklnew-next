@@ -84,10 +84,11 @@ import {
 } from '@/lib/utils';
 
 import { getDivisiFn } from '@/lib/apis/divisi.api';
-import { useReportProgress } from '@/components/custom-ui/ReportProgressProvider';
-import { loadStimulsoftScript } from '@/lib/loadStimulsoft';
 import { useReportPdfContext } from '@/hooks/ReportPdfProvider';
-import { generateDivisiExportFn } from '@/lib/apis/report.api';
+import {
+  generateDivisiExportFn,
+  generateDivisiReportFn
+} from '@/lib/apis/report.api';
 
 interface Filter {
   page: number;
@@ -145,8 +146,7 @@ const GridDivisi = () => {
   const pendingSelectIdxRef = useRef<number>(1); // default ke idx 1 (skip nomor/select)
   const suppressScrollRef = useRef(false);
   const isPageTransitionRef = useRef(false);
-  const { start } = useReportProgress();
-  const { generateExport } = useReportPdfContext();
+  const { generateReport, generateExport } = useReportPdfContext();
 
   const lastScrollTopRef = useRef<number>(0);
   const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -1826,83 +1826,20 @@ const GridDivisi = () => {
   };
 
   const handleReport = async () => {
-    const job = start('Divisi', 'pdf');
-
-    try {
-      job.fetching();
-      const now = new Date();
-      const pad = (n: any) => n.toString().padStart(2, '0');
-      const tglcetak = `${pad(now.getDate())}-${pad(
-        now.getMonth() + 1
-      )}-${now.getFullYear()} ${pad(now.getHours())}:${pad(
-        now.getMinutes()
-      )}:${pad(now.getSeconds())}`;
-
-      const { page, limit, ...filtersWithoutLimit } = filters;
-      const response = await getDivisiFn(filtersWithoutLimit);
-
-      const reportRows = response.data.map((row) => ({
-        ...row,
-        judullaporan: 'Laporan Divisi',
-        usercetak: user.username,
-        tglcetak,
-        judul: 'PT.TRANSPORINDO AGUNG SEJAHTERA'
-      }));
-      sessionStorage.setItem(
-        'filtersWithoutLimit',
-        JSON.stringify(filtersWithoutLimit)
-      );
-
-      job.rendering();
-      await loadStimulsoftScript();
-      const Stimulsoft = (window as any).Stimulsoft;
-      Stimulsoft.Base.StiFontCollection.addOpentypeFontFile(
-        '/fonts/tahoma.ttf',
-        'Tahoma'
-      );
-
-      Stimulsoft.Base.StiFontCollection.addOpentypeFontFile(
-        '/fonts/tahomabd.ttf',
-        'Tahoma'
-      );
-      Stimulsoft.Base.StiLicense.Key =
-        '6vJhGtLLLz2GNviWmUTrhSqnOItdDwjBylQzQcAOiHksEid1Z5nN/hHQewjPL/4/AvyNDbkXgG4Am2U6dyA8Ksinqp' +
-        '6agGqoHp+1KM7oJE6CKQoPaV4cFbxKeYmKyyqjF1F1hZPDg4RXFcnEaYAPj/QLdRHR5ScQUcgxpDkBVw8XpueaSFBs' +
-        'JVQs/daqfpFiipF1qfM9mtX96dlxid+K/2bKp+e5f5hJ8s2CZvvZYXJAGoeRd6iZfota7blbsgoLTeY/sMtPR2yutv' +
-        'gE9TafuTEhj0aszGipI9PgH+A/i5GfSPAQel9kPQaIQiLw4fNblFZTXvcrTUjxsx0oyGYhXslAAogi3PILS/DpymQQ' +
-        '0XskLbikFsk1hxoN5w9X+tq8WR6+T9giI03Wiqey+h8LNz6K35P2NJQ3WLn71mqOEb9YEUoKDReTzMLCA1yJoKia6Y' +
-        'JuDgUf1qamN7rRICPVd0wQpinqLYjPpgNPiVqrkGW0CQPZ2SE2tN4uFRIWw45/IITQl0v9ClCkO/gwUtwtuugegrqs' +
-        'e0EZ5j2V4a1XDmVuJaS33pAVLoUgK0M8RG72';
-
-      const report = new Stimulsoft.Report.StiReport();
-      const dataSet = new Stimulsoft.System.Data.DataSet('Data');
-      report.loadFile('/reports/LaporanDivisi.mrt');
-      report.dictionary.dataSources.clear();
-      dataSet.readJson({ data: reportRows });
-      report.regData(dataSet.dataSetName, '', dataSet);
-      report.dictionary.synchronize();
-
-      await new Promise<void>((resolve, reject) => {
-        report.renderAsync(() => {
-          job.exporting();
-          report.exportDocumentAsync((pdfData: any) => {
-            try {
-              const blob = new Blob([new Uint8Array(pdfData)], {
-                type: 'application/pdf'
-              });
-              sessionStorage.setItem('pdfUrl', URL.createObjectURL(blob));
-              job.finish(() => window.open('/reports/divisi', '_blank'));
-              resolve();
-            } catch (err) {
-              reject(err);
-            }
-          }, Stimulsoft.Report.StiExportFormat.Pdf);
-        });
-      });
-    } catch (err) {
-      job.fail('Gagal membuat laporan PDF');
-      console.error('[handleReport PDF]', err);
-    }
+    await generateReport({
+      label: 'Divisi',
+      payload: {
+        mrtName: 'LaporanDivisi.mrt',
+        search: filters.search,
+        filters: filters.filters,
+        sortBy: filters.sortBy,
+        sortDirection: filters.sortDirection,
+        judullaporan: 'Laporan Divisi'
+      },
+      apiFn: generateDivisiReportFn,
+      // Tombol Export di viewer memakai filter grid yang sama.
+      onExport: () => handleExportExcel()
+    });
   };
 
   document.querySelectorAll('.column-headers').forEach((element) => {
