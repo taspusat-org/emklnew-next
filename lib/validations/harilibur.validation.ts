@@ -19,7 +19,10 @@ export const HariliburSchema = z.object({
   keterangan: z
     .string()
     .nonempty({ message: dynamicRequiredMessage('KETERANGAN') }),
-  statusaktif: z.string().nullable().optional(),
+
+  statusaktif: z.string().min(1, { message: REQUIRED_FIELD }),
+  text: z.string().nullable().optional(),
+
   cabang_id: z.string().nonempty({ message: dynamicRequiredMessage('CABANG') }),
   cabang_nama: z.string().nullable().optional()
 });
