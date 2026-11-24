@@ -13,6 +13,7 @@ import { Input } from '@/components/ui/input';
 import { RootState } from '@/lib/store/store';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
+import { NOMOR_CELL_BOX } from '@/constants/constant';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useAlert } from '@/lib/store/client/useAlert';
 import { LoadRowsRenderer } from '@/components/LoadRows';
@@ -592,76 +593,73 @@ const GridBlHeader = () => {
       {
         key: 'nomor',
         name: 'NO',
-        width: 50,
+        width: 40,
         headerCellClass: 'column-headers',
-        renderHeaderCell: (column: any) => (
-          <div className="flex h-full flex-col items-center gap-1">
-            <div className="headers-cell h-[50%] items-center justify-center text-center">
-              <p className="text-sm font-normal">No.</p>
+        renderHeaderCell: () => (
+          // gap-1 WAJIB sama dengan kolom lain: dua anak h-[50%] + gap 4px
+          // melebihi tinggi container, keduanya menyusut 2px, dan garis bawah
+          // baris judul berhenti di H/2-2.
+          <div className="flex h-full w-full flex-col gap-1">
+            <div className="headers-cell h-[50%] w-full">
+              <p className="w-full text-center text-sm font-normal">No.</p>
             </div>
 
-            <div
-              className="flex h-[50%] w-full cursor-pointer items-center justify-center"
-              onClick={() => {
-                setFilters({
-                  ...filters,
-                  search: '',
-                  filters: {
-                    ...filterBlHeader
-                  }
-                }),
-                  setInputValue('');
-                setTimeout(() => {
-                  gridRef?.current?.selectCell({ rowIdx: 0, idx: 1 });
-                }, 0);
-              }}
-            >
-              <FaTimes className="bg-red-500 text-white" />
+            <div className={`h-[50%] w-[calc(100%+2px)] ${NOMOR_CELL_BOX}`}>
+              <div className="flex justify-center">
+                <Checkbox
+                  checked={isAllSelected}
+                  onCheckedChange={() => handleSelectAll()}
+                  id="header-checkbox"
+                />
+              </div>
+              <div
+                className="flex cursor-pointer items-center justify-center"
+                onClick={() => {
+                  setFilters({
+                    ...filters,
+                    search: '',
+                    filters: {
+                      ...filterBlHeader
+                    }
+                  }),
+                    setInputValue('');
+                  setTimeout(() => {
+                    gridRef?.current?.selectCell({ rowIdx: 0, idx: 1 });
+                  }, 0);
+                }}
+              >
+                <FaTimes className="bg-red-500 text-white" />
+              </div>
             </div>
           </div>
         ),
         renderCell: (props: any) => {
-          const localIndex = rows.findIndex((row) => row.id === props.row.id);
+          // Nomor ABSOLUT, bukan index dalam window. `rows` hanya memuat
+          // WINDOW_SIZE halaman yang sedang terlihat, jadi index lokal akan
+          // mengulang dari 1 tiap kali window bergeser.
+          const rowId = props.row.id;
+          const localIndex = rows.findIndex((row) => row.id === rowId);
           const absoluteNumber =
             localIndex === -1
               ? '—'
               : (minVisiblePage - 1) * filters.limit + localIndex + 1;
           return (
-            <div className="flex h-full w-full cursor-pointer items-center justify-center text-sm">
-              {absoluteNumber}
+            <div
+              className={`-ml-[5px] h-full w-[calc(100%+9px)] cursor-pointer ${NOMOR_CELL_BOX}`}
+            >
+              <div className="flex justify-center">
+                <Checkbox
+                  checked={checkedRows.has(rowId)}
+                  onCheckedChange={() => handleRowSelect(rowId)}
+                  id={`row-checkbox-${rowId}`}
+                />
+              </div>
+              <div className="flex justify-center text-sm">
+                {absoluteNumber}
+              </div>
             </div>
           );
         }
-      },
-      {
-        key: 'select',
-        name: '',
-        width: 50,
-        resizable: true,
-        draggable: true,
-        headerCellClass: 'column-headers',
-        renderHeaderCell: (column: any) => (
-          <div className="flex h-full cursor-pointer flex-col items-center gap-1">
-            <div className="headers-cell h-[50%]"></div>
-            <div className="flex h-[50%] w-full items-center justify-center">
-              <Checkbox
-                checked={isAllSelected}
-                onCheckedChange={() => handleSelectAll()}
-                id="header-checkbox"
-                className="mb-2"
-              />
-            </div>
-          </div>
-        ),
-        renderCell: ({ row }: { row: BlHeader }) => (
-          <div className="flex h-full items-center justify-center">
-            <Checkbox
-              checked={checkedRows.has(row.id)}
-              onCheckedChange={() => handleRowSelect(row.id)}
-              id={`row-checkbox-${row.id}`}
-            />
-          </div>
-        )
       },
       {
         key: 'nobukti',
@@ -1717,86 +1715,6 @@ const GridBlHeader = () => {
       onExport: () => handleExportExcel(filtersWithoutLimit)
     });
   };
-
-  // const handleReport = async () => {
-  //   if (checkedRows.size === 0) {
-  //     alert({
-  //       title: 'PILIH DATA YANG INGIN DI CETAK!',
-  //       variant: 'danger',
-  //       submitText: 'OK'
-  //     });
-  //     return; // Stop execution if no rows are selected
-  //   }
-  //   if (checkedRows.size > 1) {
-  //     alert({
-  //       title: 'HANYA BISA MEMILIH SATU DATA!',
-  //       variant: 'danger',
-  //       submitText: 'OK'
-  //     });
-  //     return; // Stop execution if no rows are selected
-  //   }
-
-  //   const rowId = Array.from(checkedRows)[0];
-
-  //   try {
-  //     dispatch(setProcessing()); // Show loading overlay when the request starts
-
-  //     const now = new Date();
-  //     const pad = (n: any) => n.toString().padStart(2, '0');
-  //     const tglcetak = `${pad(now.getDate())}-${pad(
-  //       now.getMonth() + 1
-  //     )}-${now.getFullYear()} ${pad(now.getHours())}:${pad(
-  //       now.getMinutes()
-  //     )}:${pad(now.getSeconds())}`;
-
-  //     const { page, limit, ...filtersWithoutLimit } = filters;
-  //     const response = await getBlHeaderByIdFn(rowId);
-
-  //     if (response.data === null || response.data.length === 0) {
-  //       alert({
-  //         title: 'DATA TIDAK TERSEDIA!',
-  //         variant: 'danger',
-  //         submitText: 'OK'
-  //       });
-  //     } else {
-  //       const reportRows = response.data.map((row: any) => ({
-  //         ...row,
-  //         judullaporan: 'PT. TRANSPORINDO AGUNG SEJAHTERA',
-  //         usercetak: user.username,
-  //         tglcetak,
-  //         judul: `BILL OF LADING`,
-  //       }));
-
-  //       // const merged = detail.flatMap((item: any) =>
-  //       //   (item.rincian || []).map((rincian: any) => ({
-  //       //     ...item,
-  //       //     rincian_id: rincian.id,
-  //       //     rincian_comodity: rincian.comodity,
-  //       //     rincian_keterangan: rincian.keterangan,
-  //       //     rincian_nocontainer: rincian.nocontainer,
-  //       //     rincian_noseal: rincian.noseal,
-  //       //     rincian_orderan_muatan: rincian.orderanmuatan_nobukti,
-  //       //     rincian_shipper_nama: rincian.shipper_nama,
-  //       //     rincian_shippinginstructiondetail_id: rincian.shippinginstructiondetail_id,
-  //       //     rincian_shippinginstructiondetail_nobukti: rincian.shippinginstructiondetail_nobukti
-  //       //   }))
-  //       // );
-
-  //       dispatch(setReportData(reportRows));
-  //       // dispatch(setDetailDataReport(merged));
-  //       window.open('/reports/designer', '_blank');
-  //     }
-  //   } catch (error) {
-  //     console.error('Error generating report:', error);
-  //     alert({
-  //       title: 'Terjadi kesalahan saat memuat data!',
-  //       variant: 'danger',
-  //       submitText: 'OK'
-  //     });
-  //   } finally {
-  //     dispatch(setProcessed()); // Hide loading overlay when the request is finished
-  //   }
-  // };
 
   const onSuccess = async (
     indexOnPage: any,

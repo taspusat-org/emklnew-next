@@ -452,6 +452,38 @@ export const generateShipperExportFn = async (
   return response.data;
 };
 
+/** Cetak Laporan Daftar BL di background — lihat generateAlatbayarReportFn. */
+export const generateDaftarblReportFn = async (
+  payload: ReportJobPayload
+): Promise<ReportJobResponse> => {
+  const response = await api2.post('/daftarbl/report', payload);
+  return response.data;
+};
+
+/** Cetak Laporan Divisi di background — lihat generateAlatbayarReportFn. */
+export const generateDivisiReportFn = async (
+  payload: ReportJobPayload
+): Promise<ReportJobResponse> => {
+  const response = await api2.post('/divisi/report', payload);
+  return response.data;
+};
+
+/** Cetak Laporan Jenis Orderan di background — lihat generateAlatbayarReportFn. */
+export const generateJenisOrderanReportFn = async (
+  payload: ReportJobPayload
+): Promise<ReportJobResponse> => {
+  const response = await api2.post('/jenisorderan/report', payload);
+  return response.data;
+};
+
+/** Cetak Estimasi Biaya di background — lihat generateAlatbayarReportFn. */
+export const generateEstimasiBiayaReportFn = async (
+  payload: ReportJobPayload
+): Promise<ReportJobResponse> => {
+  const response = await api2.post('/estimasibiayaheader/report', payload);
+  return response.data;
+};
+
 /** Export Excel Shipper  di background — lihat generateAlatbayarExportFn. */
 export const generateKapalExportFn = async (
   payload: ExportJobPayload
