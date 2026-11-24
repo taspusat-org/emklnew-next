@@ -140,6 +140,20 @@ export const generateBlHeaderReportFn = async (
   return response.data;
 };
 
+export const generateKapalReportFn = async (
+  payload: ReportByIdJobPayload
+): Promise<ReportJobResponse> => {
+  const response = await api2.post('/kapal/report', payload);
+  return response.data;
+};
+
+export const generateJenissealReportFn = async (
+  payload: ReportByIdJobPayload
+): Promise<ReportJobResponse> => {
+  const response = await api2.post('/jenisseal/report', payload);
+  return response.data;
+};
+
 export interface ExportJobPayload {
   search?: string;
   filters?: Record<string, string | number | null>;
@@ -435,5 +449,20 @@ export const generateShipperExportFn = async (
   payload: ExportJobPayload
 ): Promise<ReportJobResponse> => {
   const response = await api2.post('/shipper/export', payload);
+  return response.data;
+};
+
+/** Export Excel Shipper  di background — lihat generateAlatbayarExportFn. */
+export const generateKapalExportFn = async (
+  payload: ExportJobPayload
+): Promise<ReportJobResponse> => {
+  const response = await api2.post('/kapal/export', payload);
+  return response.data;
+};
+
+export const generateJenissealExportFn = async (
+  payload: ExportJobPayload
+): Promise<ReportJobResponse> => {
+  const response = await api2.post('/jenisseal/export', payload);
   return response.data;
 };

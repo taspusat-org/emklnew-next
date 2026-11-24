@@ -21,7 +21,7 @@ import { ImSpinner2 } from 'react-icons/im';
 import ActionButton from '@/components/custom-ui/ActionButton';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import FormBank from './FormHarilibur';
+import FormHarilibur from './FormHarilibur';
 import { useQueryClient } from 'react-query';
 import {
   HariliburInput,
@@ -322,7 +322,7 @@ const GridHarilibur = () => {
                       created_at: '',
                       updated_at: '',
                       statusaktif: '',
-                      text: 'AKTIF'
+                      text: ''
                     }
                   }),
                     setInputValue('');
@@ -2402,7 +2402,7 @@ const GridHarilibur = () => {
       forms.setValue('cabang_nama', rowData?.cabang_nama);
 
       forms.setValue('statusaktif', rowData?.statusaktif ?? '');
-      // forms.setValue('text', rowData?.text ?? '');
+      forms.setValue('text', rowData?.text ?? '');
     }
   }, [forms, selectedRow, rows, mode]);
 
@@ -2617,7 +2617,7 @@ const GridHarilibur = () => {
           )}
         </div>
       </div>
-      <FormBank
+      <FormHarilibur
         key={addFormKey}
         popOver={popOver}
         handleClose={handleClose}
