@@ -2401,9 +2401,9 @@ const GridScheduleHeader = () => {
   useEffect(() => {
     if (rows.length > 0 && selectedRow !== null) {
       const selectedRowData = rows[selectedRow];
-      if (selectedRowData?.id !== lastDispatchedId.current) {
+      if (selectedRowData && selectedRowData.id !== lastDispatchedId.current) {
         dispatch(setHeaderData(selectedRowData));
-        lastDispatchedId.current = selectedRowData?.id;
+        lastDispatchedId.current = selectedRowData.id;
       }
       headerClearedRef.current = false;
       return;
@@ -2521,6 +2521,8 @@ const GridScheduleHeader = () => {
   useEffect(() => {
     if (selectedRow !== null && rows.length > 0 && mode !== 'add') {
       const row = rows[selectedRow];
+      // Setelah baris terbawah dihapus, index lama menunjuk keluar `rows` sampai Row Combiner memindah fokus.
+      if (!row) return;
 
       forms.setValue('nobukti', row.nobukti);
       forms.setValue('tglbukti', row.tglbukti);
