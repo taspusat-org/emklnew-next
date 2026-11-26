@@ -24,6 +24,7 @@ import { useDispatch } from 'react-redux';
 import { useTheme } from 'next-themes';
 import InputDateTimePicker from '@/components/custom-ui/InputDateTimePicker';
 import { EmptyRowsRenderer } from '@/components/EmptyRows';
+import { useShiftWheelScroll } from '@/hooks/useShiftWheelScroll';
 
 // id 0 = penanda baris baru untuk backend. FK-nya sengaja string kosong, bukan
 // 0: kolomnya varchar UUID, dan '' yang membuat validasi "WAJIB DIISI" berbunyi.
@@ -78,6 +79,7 @@ const FormSchedule = ({
 
   const dispatch = useDispatch();
   const gridRef = useRef<DataGridHandle>(null);
+  const shiftWheelRef = useShiftWheelScroll();
   const formRef = useRef<HTMLFormElement | null>(null); // Ref untuk form
   const openName = useSelector((state: RootState) => state.lookup.openName);
   const headerData = useSelector((state: RootState) => state.header.headerData);
@@ -155,6 +157,11 @@ const FormSchedule = ({
   };
 
   const inputStopPropagation = (e: React.KeyboardEvent) => {
+    e.stopPropagation();
+  };
+
+  // Tanpa ini klik pertama sampai ke sel, lalu grid memfokuskan sel dan merebut fokus dari input.
+  const stopCellSelect = (e: React.MouseEvent) => {
     e.stopPropagation();
   };
 
@@ -439,7 +446,7 @@ const FormSchedule = ({
             {props.row.isAddRow ? (
               ''
             ) : (
-              <div className="flex flex-col lg:w-full">
+              <div className="flex flex-col lg:w-full" onClick={stopCellSelect}>
                 <FormControl>
                   <InputDatePicker
                     value={props.row.tglberangkat}
@@ -483,7 +490,10 @@ const FormSchedule = ({
               {props.row.isAddRow ? (
                 ''
               ) : (
-                <div className="flex flex-col lg:w-full">
+                <div
+                  className="flex flex-col lg:w-full"
+                  onClick={stopCellSelect}
+                >
                   <FormControl>
                     <InputDatePicker
                       value={props.row.tgltiba}
@@ -527,7 +537,10 @@ const FormSchedule = ({
               {props.row.isAddRow ? (
                 ''
               ) : (
-                <div className="flex flex-col lg:w-full">
+                <div
+                  className="flex flex-col lg:w-full"
+                  onClick={stopCellSelect}
+                >
                   <FormControl>
                     <InputDatePicker
                       value={props.row.etb}
@@ -567,7 +580,10 @@ const FormSchedule = ({
               {props.row.isAddRow ? (
                 ''
               ) : (
-                <div className="flex flex-col lg:w-full">
+                <div
+                  className="flex flex-col lg:w-full"
+                  onClick={stopCellSelect}
+                >
                   <FormControl>
                     <InputDatePicker
                       value={props.row.eta}
@@ -607,7 +623,10 @@ const FormSchedule = ({
               {props.row.isAddRow ? (
                 ''
               ) : (
-                <div className="flex flex-col lg:w-full">
+                <div
+                  className="flex flex-col lg:w-full"
+                  onClick={stopCellSelect}
+                >
                   <FormControl>
                     <InputDatePicker
                       value={props.row.etd}
@@ -727,7 +746,10 @@ const FormSchedule = ({
               {props.row.isAddRow ? (
                 ''
               ) : (
-                <div className="flex flex-col lg:w-full">
+                <div
+                  className="flex flex-col lg:w-full"
+                  onClick={stopCellSelect}
+                >
                   <FormControl>
                     <InputDateTimePicker
                       value={props.row.closing} // '' saat kosong
@@ -773,7 +795,10 @@ const FormSchedule = ({
               {props.row.isAddRow ? (
                 ''
               ) : (
-                <div className="flex flex-col lg:w-full">
+                <div
+                  className="flex flex-col lg:w-full"
+                  onClick={stopCellSelect}
+                >
                   <FormControl>
                     <InputDatePicker
                       value={props.row.etatujuan}
@@ -817,7 +842,10 @@ const FormSchedule = ({
               {props.row.isAddRow ? (
                 ''
               ) : (
-                <div className="flex flex-col lg:w-full">
+                <div
+                  className="flex flex-col lg:w-full"
+                  onClick={stopCellSelect}
+                >
                   <FormControl>
                     <InputDatePicker
                       value={props.row.etdtujuan}
@@ -1141,7 +1169,7 @@ const FormSchedule = ({
                       </FormItem>
                     )}
                   />
-                  <div className="h-[500px] min-h-[500px]">
+                  <div ref={shiftWheelRef} className="h-[500px] min-h-[500px]">
                     <div className="flex h-[100%] w-full flex-col rounded-sm border border-border bg-background">
                       <div className="flex h-[38px] w-full flex-row items-center rounded-t-sm border-b border-border bg-background-grid-header px-2"></div>
 

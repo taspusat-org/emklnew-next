@@ -74,6 +74,11 @@ const DATETIME_12H_MASK: Array<RegExp | string> = [
 // Placeholder mask netral (biar user bebas isi AM/PM)
 const MASK_PLACEHOLDER = 'DD-MM-YYYY HH:MM AM';
 
+const timeButtonClass = (selected: boolean) =>
+  `aspect-square shrink-0 sm:w-full ${
+    selected ? '' : 'hover:bg-background-input-focus hover:text-input-text'
+  }`;
+
 function tryParse(value: string, dateFmt: string): Date | null {
   if (!value || !value.trim()) return null;
 
@@ -351,17 +356,17 @@ const InputDateTimePicker = forwardRef<
     return (
       <div
         className={`relative flex items-center rounded-sm border border-input-border focus-within:border-input-border-focus ${
-          disabled ? 'pointer-events-none opacity-70' : ''
+          disabled ? 'pointer-events-none' : ''
         } ${className}`}
       >
         <InputMask
           ref={setRefs as any}
           {...rest}
           mask={mask}
-          className={`h-9 w-full rounded-sm px-3 text-sm text-input-text focus:bg-background-input-focus focus:outline-none focus:ring-0 ${
+          className={`h-9 w-full rounded-sm bg-background-input px-3 text-sm focus:bg-background-input-focus focus:outline-none focus:ring-0 ${
             disabled
-              ? 'cursor-not-allowed bg-background-input text-input-text-disabled'
-              : ''
+              ? 'cursor-not-allowed bg-background-input-disabled text-input-text-disabled'
+              : 'text-input-text'
           }`}
           maskPlaceholder={
             showTime ? MASK_PLACEHOLDER : dateFormat.toUpperCase()
@@ -391,11 +396,11 @@ const InputDateTimePicker = forwardRef<
           }}
         />
 
-        {clearable && (value || inputText) && (
+        {clearable && !disabled && (value || inputText) && (
           <button
             type="button"
             aria-label="Clear date"
-            className="absolute right-9 mr-1 rounded p-1 text-xs text-zinc-600 hover:bg-zinc-100"
+            className="absolute right-9 mr-1 rounded p-1 text-xs text-input-text hover:bg-background-input-focus"
             onClick={clear}
           >
             ✕
@@ -408,17 +413,17 @@ const InputDateTimePicker = forwardRef<
               <button
                 type="button"
                 disabled={disabled}
-                className={`ml-1 flex h-9 w-9 items-center justify-center border ${
+                className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-r-sm border ${
                   disabled
                     ? 'cursor-not-allowed bg-background-input-disabled text-input-text-disabled'
-                    : 'cursor-pointer border-[#adcdff] bg-[#e0ecff] text-[#0e2d5f] hover:bg-[#abcbfd]'
+                    : 'cursor-pointer border-input-border bg-background-grid-header text-button-text hover:bg-background-input-focus'
                 }`}
               >
-                <FaCalendarAlt className="h-4 w-4 text-[#0e2d5f]" />
+                <FaCalendarAlt className="h-4 w-4" />
               </button>
             </PopoverTrigger>
             <PopoverContent
-              className="flex w-auto flex-row border border-border bg-background-header p-2"
+              className="flex w-auto flex-row border border-border bg-background-card p-2 text-input-text"
               sideOffset={-1}
               align="end"
             >
@@ -435,7 +440,7 @@ const InputDateTimePicker = forwardRef<
               </div>
 
               {showTime && (
-                <div className="mt-2 flex flex-col divide-y sm:ml-2 sm:mt-0 sm:h-[300px] sm:flex-row sm:divide-x sm:divide-y-0">
+                <div className="mt-2 flex flex-col divide-y divide-border sm:ml-2 sm:mt-0 sm:h-[300px] sm:flex-row sm:divide-x sm:divide-y-0">
                   <ScrollArea className="w-64 sm:w-auto">
                     <div className="flex p-2 sm:flex-col">
                       {Array.from({ length: 12 }, (_, i) => i + 1).map((h) => {
@@ -446,7 +451,7 @@ const InputDateTimePicker = forwardRef<
                             key={h}
                             size="icon"
                             variant={selected ? 'default' : 'ghost'}
-                            className="aspect-square shrink-0 sm:w-full"
+                            className={timeButtonClass(selected)}
                             onClick={() => setTimePart('hour', h)}
                           >
                             {h}
@@ -470,7 +475,7 @@ const InputDateTimePicker = forwardRef<
                             key={min}
                             size="icon"
                             variant={selected ? 'default' : 'ghost'}
-                            className="aspect-square shrink-0 sm:w-full"
+                            className={timeButtonClass(selected)}
                             onClick={() => setTimePart('minute', min)}
                           >
                             {min.toString().padStart(2, '0')}
@@ -493,7 +498,7 @@ const InputDateTimePicker = forwardRef<
                             key={ap}
                             size="icon"
                             variant={selected ? 'default' : 'ghost'}
-                            className="aspect-square shrink-0 sm:w-full"
+                            className={timeButtonClass(selected)}
                             onClick={() =>
                               setTimePart('ampm', ap as 'AM' | 'PM')
                             }
