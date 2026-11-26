@@ -110,9 +110,9 @@ interface Filter {
     keterangan: string;
     contactperson: string;
     alamat: string;
-    coa: string;
-    coapiutang: string;
-    coahutang: string;
+    coa_text: string;
+    coapiutang_text: string;
+    coahutang_text: string;
     kota: string;
     kodepos: string;
     telp: string;
@@ -123,7 +123,7 @@ interface Filter {
     creditterm: string;
     credittermplus: string;
     npwp: string;
-    coagiro: string;
+    coagiro_text: string;
     ppn: string;
     titipke: string;
     ppnbatalmuat: string;
@@ -319,12 +319,6 @@ const GridShipper = () => {
     resolver: mode === 'delete' ? undefined : zodResolver(ShipperSchema),
     mode: 'onSubmit',
     defaultValues: {
-      statusrelasi: '',
-      statusrelasi_text: '',
-
-      relasi_id: '',
-      relasi_id_text: '',
-
       nama: '',
 
       keterangan: '',
@@ -334,10 +328,13 @@ const GridShipper = () => {
       alamat: '',
 
       coa: '',
+      coa_text: '',
 
       coapiutang: '',
+      coapiutang_text: '',
 
       coahutang: '',
+      coahutang_text: '',
 
       kota: '',
 
@@ -360,6 +357,7 @@ const GridShipper = () => {
       npwp: '',
 
       coagiro: '',
+      coagiro_text: '',
 
       ppn: '',
 
@@ -465,9 +463,9 @@ const GridShipper = () => {
       keterangan: '',
       contactperson: '',
       alamat: '',
-      coa: '',
-      coapiutang: '',
-      coahutang: '',
+      coa_text: '',
+      coapiutang_text: '',
+      coahutang_text: '',
       kota: '',
       kodepos: '',
       telp: '',
@@ -478,7 +476,7 @@ const GridShipper = () => {
       creditterm: '',
       credittermplus: '',
       npwp: '',
-      coagiro: '',
+      coagiro_text: '',
       ppn: '',
       titipke: '',
       ppnbatalmuat: '',
@@ -596,9 +594,9 @@ const GridShipper = () => {
                       keterangan: '',
                       contactperson: '',
                       alamat: '',
-                      coa: '',
-                      coapiutang: '',
-                      coahutang: '',
+                      coa_text: '',
+                      coapiutang_text: '',
+                      coahutang_text: '',
                       kota: '',
                       kodepos: '',
                       telp: '',
@@ -609,7 +607,7 @@ const GridShipper = () => {
                       creditterm: '',
                       credittermplus: '',
                       npwp: '',
-                      coagiro: '',
+                      coagiro_text: '',
                       ppn: '',
                       titipke: '',
                       ppnbatalmuat: '',
@@ -692,142 +690,142 @@ const GridShipper = () => {
           );
         }
       },
-      {
-        key: 'statusrelasi_text',
-        name: 'Statusrelasi',
-        resizable: true,
-        draggable: true,
-        width: 200,
-        headerCellClass: 'column-headers',
-        renderHeaderCell: (column: any) => (
-          <div
-            title="STATUSRELASI"
-            className="flex h-full cursor-pointer flex-col items-center gap-1"
-          >
-            <div
-              className="headers-cell h-[50%] px-8"
-              onClick={() => handleSort('statusrelasi_text')}
-              onContextMenu={(event) =>
-                setContextMenu(handleContextMenu(event))
-              }
-            >
-              <p
-                className={`text-sm ${
-                  filters.sortBy === 'statusrelasi_text'
-                    ? 'font-bold'
-                    : 'font-normal'
-                }`}
-              >
-                Statusrelasi
-              </p>
-              <div className="ml-2">
-                {filters.sortBy === 'statusrelasi_text' &&
-                filters.sortDirection === 'asc' ? (
-                  <FaSortUp className="font-bold" />
-                ) : filters.sortBy === 'statusrelasi_text' &&
-                  filters.sortDirection === 'desc' ? (
-                  <FaSortDown className="font-bold" />
-                ) : (
-                  <FaSort className="text-zinc-400" />
-                )}
-              </div>
-            </div>
-            <div className="relative h-[50%] w-full px-1">
-              <FilterInput
-                colKey="statusrelasi_text"
-                value={filters.filters.statusrelasi_text || ''}
-                onChange={(value) =>
-                  handleFilterInputChange('statusrelasi_text', value)
-                }
-                onClear={() => handleClearFilter('statusrelasi_text')}
-                inputRef={(el) => {
-                  inputColRefs.current['statusrelasi_text'] = el;
-                }}
-              />
-            </div>
-          </div>
-        ),
-        renderCell: (props: any) => {
-          const columnFilter = filters.filters.statusrelasi_text || '';
-          const cellValue = props.row.statusrelasi_text || '';
-          return (
-            <div
-              title={String(cellValue).toUpperCase()}
-              className="m-0 flex h-full cursor-pointer items-center p-0 text-sm"
-            >
-              {highlightText(cellValue, filters.search, columnFilter)}
-            </div>
-          );
-        }
-      },
-      {
-        key: 'relasi_id_text',
-        name: 'Relasi',
-        resizable: true,
-        draggable: true,
-        width: 200,
-        headerCellClass: 'column-headers',
-        renderHeaderCell: (column: any) => (
-          <div
-            title="RELASI"
-            className="flex h-full cursor-pointer flex-col items-center gap-1"
-          >
-            <div
-              className="headers-cell h-[50%] px-8"
-              onClick={() => handleSort('relasi_id_text')}
-              onContextMenu={(event) =>
-                setContextMenu(handleContextMenu(event))
-              }
-            >
-              <p
-                className={`text-sm ${
-                  filters.sortBy === 'relasi_id_text'
-                    ? 'font-bold'
-                    : 'font-normal'
-                }`}
-              >
-                Relasi
-              </p>
-              <div className="ml-2">
-                {filters.sortBy === 'relasi_id_text' &&
-                filters.sortDirection === 'asc' ? (
-                  <FaSortUp className="font-bold" />
-                ) : filters.sortBy === 'relasi_id_text' &&
-                  filters.sortDirection === 'desc' ? (
-                  <FaSortDown className="font-bold" />
-                ) : (
-                  <FaSort className="text-zinc-400" />
-                )}
-              </div>
-            </div>
-            <div className="relative h-[50%] w-full px-1">
-              <FilterInput
-                colKey="relasi_id_text"
-                value={filters.filters.relasi_id_text || ''}
-                onChange={(value) =>
-                  handleFilterInputChange('relasi_id_text', value)
-                }
-                onClear={() => handleClearFilter('relasi_id_text')}
-                inputRef={(el) => {
-                  inputColRefs.current['relasi_id_text'] = el;
-                }}
-              />
-            </div>
-          </div>
-        ),
-        renderCell: (props: any) => {
-          const columnFilter = filters.filters.relasi_id_text || '';
-          const cellValue = props.row.relasi_id_text || '';
-          return (
-            <div
-              title={String(cellValue).toUpperCase()}
-              className="m-0 flex h-full cursor-pointer items-center p-0 text-sm"
-            >
-              {highlightText(cellValue, filters.search, columnFilter)}
-            </div>
-          );
-        }
-      },
+      // {
+      //   key: 'statusrelasi_text',
+      //   name: 'Statusrelasi',
+      //   resizable: true,
+      //   draggable: true,
+      //   width: 200,
+      //   headerCellClass: 'column-headers',
+      //   renderHeaderCell: (column: any) => (
+      //     <div
+      //       title="STATUSRELASI"
+      //       className="flex h-full cursor-pointer flex-col items-center gap-1"
+      //     >
+      //       <div
+      //         className="headers-cell h-[50%] px-8"
+      //         onClick={() => handleSort('statusrelasi_text')}
+      //         onContextMenu={(event) =>
+      //           setContextMenu(handleContextMenu(event))
+      //         }
+      //       >
+      //         <p
+      //           className={`text-sm ${
+      //             filters.sortBy === 'statusrelasi_text'
+      //               ? 'font-bold'
+      //               : 'font-normal'
+      //           }`}
+      //         >
+      //           Statusrelasi
+      //         </p>
+      //         <div className="ml-2">
+      //           {filters.sortBy === 'statusrelasi_text' &&
+      //           filters.sortDirection === 'asc' ? (
+      //             <FaSortUp className="font-bold" />
+      //           ) : filters.sortBy === 'statusrelasi_text' &&
+      //             filters.sortDirection === 'desc' ? (
+      //             <FaSortDown className="font-bold" />
+      //           ) : (
+      //             <FaSort className="text-zinc-400" />
+      //           )}
+      //         </div>
+      //       </div>
+      //       <div className="relative h-[50%] w-full px-1">
+      //         <FilterInput
+      //           colKey="statusrelasi_text"
+      //           value={filters.filters.statusrelasi_text || ''}
+      //           onChange={(value) =>
+      //             handleFilterInputChange('statusrelasi_text', value)
+      //           }
+      //           onClear={() => handleClearFilter('statusrelasi_text')}
+      //           inputRef={(el) => {
+      //             inputColRefs.current['statusrelasi_text'] = el;
+      //           }}
+      //         />
+      //       </div>
+      //     </div>
+      //   ),
+      //   renderCell: (props: any) => {
+      //     const columnFilter = filters.filters.statusrelasi_text || '';
+      //     const cellValue = props.row.statusrelasi_text || '';
+      //     return (
+      //       <div
+      //         title={String(cellValue).toUpperCase()}
+      //         className="m-0 flex h-full cursor-pointer items-center p-0 text-sm"
+      //       >
+      //         {highlightText(cellValue, filters.search, columnFilter)}
+      //       </div>
+      //     );
+      //   }
+      // },
+      // {
+      //   key: 'relasi_id_text',
+      //   name: 'Relasi',
+      //   resizable: true,
+      //   draggable: true,
+      //   width: 200,
+      //   headerCellClass: 'column-headers',
+      //   renderHeaderCell: (column: any) => (
+      //     <div
+      //       title="RELASI"
+      //       className="flex h-full cursor-pointer flex-col items-center gap-1"
+      //     >
+      //       <div
+      //         className="headers-cell h-[50%] px-8"
+      //         onClick={() => handleSort('relasi_id_text')}
+      //         onContextMenu={(event) =>
+      //           setContextMenu(handleContextMenu(event))
+      //         }
+      //       >
+      //         <p
+      //           className={`text-sm ${
+      //             filters.sortBy === 'relasi_id_text'
+      //               ? 'font-bold'
+      //               : 'font-normal'
+      //           }`}
+      //         >
+      //           Relasi
+      //         </p>
+      //         <div className="ml-2">
+      //           {filters.sortBy === 'relasi_id_text' &&
+      //           filters.sortDirection === 'asc' ? (
+      //             <FaSortUp className="font-bold" />
+      //           ) : filters.sortBy === 'relasi_id_text' &&
+      //             filters.sortDirection === 'desc' ? (
+      //             <FaSortDown className="font-bold" />
+      //           ) : (
+      //             <FaSort className="text-zinc-400" />
+      //           )}
+      //         </div>
+      //       </div>
+      //       <div className="relative h-[50%] w-full px-1">
+      //         <FilterInput
+      //           colKey="relasi_id_text"
+      //           value={filters.filters.relasi_id_text || ''}
+      //           onChange={(value) =>
+      //             handleFilterInputChange('relasi_id_text', value)
+      //           }
+      //           onClear={() => handleClearFilter('relasi_id_text')}
+      //           inputRef={(el) => {
+      //             inputColRefs.current['relasi_id_text'] = el;
+      //           }}
+      //         />
+      //       </div>
+      //     </div>
+      //   ),
+      //   renderCell: (props: any) => {
+      //     const columnFilter = filters.filters.relasi_id_text || '';
+      //     const cellValue = props.row.relasi_id_text || '';
+      //     return (
+      //       <div
+      //         title={String(cellValue).toUpperCase()}
+      //         className="m-0 flex h-full cursor-pointer items-center p-0 text-sm"
+      //       >
+      //         {highlightText(cellValue, filters.search, columnFilter)}
+      //       </div>
+      //     );
+      //   }
+      // },
       {
         key: 'nama',
         name: 'Nama',
@@ -1091,7 +1089,7 @@ const GridShipper = () => {
         }
       },
       {
-        key: 'coa',
+        key: 'coa_text',
         name: 'Coa',
         resizable: true,
         draggable: true,
@@ -1104,22 +1102,23 @@ const GridShipper = () => {
           >
             <div
               className="headers-cell h-[50%] px-8"
-              onClick={() => handleSort('coa')}
+              onClick={() => handleSort('coa_text')}
               onContextMenu={(event) =>
                 setContextMenu(handleContextMenu(event))
               }
             >
               <p
                 className={`text-sm ${
-                  filters.sortBy === 'coa' ? 'font-bold' : 'font-normal'
+                  filters.sortBy === 'coa_text' ? 'font-bold' : 'font-normal'
                 }`}
               >
                 Coa
               </p>
               <div className="ml-2">
-                {filters.sortBy === 'coa' && filters.sortDirection === 'asc' ? (
+                {filters.sortBy === 'coa_text' &&
+                filters.sortDirection === 'asc' ? (
                   <FaSortUp className="font-bold" />
-                ) : filters.sortBy === 'coa' &&
+                ) : filters.sortBy === 'coa_text' &&
                   filters.sortDirection === 'desc' ? (
                   <FaSortDown className="font-bold" />
                 ) : (
@@ -1129,20 +1128,20 @@ const GridShipper = () => {
             </div>
             <div className="relative h-[50%] w-full px-1">
               <FilterInput
-                colKey="coa"
-                value={filters.filters.coa || ''}
-                onChange={(value) => handleFilterInputChange('coa', value)}
-                onClear={() => handleClearFilter('coa')}
+                colKey="coa_text"
+                value={filters.filters.coa_text || ''}
+                onChange={(value) => handleFilterInputChange('coa_text', value)}
+                onClear={() => handleClearFilter('coa_text')}
                 inputRef={(el) => {
-                  inputColRefs.current['coa'] = el;
+                  inputColRefs.current['coa_text'] = el;
                 }}
               />
             </div>
           </div>
         ),
         renderCell: (props: any) => {
-          const columnFilter = filters.filters.coa || '';
-          const cellValue = props.row.coa || '';
+          const columnFilter = filters.filters.coa_text || '';
+          const cellValue = props.row.coa_text || '';
           return (
             <div
               title={String(cellValue).toUpperCase()}
@@ -1154,7 +1153,7 @@ const GridShipper = () => {
         }
       },
       {
-        key: 'coapiutang',
+        key: 'coapiutang_text',
         name: 'Coapiutang',
         resizable: true,
         draggable: true,
@@ -1167,23 +1166,25 @@ const GridShipper = () => {
           >
             <div
               className="headers-cell h-[50%] px-8"
-              onClick={() => handleSort('coapiutang')}
+              onClick={() => handleSort('coapiutang_text')}
               onContextMenu={(event) =>
                 setContextMenu(handleContextMenu(event))
               }
             >
               <p
                 className={`text-sm ${
-                  filters.sortBy === 'coapiutang' ? 'font-bold' : 'font-normal'
+                  filters.sortBy === 'coapiutang_text'
+                    ? 'font-bold'
+                    : 'font-normal'
                 }`}
               >
                 Coapiutang
               </p>
               <div className="ml-2">
-                {filters.sortBy === 'coapiutang' &&
+                {filters.sortBy === 'coapiutang_text' &&
                 filters.sortDirection === 'asc' ? (
                   <FaSortUp className="font-bold" />
-                ) : filters.sortBy === 'coapiutang' &&
+                ) : filters.sortBy === 'coapiutang_text' &&
                   filters.sortDirection === 'desc' ? (
                   <FaSortDown className="font-bold" />
                 ) : (
@@ -1193,22 +1194,22 @@ const GridShipper = () => {
             </div>
             <div className="relative h-[50%] w-full px-1">
               <FilterInput
-                colKey="coapiutang"
-                value={filters.filters.coapiutang || ''}
+                colKey="coapiutang_text"
+                value={filters.filters.coapiutang_text || ''}
                 onChange={(value) =>
-                  handleFilterInputChange('coapiutang', value)
+                  handleFilterInputChange('coapiutang_text', value)
                 }
-                onClear={() => handleClearFilter('coapiutang')}
+                onClear={() => handleClearFilter('coapiutang_text')}
                 inputRef={(el) => {
-                  inputColRefs.current['coapiutang'] = el;
+                  inputColRefs.current['coapiutang_text'] = el;
                 }}
               />
             </div>
           </div>
         ),
         renderCell: (props: any) => {
-          const columnFilter = filters.filters.coapiutang || '';
-          const cellValue = props.row.coapiutang || '';
+          const columnFilter = filters.filters.coapiutang_text || '';
+          const cellValue = props.row.coapiutang_text || '';
           return (
             <div
               title={String(cellValue).toUpperCase()}
@@ -1220,7 +1221,7 @@ const GridShipper = () => {
         }
       },
       {
-        key: 'coahutang',
+        key: 'coahutang_text',
         name: 'Coahutang',
         resizable: true,
         draggable: true,
@@ -1233,23 +1234,25 @@ const GridShipper = () => {
           >
             <div
               className="headers-cell h-[50%] px-8"
-              onClick={() => handleSort('coahutang')}
+              onClick={() => handleSort('coahutang_text')}
               onContextMenu={(event) =>
                 setContextMenu(handleContextMenu(event))
               }
             >
               <p
                 className={`text-sm ${
-                  filters.sortBy === 'coahutang' ? 'font-bold' : 'font-normal'
+                  filters.sortBy === 'coahutang_text'
+                    ? 'font-bold'
+                    : 'font-normal'
                 }`}
               >
                 Coahutang
               </p>
               <div className="ml-2">
-                {filters.sortBy === 'coahutang' &&
+                {filters.sortBy === 'coahutang_text' &&
                 filters.sortDirection === 'asc' ? (
                   <FaSortUp className="font-bold" />
-                ) : filters.sortBy === 'coahutang' &&
+                ) : filters.sortBy === 'coahutang_text' &&
                   filters.sortDirection === 'desc' ? (
                   <FaSortDown className="font-bold" />
                 ) : (
@@ -1259,22 +1262,22 @@ const GridShipper = () => {
             </div>
             <div className="relative h-[50%] w-full px-1">
               <FilterInput
-                colKey="coahutang"
-                value={filters.filters.coahutang || ''}
+                colKey="coahutang_text"
+                value={filters.filters.coahutang_text || ''}
                 onChange={(value) =>
-                  handleFilterInputChange('coahutang', value)
+                  handleFilterInputChange('coahutang_text', value)
                 }
-                onClear={() => handleClearFilter('coahutang')}
+                onClear={() => handleClearFilter('coahutang_text')}
                 inputRef={(el) => {
-                  inputColRefs.current['coahutang'] = el;
+                  inputColRefs.current['coahutang_text'] = el;
                 }}
               />
             </div>
           </div>
         ),
         renderCell: (props: any) => {
-          const columnFilter = filters.filters.coahutang || '';
-          const cellValue = props.row.coahutang || '';
+          const columnFilter = filters.filters.coahutang_text || '';
+          const cellValue = props.row.coahutang_text || '';
           return (
             <div
               title={String(cellValue).toUpperCase()}
@@ -1944,7 +1947,7 @@ const GridShipper = () => {
         }
       },
       {
-        key: 'coagiro',
+        key: 'coagiro_text',
         name: 'Coagiro',
         resizable: true,
         draggable: true,
@@ -1957,23 +1960,25 @@ const GridShipper = () => {
           >
             <div
               className="headers-cell h-[50%] px-8"
-              onClick={() => handleSort('coagiro')}
+              onClick={() => handleSort('coagiro_text')}
               onContextMenu={(event) =>
                 setContextMenu(handleContextMenu(event))
               }
             >
               <p
                 className={`text-sm ${
-                  filters.sortBy === 'coagiro' ? 'font-bold' : 'font-normal'
+                  filters.sortBy === 'coagiro_text'
+                    ? 'font-bold'
+                    : 'font-normal'
                 }`}
               >
                 Coagiro
               </p>
               <div className="ml-2">
-                {filters.sortBy === 'coagiro' &&
+                {filters.sortBy === 'coagiro_text' &&
                 filters.sortDirection === 'asc' ? (
                   <FaSortUp className="font-bold" />
-                ) : filters.sortBy === 'coagiro' &&
+                ) : filters.sortBy === 'coagiro_text' &&
                   filters.sortDirection === 'desc' ? (
                   <FaSortDown className="font-bold" />
                 ) : (
@@ -1983,20 +1988,22 @@ const GridShipper = () => {
             </div>
             <div className="relative h-[50%] w-full px-1">
               <FilterInput
-                colKey="coagiro"
-                value={filters.filters.coagiro || ''}
-                onChange={(value) => handleFilterInputChange('coagiro', value)}
-                onClear={() => handleClearFilter('coagiro')}
+                colKey="coagiro_text"
+                value={filters.filters.coagiro_text || ''}
+                onChange={(value) =>
+                  handleFilterInputChange('coagiro_text', value)
+                }
+                onClear={() => handleClearFilter('coagiro_text')}
                 inputRef={(el) => {
-                  inputColRefs.current['coagiro'] = el;
+                  inputColRefs.current['coagiro_text'] = el;
                 }}
               />
             </div>
           </div>
         ),
         renderCell: (props: any) => {
-          const columnFilter = filters.filters.coagiro || '';
-          const cellValue = props.row.coagiro || '';
+          const columnFilter = filters.filters.coagiro_text || '';
+          const cellValue = props.row.coagiro_text || '';
           return (
             <div
               title={String(cellValue).toUpperCase()}
@@ -5071,9 +5078,9 @@ const GridShipper = () => {
         keterangan: '',
         contactperson: '',
         alamat: '',
-        coa: '',
-        coapiutang: '',
-        coahutang: '',
+        coa_text: '',
+        coapiutang_text: '',
+        coahutang_text: '',
         kota: '',
         kodepos: '',
         telp: '',
@@ -5084,7 +5091,7 @@ const GridShipper = () => {
         creditterm: '',
         credittermplus: '',
         npwp: '',
-        coagiro: '',
+        coagiro_text: '',
         ppn: '',
         titipke: '',
         ppnbatalmuat: '',
@@ -5750,17 +5757,16 @@ const GridShipper = () => {
   // Reset form mode "add" ke nilai kosong.
   const resetAddForm = async () => {
     forms.reset({
-      statusrelasi: '',
-      statusrelasi_text: '',
-      relasi_id: '',
-      relasi_id_text: '',
       nama: '',
       keterangan: '',
       contactperson: '',
       alamat: '',
       coa: '',
+      coa_text: '',
       coapiutang: '',
+      coapiutang_text: '',
       coahutang: '',
+      coahutang_text: '',
       kota: '',
       kodepos: '',
       telp: '',
@@ -5772,6 +5778,7 @@ const GridShipper = () => {
       credittermplus: '',
       npwp: '',
       coagiro: '',
+      coagiro_text: '',
       ppn: '',
       titipke: '',
       ppnbatalmuat: '',
@@ -6650,19 +6657,16 @@ const GridShipper = () => {
   const fillFormFromRow = (rowData?: IShipper) => {
     if (!rowData) return;
     forms.setValue('id', rowData?.id ?? '');
-
-    forms.setValue('statusrelasi', String(rowData?.statusrelasi ?? ''));
-    forms.setValue('statusrelasi_text', rowData?.statusrelasi_text);
-
-    forms.setValue('relasi_id', String(rowData?.relasi_id ?? ''));
-    forms.setValue('relasi_id_text', rowData?.relasi_id_text);
     forms.setValue('nama', rowData?.nama);
     forms.setValue('keterangan', rowData?.keterangan);
     forms.setValue('contactperson', rowData?.contactperson);
     forms.setValue('alamat', rowData?.alamat);
     forms.setValue('coa', rowData?.coa);
+    forms.setValue('coa_text', rowData?.coa_text);
     forms.setValue('coapiutang', rowData?.coapiutang);
+    forms.setValue('coapiutang_text', rowData?.coapiutang_text);
     forms.setValue('coahutang', rowData?.coahutang);
+    forms.setValue('coahutang_text', rowData?.coahutang_text);
     forms.setValue('kota', rowData?.kota);
     forms.setValue('kodepos', rowData?.kodepos);
     forms.setValue('telp', rowData?.telp);
@@ -6674,6 +6678,7 @@ const GridShipper = () => {
     forms.setValue('credittermplus', rowData?.credittermplus ?? '');
     forms.setValue('npwp', rowData?.npwp);
     forms.setValue('coagiro', rowData?.coagiro);
+    forms.setValue('coagiro_text', rowData?.coagiro_text);
     forms.setValue('ppn', rowData?.ppn ?? '');
     forms.setValue('titipke', rowData?.titipke);
     forms.setValue('ppnbatalmuat', rowData?.ppnbatalmuat ?? '');

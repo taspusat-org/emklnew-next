@@ -42,6 +42,7 @@ const FormMenu = ({
       pageSize: 20,
       dataToPost: 'id',
       showOnButton: true,
+      disabled: mode === 'view' || mode === 'delete',
       postData: 'nama'
     }
   ];
@@ -56,6 +57,8 @@ const FormMenu = ({
       pageSize: 20,
       dataToPost: 'id',
       showOnButton: true,
+      disabled: mode === 'view' || mode === 'delete',
+
       postData: 'title'
     }
   ];
@@ -72,6 +75,8 @@ const FormMenu = ({
       pageSize: 20,
       dataToPost: 'id',
       showOnButton: true,
+      disabled: mode === 'view' || mode === 'delete',
+
       postData: 'text'
     }
   ];

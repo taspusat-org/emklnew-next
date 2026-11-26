@@ -144,7 +144,16 @@ const FormKasGantung = ({
     });
   };
   const deleteRow = (index: number) => {
-    setRows(rows.filter((_, i) => i !== index));
+    setRows((prevRows) => {
+      const remaining = prevRows.filter((_, i) => i !== index);
+      if (remaining.some((row) => row.id !== 'add_row')) return remaining;
+
+      // detail tidak boleh kosong, sisakan 1 baris default
+      return [
+        { id: '0', nobukti: '', nominal: '', keterangan: '', isNew: true },
+        ...remaining
+      ];
+    });
   };
   const inputStopPropagation = (e: React.KeyboardEvent) => {
     e.stopPropagation();
@@ -199,7 +208,8 @@ const FormKasGantung = ({
           }
 
           // Otherwise, render the delete button for rows with data
-          const rowIndex = rows.findIndex((row) => row.id === props.row.id);
+          // baris baru semua ber-id '0', jadi cari lewat referensi objek
+          const rowIndex = rows.indexOf(props.row);
           return (
             <div className="m-0 flex h-full w-full cursor-pointer items-center justify-center p-0 text-xs">
               <button

@@ -1,13 +1,3 @@
-import { useEffect, useRef } from 'react';
-import { useDispatch } from 'react-redux';
-import { useSelector } from 'react-redux';
-import { IoMdClose } from 'react-icons/io';
-import { RootState } from '@/lib/store/store';
-import { Input } from '@/components/ui/input';
-import LookUp from '@/components/custom-ui/LookUp';
-import FormFooterButtons from '@/components/custom-ui/FormFooterButtons';
-import InputNumeric from '@/components/custom-ui/InputNumeric';
-import { setSubmitClicked } from '@/lib/store/lookupSlice/lookupSlice';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import {
   Form,
@@ -17,202 +7,45 @@ import {
   FormLabel,
   FormMessage
 } from '@/components/ui/form';
-import InputMask from '@mona-health/react-input-mask';
-import InputCurrency from '@/components/custom-ui/InputCurrency';
+import { useEffect, useRef, useState } from 'react';
+import { useSelector, useDispatch } from 'react-redux';
+import { RootState } from '@/lib/store/store';
+import LookUp from '@/components/custom-ui/LookUp';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import InputDatePicker from '@/components/custom-ui/InputDatePicker';
-import { useFormError } from '@/lib/hooks/formErrorContext';
+import InputNumeric from '@/components/custom-ui/InputNumeric';
+import InputCurrency from '@/components/custom-ui/InputCurrency';
+import { IoMdClose } from 'react-icons/io';
+import { setSubmitClicked } from '@/lib/store/lookupSlice/lookupSlice';
+import FormFooterButtons from '@/components/custom-ui/FormFooterButtons';
+
+interface FormSupplierProps {
+  popOver: boolean;
+  setPopOver: (value: boolean) => void;
+  forms: any;
+  onSubmit: any;
+  mode: any;
+  handleClose: () => void;
+  isLoadingCreate: boolean;
+  isLoadingUpdate: boolean;
+  isLoadingDelete: boolean;
+}
 
 const FormSupplier = ({
-  forms,
   popOver,
   setPopOver,
+  forms,
   onSubmit,
   mode,
   handleClose,
   isLoadingCreate,
   isLoadingUpdate,
   isLoadingDelete
-}: any) => {
-  const dispatch = useDispatch();
+}: FormSupplierProps) => {
   const formRef = useRef<HTMLFormElement | null>(null);
   const openName = useSelector((state: RootState) => state.lookup.openName);
-  // Error dari backend (mis. "COA Piutang dan COA Giro tidak boleh sama")
-  // masuk ke context ini. LookUp hanya membaca error react-hook-form, jadi
-  // tanpa dioper lewat `errorMessage` pesannya tak pernah muncul di layar.
-  const { errors: formErrors } = useFormError();
-
-  const lookupPropsStatusAktif = [
-    {
-      columns: [{ key: 'text', name: 'NAMA' }],
-      labelLookup: 'STATUS AKTIF LOOKUP',
-      required: true,
-      selectedRequired: false,
-      endpoint: 'parameter?grp=status+aktif',
-      label: 'STATUS AKTIF',
-      singleColumn: true,
-      pageSize: 20,
-      disabled: mode === 'view' || mode === 'delete' ? true : false,
-      postData: 'text',
-      dataToPost: 'id'
-    }
-  ];
-
-  const lookUpPropsCOA = [
-    {
-      columns: [
-        { key: 'coa', name: 'COA' },
-        { key: 'keterangancoa', name: 'KETERANGANCOA' }
-      ],
-      labelLookup: 'COA LOOKUP',
-      required: true,
-      selectedRequired: false,
-      endpoint: 'akunpusat',
-      label: 'COA',
-      singleColumn: false,
-      pageSize: 20,
-      disabled: mode === 'view' || mode === 'delete' ? true : false,
-      postData: 'keterangancoa',
-      dataToPost: 'coa',
-      showOnButton: true
-    }
-  ];
-
-  const lookUpPropsCoaPiutang = [
-    {
-      columns: [
-        { key: 'coa', name: 'COA' },
-        { key: 'keterangancoa', name: 'KETERANGANCOA' }
-      ],
-      labelLookup: 'COA PIUTANG LOOKUP',
-      required: true,
-      selectedRequired: false,
-      endpoint: 'akunpusat',
-      label: 'COA PIUTANG',
-      singleColumn: false,
-      pageSize: 20,
-      disabled: mode === 'view' || mode === 'delete' ? true : false,
-      showOnButton: true,
-      postData: 'keterangancoa',
-      dataToPost: 'coa'
-    }
-  ];
-
-  const lookUpPropsCoaHutang = [
-    {
-      columns: [
-        { key: 'coa', name: 'COA' },
-        { key: 'keterangancoa', name: 'KETERANGANCOA' }
-      ],
-      labelLookup: 'COA HUTANG LOOKUP',
-      required: true,
-      selectedRequired: false,
-      endpoint: 'akunpusat',
-      label: 'COA HUTANG',
-      singleColumn: false,
-      pageSize: 20,
-      disabled: mode === 'view' || mode === 'delete' ? true : false,
-      showOnButton: true,
-      postData: 'keterangancoa',
-      dataToPost: 'coa'
-    }
-  ];
-
-  const lookUpPropsCoaGiro = [
-    {
-      columns: [
-        { key: 'coa', name: 'COA' },
-        { key: 'keterangancoa', name: 'KETERANGANCOA' }
-      ],
-      labelLookup: 'COA GIRO LOOKUP',
-      required: true,
-      selectedRequired: false,
-      endpoint: 'akunpusat',
-      label: 'COA GIRO',
-      singleColumn: false,
-      pageSize: 20,
-      disabled: mode === 'view' || mode === 'delete' ? true : false,
-      showOnButton: true,
-      postData: 'keterangancoa',
-      dataToPost: 'coa'
-    }
-  ];
-
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      // Fungsi untuk menangani pergerakan fokus berdasarkan tombolc
-      if (openName) {
-        // Jika popOverDate ada nilainya, jangan lakukan apa-apa
-        return;
-      }
-
-      const form = formRef.current;
-      if (!form) return;
-
-      const inputs = Array.from(
-        form.querySelectorAll('input, select, textarea, button')
-      ).filter(
-        (element) =>
-          element.id !== 'image-dropzone' &&
-          element.tagName !== 'BUTTON' &&
-          !element.hasAttribute('readonly') // Pengecualian jika input readonly
-      ) as HTMLElement[]; // Ambil semua input dalam form kecuali button dan readonly inputs
-
-      const focusedElement = document.activeElement as HTMLElement;
-
-      // Cek apakah elemen yang difokuskan adalah dropzone
-      const isImageDropzone =
-        document.querySelector('input#image-dropzone') === focusedElement;
-      const isFileInput =
-        document.querySelector('input#file-input') === focusedElement;
-
-      if (isImageDropzone || isFileInput) return; // Jangan pindah fokus jika elemen fokus adalah dropzone atau input file
-
-      let nextElement: HTMLElement | null = null;
-
-      if (event.key === 'ArrowDown' || event.key === 'Tab') {
-        nextElement = getNextFocusableElement(inputs, focusedElement, 'down');
-        if (event.key === 'Tab') {
-          event.preventDefault(); // Cegah default tab behavior jika ingin mengontrol pergerakan fokus
-        }
-      } else if (
-        event.key === 'ArrowUp' ||
-        (event.shiftKey && event.key === 'Tab')
-      ) {
-        nextElement = getNextFocusableElement(inputs, focusedElement, 'up');
-      }
-      // Jika ditemukan input selanjutnya, pindahkan fokus
-      if (nextElement) {
-        nextElement.focus();
-      }
-    };
-
-    // Fungsi untuk mendapatkan elemen input selanjutnya berdasarkan arah (down atau up)
-    const getNextFocusableElement = (
-      inputs: HTMLElement[],
-      currentElement: HTMLElement,
-      direction: 'up' | 'down'
-    ): HTMLElement | null => {
-      const index = Array.from(inputs).indexOf(currentElement as any);
-
-      if (direction === 'down') {
-        // Jika sudah di input terakhir, tidak perlu pindah fokus
-        if (index === inputs.length - 1) {
-          return null; // Tidak ada elemen selanjutnya
-        }
-        return inputs[index + 1]; // Fokus pindah ke input setelahnya
-      } else {
-        return inputs[index - 1]; // Fokus pindah ke input sebelumnya
-      }
-    };
-
-    document.addEventListener('keydown', handleKeyDown); // Menambahkan event listener untuk keydown
-
-    // Membersihkan event listener ketika komponen tidak lagi digunakan
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [openName]); // Tambahkan popOverDate sebagai dependensi
-
+  const dispatch = useDispatch();
   return (
     <Dialog open={popOver} onOpenChange={setPopOver}>
       <DialogTitle hidden={true}>Title</DialogTitle>
@@ -237,12 +70,16 @@ const FormSupplier = ({
             <IoMdClose className="h-5 w-5 font-bold text-white" />
           </div>
         </div>
+
         <div className="h-full flex-1 overflow-y-auto bg-background-card pl-1 pr-2">
           <div className="h-full bg-background-card px-5 py-3">
             <Form {...forms}>
               <form
                 ref={formRef}
-                onSubmit={onSubmit}
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  onSubmit(false);
+                }}
                 className="flex h-full flex-col gap-6"
               >
                 <div className="flex h-[100%] flex-col gap-2 lg:gap-3">
@@ -252,7 +89,7 @@ const FormSupplier = ({
                     render={({ field }) => (
                       <FormItem className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
                         <FormLabel
-                          required={true}
+                          required={false}
                           className="font-semibold lg:w-[15%]"
                         >
                           NAMA
@@ -278,7 +115,7 @@ const FormSupplier = ({
                     render={({ field }) => (
                       <FormItem className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
                         <FormLabel
-                          required={true}
+                          required={false}
                           className="font-semibold lg:w-[15%]"
                         >
                           KETERANGAN
@@ -304,10 +141,10 @@ const FormSupplier = ({
                     render={({ field }) => (
                       <FormItem className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
                         <FormLabel
-                          required={true}
+                          required={false}
                           className="font-semibold lg:w-[15%]"
                         >
-                          CONTACT PERSON
+                          CONTACTPERSON
                         </FormLabel>
                         <div className="flex flex-col lg:w-[85%]">
                           <FormControl>
@@ -330,27 +167,19 @@ const FormSupplier = ({
                     render={({ field }) => (
                       <FormItem className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
                         <FormLabel
-                          required={true}
+                          required={false}
                           className="font-semibold lg:w-[15%]"
                         >
                           KTP
                         </FormLabel>
                         <div className="flex flex-col lg:w-[85%]">
                           <FormControl>
-                            <InputMask
+                            <Input
                               {...field}
-                              mask="9999999999999999"
-                              maskPlaceholder={null}
                               value={field.value ?? ''}
-                              className={`h-9 w-full rounded-sm border border-input-border bg-background-input px-3 py-2 text-sm focus:border-border focus:bg-background-input-focus ${
-                                mode === 'delete'
-                                  ? 'text-zinc-400'
-                                  : 'text-primary-text'
-                              } focus:outline-none focus:ring-0`}
-                              onChange={field.onChange}
                               type="text"
                               readOnly={mode === 'view' || mode === 'delete'}
-                            ></InputMask>
+                            />
                           </FormControl>
                           <FormMessage />
                         </div>
@@ -364,7 +193,7 @@ const FormSupplier = ({
                     render={({ field }) => (
                       <FormItem className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
                         <FormLabel
-                          required={true}
+                          required={false}
                           className="font-semibold lg:w-[15%]"
                         >
                           ALAMAT
@@ -387,116 +216,138 @@ const FormSupplier = ({
                   <div className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
                     <div className="w-full lg:w-[15%]">
                       <FormLabel
-                        required={true}
+                        required={false}
                         className="text-sm font-semibold"
                       >
-                        COA
+                        Coa
                       </FormLabel>
                     </div>
                     <div className="w-full lg:w-[85%]">
-                      {lookUpPropsCOA.map((props, index) => (
-                        <LookUp
-                          key={index}
-                          {...props}
-                          lookupValue={(value: any) => {
-                            forms.setValue('coa', value);
-                          }}
-                          onSelectRow={(val) => {
-                            forms.setValue('coa_nama', val?.keterangancoa);
-                          }}
-                          name="coa"
-                          forms={forms}
-                          lookupNama={forms.getValues('coa_nama')}
-                          errorMessage={formErrors?.coa}
-                        />
-                      ))}
+                      <LookUp
+                        columns={[{ key: 'keterangancoa', name: 'COA' }]}
+                        labelLookup="COA LOOKUP"
+                        required={false}
+                        selectedRequired={false}
+                        endpoint="akunpusat"
+                        label="COA"
+                        singleColumn={true}
+                        pageSize={20}
+                        showOnButton={true}
+                        postData="keterangancoa"
+                        dataToPost="coa"
+                        lookupValue={(id) => {
+                          forms.setValue('coa', String(id ?? ''));
+                        }}
+                        onSelectRow={(val) =>
+                          forms.setValue('coa_text', val?.keterangancoa)
+                        }
+                        lookupNama={forms.getValues('coa_text')}
+                        disabled={mode === 'view' || mode === 'delete'}
+                      />
                     </div>
                   </div>
 
                   <div className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
                     <div className="w-full lg:w-[15%]">
                       <FormLabel
-                        required={true}
+                        required={false}
                         className="text-sm font-semibold"
                       >
-                        COA PIUTANG
+                        Coagiro
                       </FormLabel>
                     </div>
                     <div className="w-full lg:w-[85%]">
-                      {lookUpPropsCoaPiutang.map((props, index) => (
-                        <LookUp
-                          key={index}
-                          {...props}
-                          lookupValue={(value: any) => {
-                            forms.setValue('coapiu', value);
-                          }}
-                          onSelectRow={(val) => {
-                            forms.setValue('coapiu_nama', val?.keterangancoa);
-                          }}
-                          name="coapiu"
-                          forms={forms}
-                          lookupNama={forms.getValues('coapiu_nama')}
-                          errorMessage={formErrors?.coapiu}
-                        />
-                      ))}
+                      <LookUp
+                        columns={[{ key: 'keterangancoa', name: 'COA GIRO' }]}
+                        labelLookup="COAGIRO LOOKUP"
+                        required={false}
+                        selectedRequired={false}
+                        endpoint="akunpusat"
+                        label="COAGIRO"
+                        singleColumn={true}
+                        pageSize={20}
+                        showOnButton={true}
+                        postData="keterangancoa"
+                        dataToPost="coa"
+                        lookupValue={(id) => {
+                          forms.setValue('coagiro', String(id ?? ''));
+                        }}
+                        onSelectRow={(val) =>
+                          forms.setValue('coagiro_text', val?.keterangancoa)
+                        }
+                        lookupNama={forms.getValues('coagiro_text')}
+                        disabled={mode === 'view' || mode === 'delete'}
+                      />
                     </div>
                   </div>
 
                   <div className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
                     <div className="w-full lg:w-[15%]">
                       <FormLabel
-                        required={true}
+                        required={false}
                         className="text-sm font-semibold"
                       >
-                        COA HUTANG
+                        Coapiu
                       </FormLabel>
                     </div>
                     <div className="w-full lg:w-[85%]">
-                      {lookUpPropsCoaHutang.map((props, index) => (
-                        <LookUp
-                          key={index}
-                          {...props}
-                          lookupValue={(value: any) => {
-                            forms.setValue('coahut', value);
-                          }}
-                          onSelectRow={(val) => {
-                            forms.setValue('coahut_nama', val?.keterangancoa);
-                          }}
-                          name="coahut"
-                          forms={forms}
-                          lookupNama={forms.getValues('coahut_nama')}
-                          errorMessage={formErrors?.coahut}
-                        />
-                      ))}
+                      <LookUp
+                        columns={[
+                          { key: 'keterangancoa', name: 'COA PIUTANG' }
+                        ]}
+                        labelLookup="COAPIU LOOKUP"
+                        required={false}
+                        selectedRequired={false}
+                        endpoint="akunpusat"
+                        label="COAPIU"
+                        singleColumn={true}
+                        pageSize={20}
+                        showOnButton={true}
+                        postData="keterangancoa"
+                        dataToPost="coa"
+                        lookupValue={(id) => {
+                          forms.setValue('coapiu', String(id ?? ''));
+                        }}
+                        onSelectRow={(val) =>
+                          forms.setValue('coapiu_text', val?.keterangancoa)
+                        }
+                        lookupNama={forms.getValues('coapiu_text')}
+                        disabled={mode === 'view' || mode === 'delete'}
+                      />
                     </div>
                   </div>
 
                   <div className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
                     <div className="w-full lg:w-[15%]">
                       <FormLabel
-                        required={true}
+                        required={false}
                         className="text-sm font-semibold"
                       >
-                        COA GIRO
+                        Coahut
                       </FormLabel>
                     </div>
                     <div className="w-full lg:w-[85%]">
-                      {lookUpPropsCoaGiro.map((props, index) => (
-                        <LookUp
-                          key={index}
-                          {...props}
-                          lookupValue={(value: any) => {
-                            forms.setValue('coagiro', value);
-                          }}
-                          onSelectRow={(val) => {
-                            forms.setValue('coagiro_nama', val?.keterangancoa);
-                          }}
-                          name="coagiro"
-                          forms={forms}
-                          lookupNama={forms.getValues('coagiro_nama')}
-                          errorMessage={formErrors?.coagiro}
-                        />
-                      ))}
+                      <LookUp
+                        columns={[{ key: 'keterangancoa', name: 'COA HUTANG' }]}
+                        labelLookup="COAHUT LOOKUP"
+                        required={false}
+                        selectedRequired={false}
+                        endpoint="akunpusat"
+                        label="COAHUT"
+                        singleColumn={true}
+                        pageSize={20}
+                        showOnButton={true}
+                        postData="keterangancoa"
+                        dataToPost="coa"
+                        lookupValue={(id) => {
+                          forms.setValue('coahut', String(id ?? ''));
+                        }}
+                        onSelectRow={(val) =>
+                          forms.setValue('coahut_text', val?.keterangancoa)
+                        }
+                        lookupNama={forms.getValues('coahut_text')}
+                        disabled={mode === 'view' || mode === 'delete'}
+                      />
                     </div>
                   </div>
 
@@ -505,7 +356,10 @@ const FormSupplier = ({
                     control={forms.control}
                     render={({ field }) => (
                       <FormItem className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
-                        <FormLabel className="font-semibold lg:w-[15%]">
+                        <FormLabel
+                          required={false}
+                          className="font-semibold lg:w-[15%]"
+                        >
                           KOTA
                         </FormLabel>
                         <div className="flex flex-col lg:w-[85%]">
@@ -528,25 +382,20 @@ const FormSupplier = ({
                     control={forms.control}
                     render={({ field }) => (
                       <FormItem className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
-                        <FormLabel className="font-semibold lg:w-[15%]">
-                          KODE POS
+                        <FormLabel
+                          required={false}
+                          className="font-semibold lg:w-[15%]"
+                        >
+                          KODEPOS
                         </FormLabel>
                         <div className="flex flex-col lg:w-[85%]">
                           <FormControl>
-                            <InputMask
+                            <Input
                               {...field}
-                              mask="99999"
-                              maskPlaceholder={null}
                               value={field.value ?? ''}
-                              className={`h-9 w-full rounded-sm border border-input-border bg-background-input px-3 py-2 text-sm focus:border-border focus:bg-background-input-focus ${
-                                mode === 'delete'
-                                  ? 'text-zinc-400'
-                                  : 'text-primary-text'
-                              } focus:outline-none focus:ring-0`}
-                              onChange={field.onChange}
                               type="text"
                               readOnly={mode === 'view' || mode === 'delete'}
-                            ></InputMask>
+                            />
                           </FormControl>
                           <FormMessage />
                         </div>
@@ -559,25 +408,20 @@ const FormSupplier = ({
                     control={forms.control}
                     render={({ field }) => (
                       <FormItem className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
-                        <FormLabel className="font-semibold lg:w-[15%]">
+                        <FormLabel
+                          required={false}
+                          className="font-semibold lg:w-[15%]"
+                        >
                           TELP
                         </FormLabel>
                         <div className="flex flex-col lg:w-[85%]">
                           <FormControl>
-                            <InputMask
+                            <Input
                               {...field}
-                              mask="999999999999999"
-                              maskPlaceholder={null}
                               value={field.value ?? ''}
-                              className={`h-9 w-full rounded-sm border border-input-border bg-background-input px-3 py-2 text-sm focus:border-border focus:bg-background-input-focus ${
-                                mode === 'delete'
-                                  ? 'text-zinc-400'
-                                  : 'text-primary-text'
-                              } focus:outline-none focus:ring-0`}
-                              onChange={field.onChange}
                               type="text"
                               readOnly={mode === 'view' || mode === 'delete'}
-                            ></InputMask>
+                            />
                           </FormControl>
                           <FormMessage />
                         </div>
@@ -591,7 +435,7 @@ const FormSupplier = ({
                     render={({ field }) => (
                       <FormItem className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
                         <FormLabel
-                          required={true}
+                          required={false}
                           className="font-semibold lg:w-[15%]"
                         >
                           EMAIL
@@ -616,7 +460,10 @@ const FormSupplier = ({
                     control={forms.control}
                     render={({ field }) => (
                       <FormItem className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
-                        <FormLabel className="font-semibold lg:w-[15%]">
+                        <FormLabel
+                          required={false}
+                          className="font-semibold lg:w-[15%]"
+                        >
                           FAX
                         </FormLabel>
                         <div className="flex flex-col lg:w-[85%]">
@@ -639,7 +486,10 @@ const FormSupplier = ({
                     control={forms.control}
                     render={({ field }) => (
                       <FormItem className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
-                        <FormLabel className="font-semibold lg:w-[15%]">
+                        <FormLabel
+                          required={false}
+                          className="font-semibold lg:w-[15%]"
+                        >
                           WEB
                         </FormLabel>
                         <div className="flex flex-col lg:w-[85%]">
@@ -663,17 +513,17 @@ const FormSupplier = ({
                     render={({ field }) => (
                       <FormItem className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
                         <FormLabel
-                          required={true}
+                          required={false}
                           className="font-semibold lg:w-[15%]"
                         >
-                          CREDIT TERM
+                          CREDITTERM
                         </FormLabel>
                         <div className="flex flex-col lg:w-[85%]">
                           <FormControl>
                             <InputNumeric
                               value={field.value ?? ''}
-                              onValueChange={(value: any) =>
-                                forms.setValue('creditterm', Number(value))
+                              onValueChange={(value) =>
+                                field.onChange(value ?? '')
                               }
                               readOnly={mode === 'view' || mode === 'delete'}
                             />
@@ -689,15 +539,18 @@ const FormSupplier = ({
                     control={forms.control}
                     render={({ field }) => (
                       <FormItem className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
-                        <FormLabel className="font-semibold lg:w-[15%]">
-                          CREDIT TERM PLUS
+                        <FormLabel
+                          required={false}
+                          className="font-semibold lg:w-[15%]"
+                        >
+                          CREDITTERMPLUS
                         </FormLabel>
                         <div className="flex flex-col lg:w-[85%]">
                           <FormControl>
                             <InputNumeric
                               value={field.value ?? ''}
-                              onValueChange={(value: any) =>
-                                forms.setValue('credittermplus', Number(value))
+                              onValueChange={(value) =>
+                                field.onChange(value ?? '')
                               }
                               readOnly={mode === 'view' || mode === 'delete'}
                             />
@@ -714,27 +567,19 @@ const FormSupplier = ({
                     render={({ field }) => (
                       <FormItem className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
                         <FormLabel
-                          required={true}
+                          required={false}
                           className="font-semibold lg:w-[15%]"
                         >
                           NPWP
                         </FormLabel>
                         <div className="flex flex-col lg:w-[85%]">
                           <FormControl>
-                            <InputMask
+                            <Input
                               {...field}
-                              mask="99.999.999.9-999.999"
-                              maskPlaceholder={null}
                               value={field.value ?? ''}
-                              className={`h-9 w-full rounded-sm border border-input-border bg-background-input px-3 py-2 text-sm focus:border-border focus:bg-background-input-focus ${
-                                mode === 'delete'
-                                  ? 'text-zinc-400'
-                                  : 'text-primary-text'
-                              } focus:outline-none focus:ring-0`}
-                              onChange={field.onChange}
                               type="text"
                               readOnly={mode === 'view' || mode === 'delete'}
-                            ></InputMask>
+                            />
                           </FormControl>
                           <FormMessage />
                         </div>
@@ -748,10 +593,10 @@ const FormSupplier = ({
                     render={({ field }) => (
                       <FormItem className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
                         <FormLabel
-                          required={true}
+                          required={false}
                           className="font-semibold lg:w-[15%]"
                         >
-                          ALAMAT FAKTUR PAJAK
+                          ALAMATFAKTURPAJAK
                         </FormLabel>
                         <div className="flex flex-col lg:w-[85%]">
                           <FormControl>
@@ -774,10 +619,10 @@ const FormSupplier = ({
                     render={({ field }) => (
                       <FormItem className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
                         <FormLabel
-                          required={true}
+                          required={false}
                           className="font-semibold lg:w-[15%]"
                         >
-                          NAMA PAJAK
+                          NAMAPAJAK
                         </FormLabel>
                         <div className="flex flex-col lg:w-[85%]">
                           <FormControl>
@@ -799,16 +644,17 @@ const FormSupplier = ({
                     control={forms.control}
                     render={({ field }) => (
                       <FormItem className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
-                        <FormLabel className="font-semibold lg:w-[15%]">
-                          NOMINAL PPH 21
+                        <FormLabel
+                          required={false}
+                          className="font-semibold lg:w-[15%]"
+                        >
+                          NOMINALPPH21
                         </FormLabel>
                         <div className="flex flex-col lg:w-[85%]">
                           <FormControl>
                             <InputCurrency
-                              value={field.value}
-                              onValueChange={(val) => {
-                                field.onChange(val);
-                              }}
+                              value={field.value ?? ''}
+                              onValueChange={field.onChange}
                               readOnly={mode === 'view' || mode === 'delete'}
                             />
                           </FormControl>
@@ -823,16 +669,17 @@ const FormSupplier = ({
                     control={forms.control}
                     render={({ field }) => (
                       <FormItem className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
-                        <FormLabel className="font-semibold lg:w-[15%]">
-                          NOMINAL PPH 23
+                        <FormLabel
+                          required={false}
+                          className="font-semibold lg:w-[15%]"
+                        >
+                          NOMINALPPH23
                         </FormLabel>
                         <div className="flex flex-col lg:w-[85%]">
                           <FormControl>
                             <InputCurrency
-                              value={field.value}
-                              onValueChange={(val) => {
-                                field.onChange(val);
-                              }}
+                              value={field.value ?? ''}
+                              onValueChange={field.onChange}
                               readOnly={mode === 'view' || mode === 'delete'}
                             />
                           </FormControl>
@@ -847,8 +694,11 @@ const FormSupplier = ({
                     control={forms.control}
                     render={({ field }) => (
                       <FormItem className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
-                        <FormLabel className="font-semibold lg:w-[15%]">
-                          NO SKB
+                        <FormLabel
+                          required={false}
+                          className="font-semibold lg:w-[15%]"
+                        >
+                          NOSKB
                         </FormLabel>
                         <div className="flex flex-col lg:w-[85%]">
                           <FormControl>
@@ -870,19 +720,19 @@ const FormSupplier = ({
                     control={forms.control}
                     render={({ field }) => (
                       <FormItem className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
-                        <FormLabel className="font-semibold lg:w-[15%]">
-                          TANGGAL SKB
+                        <FormLabel
+                          required={false}
+                          className="font-semibold lg:w-[15%]"
+                        >
+                          TGLSKB
                         </FormLabel>
                         <div className="flex flex-col lg:w-[85%]">
                           <FormControl>
                             <InputDatePicker
-                              value={field.value}
+                              value={field.value ?? ''}
                               onChange={field.onChange}
-                              showCalendar
-                              onSelect={(date) =>
-                                forms.setValue('tglskb', date)
-                              }
                               disabled={mode === 'view' || mode === 'delete'}
+                              showCalendar
                             />
                           </FormControl>
                           <FormMessage />
@@ -896,8 +746,11 @@ const FormSupplier = ({
                     control={forms.control}
                     render={({ field }) => (
                       <FormItem className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
-                        <FormLabel className="font-semibold lg:w-[15%]">
-                          NO SK
+                        <FormLabel
+                          required={false}
+                          className="font-semibold lg:w-[15%]"
+                        >
+                          NOSK
                         </FormLabel>
                         <div className="flex flex-col lg:w-[85%]">
                           <FormControl>
@@ -919,17 +772,19 @@ const FormSupplier = ({
                     control={forms.control}
                     render={({ field }) => (
                       <FormItem className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
-                        <FormLabel className="font-semibold lg:w-[15%]">
-                          TANGGAL SK
+                        <FormLabel
+                          required={false}
+                          className="font-semibold lg:w-[15%]"
+                        >
+                          TGLSK
                         </FormLabel>
                         <div className="flex flex-col lg:w-[85%]">
                           <FormControl>
                             <InputDatePicker
-                              value={field.value}
+                              value={field.value ?? ''}
                               onChange={field.onChange}
-                              showCalendar
-                              onSelect={(date) => forms.setValue('tglsk', date)}
                               disabled={mode === 'view' || mode === 'delete'}
+                              showCalendar
                             />
                           </FormControl>
                           <FormMessage />
@@ -941,27 +796,35 @@ const FormSupplier = ({
                   <div className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
                     <div className="w-full lg:w-[15%]">
                       <FormLabel
-                        required={true}
+                        required={false}
                         className="text-sm font-semibold"
                       >
-                        Status Aktif
+                        Statusaktif
                       </FormLabel>
                     </div>
                     <div className="w-full lg:w-[85%]">
-                      {lookupPropsStatusAktif.map((props, index) => (
-                        <LookUp
-                          key={index}
-                          {...props}
-                          lookupValue={(id) =>
-                            forms.setValue('statusaktif', id)
-                          }
-                          onSelectRow={(val) =>
-                            forms.setValue('statusaktif_nama', val?.text)
-                          }
-                          inputLookupValue={forms.getValues('statusaktif')}
-                          lookupNama={forms.getValues('statusaktif_nama')}
-                        />
-                      ))}
+                      <LookUp
+                        columns={[{ key: 'text', name: 'STATUS AKTIF' }]}
+                        labelLookup="STATUSAKTIF LOOKUP"
+                        required={false}
+                        selectedRequired={false}
+                        endpoint="parameter?grp=status+aktif"
+                        label="STATUSAKTIF"
+                        reduxKey="STATUS AKTIF"
+                        singleColumn={true}
+                        pageSize={20}
+                        showOnButton={true}
+                        postData="text"
+                        dataToPost="id"
+                        lookupValue={(id) => {
+                          forms.setValue('statusaktif', String(id ?? ''));
+                        }}
+                        onSelectRow={(val) =>
+                          forms.setValue('statusaktif_text', val?.text)
+                        }
+                        lookupNama={forms.getValues('statusaktif_text')}
+                        disabled={mode === 'view' || mode === 'delete'}
+                      />
                     </div>
                   </div>
                 </div>
@@ -969,12 +832,14 @@ const FormSupplier = ({
             </Form>
           </div>
         </div>
+
         <FormFooterButtons
           mode={mode}
           onSave={() => {
             onSubmit(false);
             dispatch(setSubmitClicked(true));
           }}
+          deleteMode={mode === 'delete'}
           onSaveAndAdd={() => {
             onSubmit(true);
             dispatch(setSubmitClicked(true));
@@ -983,7 +848,6 @@ const FormSupplier = ({
           isLoadingCreate={isLoadingCreate}
           isLoadingUpdate={isLoadingUpdate}
           isLoadingDelete={isLoadingDelete}
-          deleteMode={mode === 'delete'}
         />
       </DialogContent>
     </Dialog>

@@ -156,7 +156,26 @@ const FormPanjarHeader = ({
   };
 
   const deleteRow = (index: number) => {
-    setRows(rows.filter((_, i) => i !== index));
+    setRows((prevRows) => {
+      const remaining = prevRows.filter((_, i) => i !== index);
+      if (remaining.some((row) => row.id !== 'add_row')) return remaining;
+
+      // detail tidak boleh kosong, sisakan 1 baris default
+      return [
+        {
+          id: '',
+          nobukti: '',
+          panjar_id: '',
+          orderanmuatan_id: '',
+          orderanmuatan_nobukti: '',
+          estimasi: '0',
+          nominal: '0',
+          keterangan: '',
+          isNew: true
+        },
+        ...remaining
+      ];
+    });
   };
 
   const inputStopPropagation = (e: React.KeyboardEvent) => {
@@ -225,9 +244,7 @@ const FormPanjarHeader = ({
           return (
             <div className="m-0 flex h-full w-full cursor-pointer items-center justify-center p-0 text-xs">
               <button
-                disabled={
-                  mode === 'view' || mode === 'delete' || rows.length <= 2
-                }
+                disabled={mode === 'view' || mode === 'delete'}
                 type="button"
                 className="rounded bg-transparent text-xs text-red-500"
                 onClick={() => deleteRow(props.rowIdx)}

@@ -8,10 +8,7 @@ interface UpdateMenuParams {
   id: string;
   fields: EmklInput;
 }
-interface validationFields {
-  aksi: string;
-  value: number | string;
-}
+
 export const getEmklFn = async (
   filters: GetParams = {},
   signal?: AbortSignal
@@ -59,9 +56,4 @@ export const exportEmklFn = async (filters: any): Promise<any> => {
     console.error('Error exporting data:', error);
     throw new Error('Failed to export data');
   }
-};
-export const checkValidationEmklFn = async (fields: validationFields) => {
-  const response = await api2.post(`/emkl/check-validation`, fields);
-
-  return response;
 };

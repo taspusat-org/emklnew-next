@@ -31,7 +31,8 @@ jest.mock('@/components/custom-ui/LookUp', () => {
                 uuid: 'uuid-1',
                 id: '1',
                 text: 'NILAI 1',
-                nama: 'NILAI 1'
+                nama: 'NILAI 1',
+                keterangancoa: 'NILAI 1'
               });
           }}
           disabled={disabled}
@@ -128,9 +129,9 @@ const validData: Partial<EmklInput> = {
   nama: 'CONTOH NAMA',
   contactperson: 'CONTOH CONTACTPERSON',
   alamat: 'CONTOH ALAMAT',
-  coagiro: 'CONTOH COAGIRO',
-  coapiutang: 'CONTOH COAPIUTANG',
-  coahutang: 'CONTOH COAHUTANG',
+  coagiro: '1',
+  coapiutang: '1',
+  coahutang: '1',
   kota: 'CONTOH KOTA',
   kodepos: 'CONTOH KODEPOS',
   notelp: 'CONTOH NOTELP',
@@ -170,9 +171,6 @@ describe('FormEmkl Component', () => {
         screen.getByLabelText(/^CONTACTPERSON\s*\*?$/i)
       ).toBeInTheDocument();
       expect(screen.getByLabelText(/^ALAMAT\s*\*?$/i)).toBeInTheDocument();
-      expect(screen.getByLabelText(/^COAGIRO\s*\*?$/i)).toBeInTheDocument();
-      expect(screen.getByLabelText(/^COAPIUTANG\s*\*?$/i)).toBeInTheDocument();
-      expect(screen.getByLabelText(/^COAHUTANG\s*\*?$/i)).toBeInTheDocument();
       expect(screen.getByLabelText(/^KOTA\s*\*?$/i)).toBeInTheDocument();
       expect(screen.getByLabelText(/^KODEPOS\s*\*?$/i)).toBeInTheDocument();
       expect(screen.getByLabelText(/^NOTELP\s*\*?$/i)).toBeInTheDocument();
@@ -184,6 +182,9 @@ describe('FormEmkl Component', () => {
       expect(screen.getByLabelText(/^ALAMATPAJAK\s*\*?$/i)).toBeInTheDocument();
       expect(screen.getByTestId('lookup-STATUSRELASI')).toBeInTheDocument();
       expect(screen.getByTestId('lookup-RELASI')).toBeInTheDocument();
+      expect(screen.getByTestId('lookup-COAGIRO')).toBeInTheDocument();
+      expect(screen.getByTestId('lookup-COAPIUTANG')).toBeInTheDocument();
+      expect(screen.getByTestId('lookup-COAHUTANG')).toBeInTheDocument();
       expect(screen.getByTestId('lookup-STATUSTRADO')).toBeInTheDocument();
       expect(screen.getByTestId('lookup-STATUSAKTIF')).toBeInTheDocument();
     });
@@ -250,33 +251,6 @@ describe('FormEmkl Component', () => {
       render(<FormEmklWrapper />);
       const input = screen.getByLabelText(
         /^ALAMAT\s*\*?$/i
-      ) as HTMLInputElement;
-      await userEvent.type(input, 'Contoh Isi');
-      expect(input.value).toBe('Contoh Isi');
-    });
-
-    test('should allow typing in COAGIRO field', async () => {
-      render(<FormEmklWrapper />);
-      const input = screen.getByLabelText(
-        /^COAGIRO\s*\*?$/i
-      ) as HTMLInputElement;
-      await userEvent.type(input, 'Contoh Isi');
-      expect(input.value).toBe('Contoh Isi');
-    });
-
-    test('should allow typing in COAPIUTANG field', async () => {
-      render(<FormEmklWrapper />);
-      const input = screen.getByLabelText(
-        /^COAPIUTANG\s*\*?$/i
-      ) as HTMLInputElement;
-      await userEvent.type(input, 'Contoh Isi');
-      expect(input.value).toBe('Contoh Isi');
-    });
-
-    test('should allow typing in COAHUTANG field', async () => {
-      render(<FormEmklWrapper />);
-      const input = screen.getByLabelText(
-        /^COAHUTANG\s*\*?$/i
       ) as HTMLInputElement;
       await userEvent.type(input, 'Contoh Isi');
       expect(input.value).toBe('Contoh Isi');
@@ -381,15 +355,6 @@ describe('FormEmkl Component', () => {
       expect(screen.getByLabelText(/^ALAMAT\s*\*?$/i)).not.toHaveAttribute(
         'readonly'
       );
-      expect(screen.getByLabelText(/^COAGIRO\s*\*?$/i)).not.toHaveAttribute(
-        'readonly'
-      );
-      expect(screen.getByLabelText(/^COAPIUTANG\s*\*?$/i)).not.toHaveAttribute(
-        'readonly'
-      );
-      expect(screen.getByLabelText(/^COAHUTANG\s*\*?$/i)).not.toHaveAttribute(
-        'readonly'
-      );
       expect(screen.getByLabelText(/^KOTA\s*\*?$/i)).not.toHaveAttribute(
         'readonly'
       );
@@ -437,15 +402,6 @@ describe('FormEmkl Component', () => {
       expect(screen.getByLabelText(/^ALAMAT\s*\*?$/i)).toHaveAttribute(
         'readonly'
       );
-      expect(screen.getByLabelText(/^COAGIRO\s*\*?$/i)).toHaveAttribute(
-        'readonly'
-      );
-      expect(screen.getByLabelText(/^COAPIUTANG\s*\*?$/i)).toHaveAttribute(
-        'readonly'
-      );
-      expect(screen.getByLabelText(/^COAHUTANG\s*\*?$/i)).toHaveAttribute(
-        'readonly'
-      );
       expect(screen.getByLabelText(/^KOTA\s*\*?$/i)).toHaveAttribute(
         'readonly'
       );
@@ -489,6 +445,9 @@ describe('FormEmkl Component', () => {
       render(<FormEmklWrapper mode="view" />);
       expect(screen.getByTestId('lookup-button-STATUSRELASI')).toBeDisabled();
       expect(screen.getByTestId('lookup-button-RELASI')).toBeDisabled();
+      expect(screen.getByTestId('lookup-button-COAGIRO')).toBeDisabled();
+      expect(screen.getByTestId('lookup-button-COAPIUTANG')).toBeDisabled();
+      expect(screen.getByTestId('lookup-button-COAHUTANG')).toBeDisabled();
       expect(screen.getByTestId('lookup-button-STATUSTRADO')).toBeDisabled();
       expect(screen.getByTestId('lookup-button-STATUSAKTIF')).toBeDisabled();
     });

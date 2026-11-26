@@ -98,7 +98,10 @@ import {
   getMenuFn,
   reportMenuBySelectFn
 } from '@/lib/apis/menu.api';
-import { generateMenuExportFn } from '@/lib/apis/report.api';
+import {
+  generateMenuExportFn,
+  generateMenuReportFn
+} from '@/lib/apis/report.api';
 import { useReportPdfContext } from '@/hooks/ReportPdfProvider';
 import { syncAcosFn } from '@/lib/apis/acos.api';
 import { useReportProgress } from '@/components/custom-ui/ReportProgressProvider';
@@ -147,6 +150,7 @@ const GridMenu = () => {
   const [selectedRow, setSelectedRow] = useState<number>(0);
   const [selectedCol, setSelectedCol] = useState<number>(0);
   const [isFirstLoad, setIsFirstLoad] = useState(true);
+  const { generateReport, generateExport } = useReportPdfContext();
 
   const [totalPages, setTotalPages] = useState(1);
   const [popOver, setPopOver] = useState<boolean>(false);
@@ -180,7 +184,6 @@ const GridMenu = () => {
   const suppressScrollRef = useRef(false);
   const isPageTransitionRef = useRef(false);
   const { start } = useReportProgress();
-  const { generateExport } = useReportPdfContext();
 
   const lastScrollTopRef = useRef<number>(0);
   const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -294,7 +297,6 @@ const GridMenu = () => {
       icon: '',
       parentId: '',
       parent_nama: '',
-      isActive: 1,
       statusaktif: '',
       statusaktif_nama: ''
     }
@@ -1592,7 +1594,6 @@ const GridMenu = () => {
       icon: '',
       parentId: '',
       parent_nama: '',
-      isActive: 1,
       statusaktif: aktif.id,
       statusaktif_nama: aktif.text
     });
@@ -1861,125 +1862,35 @@ const GridMenu = () => {
     }
   };
 
-  // Baris tambahan yang dipakai header template .mrt.
-  const withReportHeader = (data: any[]) => {
-    const now = new Date();
-    const pad = (n: any) => n.toString().padStart(2, '0');
-    const tglcetak = `${pad(now.getDate())}-${pad(
-      now.getMonth() + 1
-    )}-${now.getFullYear()} ${pad(now.getHours())}:${pad(
-      now.getMinutes()
-    )}:${pad(now.getSeconds())}`;
+  const handleExportExcel = async () => {
+    const { page, limit, ...filtersWithoutLimit } = filters;
 
-    return data.map((row: any) => ({
-      ...row,
-      judullaporan: 'Laporan Menu',
-      usercetak: user.username,
-      tglcetak,
-      judul: 'PT.TRANSPORINDO AGUNG SEJAHTERA'
-    }));
-  };
-
-  // Render PDF di browser lewat Stimulsoft, sama seperti alat bayar: progres
-  // dilaporkan ke ReportProgressProvider (job) dan hasilnya dibuka di tab
-  // /reports/menu lewat sessionStorage.
-  const renderReportPdf = async (reportRows: any[], job: any) => {
-    job.rendering();
-    await loadStimulsoftScript();
-    const Stimulsoft = (window as any).Stimulsoft;
-    Stimulsoft.Base.StiFontCollection.addOpentypeFontFile(
-      '/fonts/tahoma.ttf',
-      'Tahoma'
-    );
-
-    Stimulsoft.Base.StiFontCollection.addOpentypeFontFile(
-      '/fonts/tahomabd.ttf',
-      'Tahoma'
-    );
-    Stimulsoft.Base.StiLicense.Key =
-      '6vJhGtLLLz2GNviWmUTrhSqnOItdDwjBylQzQcAOiHksEid1Z5nN/hHQewjPL/4/AvyNDbkXgG4Am2U6dyA8Ksinqp' +
-      '6agGqoHp+1KM7oJE6CKQoPaV4cFbxKeYmKyyqjF1F1hZPDg4RXFcnEaYAPj/QLdRHR5ScQUcgxpDkBVw8XpueaSFBs' +
-      'JVQs/daqfpFiipF1qfM9mtX96dlxid+K/2bKp+e5f5hJ8s2CZvvZYXJAGoeRd6iZfota7blbsgoLTeY/sMtPR2yutv' +
-      'gE9TafuTEhj0aszGipI9PgH+A/i5GfSPAQel9kPQaIQiLw4fNblFZTXvcrTUjxsx0oyGYhXslAAogi3PILS/DpymQQ' +
-      '0XskLbikFsk1hxoN5w9X+tq8WR6+T9giI03Wiqey+h8LNz6K35P2NJQ3WLn71mqOEb9YEUoKDReTzMLCA1yJoKia6Y' +
-      'JuDgUf1qamN7rRICPVd0wQpinqLYjPpgNPiVqrkGW0CQPZ2SE2tN4uFRIWw45/IITQl0v9ClCkO/gwUtwtuugegrqs' +
-      'e0EZ5j2V4a1XDmVuJaS33pAVLoUgK0M8RG72';
-
-    const report = new Stimulsoft.Report.StiReport();
-    const dataSet = new Stimulsoft.System.Data.DataSet('Data');
-    report.loadFile('/reports/LaporanMenu.mrt');
-    report.dictionary.dataSources.clear();
-    dataSet.readJson({ data: reportRows });
-    report.regData(dataSet.dataSetName, '', dataSet);
-    report.dictionary.synchronize();
-
-    await new Promise<void>((resolve, reject) => {
-      report.renderAsync(() => {
-        job.exporting();
-        report.exportDocumentAsync((pdfData: any) => {
-          try {
-            const blob = new Blob([new Uint8Array(pdfData)], {
-              type: 'application/pdf'
-            });
-            sessionStorage.setItem('pdfUrl', URL.createObjectURL(blob));
-            job.finish(() => window.open('/reports/menu', '_blank'));
-            resolve();
-          } catch (err) {
-            reject(err);
-          }
-        }, Stimulsoft.Report.StiExportFormat.Pdf);
-      });
+    await generateExport({
+      label: 'Export Emkl',
+      payload: {
+        search: filtersWithoutLimit.search,
+        filters: filtersWithoutLimit.filters,
+        sortBy: filtersWithoutLimit.sortBy,
+        sortDirection: filtersWithoutLimit.sortDirection
+      },
+      apiFn: generateMenuExportFn
     });
   };
-
   const handleReport = async () => {
-    const job = start('Menu', 'pdf');
-
-    try {
-      job.fetching();
-      const { page, limit, ...filtersWithoutLimit } = filters;
-      // limit: 0 = tanpa paging (ambil semua baris yang lolos filter). Tanpa
-      // ini backend memakai default FindAllSchema (limit 10) sehingga laporan
-      // hanya berisi 10 baris pertama.
-      const response = await getMenuFn({ ...filtersWithoutLimit, limit: 0 });
-
-      // Filter disimpan supaya tombol Export di viewer memakai filter yang
-      // sama dengan laporan yang sedang dibuka.
-      sessionStorage.setItem(
-        'filtersWithoutLimit',
-        JSON.stringify({ ...filtersWithoutLimit, limit: 0 })
-      );
-
-      await renderReportPdf(withReportHeader(response.data), job);
-    } catch (err) {
-      job.fail('Gagal membuat laporan PDF');
-      console.error('[handleReport PDF]', err);
-    }
-  };
-
-  const handleReportBySelect = async () => {
-    if (checkedRows.size === 0) {
-      alert({
-        title: 'PILIH DATA YANG INGIN DI CETAK!',
-        variant: 'danger',
-        submitText: 'OK'
-      });
-      return;
-    }
-
-    const job = start('Menu', 'pdf');
-    try {
-      job.fetching();
-      const jsonCheckedRows = Array.from(checkedRows).map((id) => ({ id }));
-      const response = await reportMenuBySelectFn(jsonCheckedRows);
-
-      sessionStorage.setItem('filtersWithoutLimit', JSON.stringify({}));
-
-      await renderReportPdf(withReportHeader(response ?? []), job);
-    } catch (err) {
-      job.fail('Gagal membuat laporan PDF');
-      console.error('[handleReportBySelect PDF]', err);
-    }
+    await generateReport({
+      label: 'Menu',
+      payload: {
+        mrtName: 'LaporanMenu.mrt',
+        search: filters.search,
+        filters: filters.filters,
+        sortBy: filters.sortBy,
+        sortDirection: filters.sortDirection,
+        judullaporan: 'Laporan Menu'
+      },
+      apiFn: generateMenuReportFn,
+      // Tombol Export di viewer memakai filter grid yang sama.
+      onExport: () => handleExportExcel()
+    });
   };
 
   const handleExport = async () => {
@@ -2588,7 +2499,6 @@ const GridMenu = () => {
     forms.setValue('id', rowData?.id ?? '');
     forms.setValue('title', rowData?.title);
     forms.setValue('icon', rowData?.icon ?? '');
-    forms.setValue('isActive', Number(rowData?.isActive ?? 1));
 
     // aco_id / parentId = varchar UUID, jangan dikonversi ke number.
     forms.setValue('aco_id', String(rowData?.aco_id ?? ''));
@@ -2797,11 +2707,6 @@ const GridMenu = () => {
                   {
                     label: 'REPORT ALL',
                     onClick: () => handleReport(),
-                    className: 'bg-cyan-500 hover:bg-cyan-700'
-                  },
-                  {
-                    label: 'REPORT BY SELECT',
-                    onClick: () => handleReportBySelect(),
                     className: 'bg-cyan-500 hover:bg-cyan-700'
                   }
                 ]

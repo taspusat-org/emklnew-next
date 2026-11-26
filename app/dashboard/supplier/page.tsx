@@ -1,25 +1,20 @@
 'use client';
 
+import PageContainer from '@/components/layout/page-container';
+import { Tabs, TabsContent } from '@/components/ui/tabs';
+import GridSupplier from './components/GridSupplier';
+import { fieldLength } from '@/lib/apis/field-length.api';
+
 import React, { useEffect } from 'react';
 import { useDispatch } from 'react-redux';
-import { Tabs, TabsContent } from '@/components/ui/tabs';
-import { fieldLength } from '@/lib/apis/field-length.api';
-import PageContainer from '@/components/layout/page-container';
 import { setFieldLength } from '@/lib/store/field-length/fieldLengthSlice';
 import { getParameterFn } from '@/lib/apis/parameter.api';
 import {
   setData,
-  setType,
-  setDefault
+  setDefault,
+  setType
 } from '@/lib/store/lookupSlice/lookupSlice';
-import { getAkuntansiFn } from '@/lib/apis/akuntansi.api';
-import GridSupplier from './components/GridSupplier';
-import { getAkunpusatFn } from '@/lib/apis/akunpusat.api';
-
-interface ApiResponse {
-  type: string;
-  data: any; // Define a more specific type for data if possible
-}
+import { IParameter } from '@/lib/types/parameter.type';
 
 const Page = () => {
   const dispatch = useDispatch();
@@ -27,52 +22,45 @@ const Page = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const result = await fieldLength('supplier');
-        dispatch(setFieldLength(result.data));
+        const fieldLengthResult = await fieldLength('supplier');
+        dispatch(setFieldLength(fieldLengthResult.data));
 
-        const [getStatusAktifLookup, getAkunPusatLookup] =
-          await Promise.all<ApiResponse>([
-            getParameterFn({ isLookUp: 'true' }),
-            getAkunpusatFn({ isLookUp: 'true' })
-          ]);
+        const [getStatusAktifLookup] = await Promise.all([
+          getParameterFn({ isLookUp: 'true' })
+        ]);
 
-        if (getStatusAktifLookup.type === 'local') {
+        if (
+          getStatusAktifLookup.type === 'local' &&
+          getStatusAktifLookup.data
+        ) {
           const grpsToFilter = ['STATUS AKTIF'];
 
           grpsToFilter.forEach((grp) => {
             const filteredData = getStatusAktifLookup.data.filter(
-              (item: any) => item.grp === grp
+              (item: IParameter) => item.grp === grp
             );
 
-            dispatch(setData({ key: grp, data: filteredData }));
-            dispatch(setType({ key: grp, type: getStatusAktifLookup.type }));
+            if (filteredData.length > 0) {
+              dispatch(setData({ key: grp, data: filteredData }));
+              dispatch(setType({ key: grp, type: getStatusAktifLookup.type }));
 
-            const defaultValue = filteredData
-              .map((item: any) => item.default)
-              .find((val: any) => val !== null || '');
+              // Set default value jika ada. Baris non-default menyimpan default
+              // sebagai string kosong (bukan null), jadi `!== null` salah memilih
+              // baris pertama. Pilih baris yang benar-benar bertanda default 'YA'.
+              const defaultItem = filteredData.find(
+                (item: IParameter) => item.default === 'YA'
+              );
 
-            dispatch(setDefault({ key: grp, isdefault: String(defaultValue) }));
-          });
-        }
+              const defaultValue = defaultItem
+                ? String(defaultItem.default)
+                : '';
 
-        if (getAkunPusatLookup.type === 'local') {
-          const multipleKey = ['COA', 'COA PIUTANG', 'COA HUTANG', 'COA GIRO'];
-
-          multipleKey.forEach((labelKey) => {
-            dispatch(setData({ key: labelKey, data: getAkunPusatLookup.data }));
-            dispatch(setType({ key: labelKey, type: getAkunPusatLookup.type }));
-
-            const defaultValue = getAkunPusatLookup.data
-              .map((item: any) => item.default)
-              .find((val: any) => val !== null || '');
-
-            dispatch(
-              setDefault({ key: labelKey, isdefault: String(defaultValue) })
-            );
+              dispatch(setDefault({ key: grp, isdefault: defaultValue }));
+            }
           });
         }
       } catch (err) {
-        console.error('Error fetching data:', err);
+        console.error('Error fetching lookup data:', err);
       }
     };
 
@@ -81,15 +69,11 @@ const Page = () => {
 
   return (
     <PageContainer scrollable>
-      <Tabs defaultValue="overview" className="space-y-4">
-        <TabsContent value="overview" className="space-y-4">
-          <div className="grid h-fit grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-7">
-            <div className="col-span-10 h-[500px]">
-              <GridSupplier />
-            </div>
-          </div>
-        </TabsContent>
-      </Tabs>
+      <div className="grid h-fit grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-7">
+        <div className="col-span-7 h-[500px]">
+          <GridSupplier />
+        </div>
+      </div>
     </PageContainer>
   );
 };

@@ -152,7 +152,35 @@ const FormBiayaLainLainDetailMuatan = ({
   };
 
   const deleteRow = (index: number) => {
-    setRows(rows.filter((_: any, i: any) => i !== index));
+    setRows((prevRows: any[]) => {
+      const remaining = prevRows.filter((_, i) => i !== index);
+      if (remaining.some((row) => row.id !== 'add_row')) return remaining;
+
+      // detail tidak boleh kosong, sisakan 1 baris default
+      return [
+        {
+          id: 0,
+          biaya_id: 0,
+          nobukti: '',
+          orderanmuatan_id: 0,
+          orderanmuatan_nobukti: '',
+          tgljob: '',
+          nocontainer: '',
+          noseal: '',
+          lokasistuffing_nama: '',
+          shipper_nama: '',
+          container_nama: '',
+          estimasi: '',
+          nominal: '',
+          keterangan: '',
+          biayaextra_id: 0,
+          biayaextra_nobukti: '',
+          biayaextra_nobuktijson: '',
+          isNew: true
+        },
+        ...remaining
+      ];
+    });
   };
 
   const inputStopPropagation = (e: React.KeyboardEvent) => {
