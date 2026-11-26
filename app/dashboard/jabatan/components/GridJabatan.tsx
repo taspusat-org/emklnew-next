@@ -2685,6 +2685,7 @@ const GridJabatan = () => {
             onDelete={handleDelete}
             onView={handleView}
             onEdit={handleEdit}
+            checkedRows={checkedRows}
             rowsLength={rows.length}
             totalItems={allJabatan ? allJabatan.pagination.totalItems : 0}
             startRow={startRow}

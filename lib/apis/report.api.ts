@@ -253,13 +253,6 @@ export const generateUserExportFn = async (
   return response.data;
 };
 
-export const generateMenuExportFn = async (
-  payload: ExportJobPayload
-): Promise<ReportJobResponse> => {
-  const response = await api2.post('/menu/export', payload);
-  return response.data;
-};
-
 export const generateHutangExportFn = async (
   payload: ExportJobPayload
 ): Promise<ReportJobResponse> => {
@@ -449,6 +442,36 @@ export const generateShipperExportFn = async (
   payload: ExportJobPayload
 ): Promise<ReportJobResponse> => {
   const response = await api2.post('/shipper/export', payload);
+  return response.data;
+};
+
+export const generateMenuReportFn = async (
+  payload: ReportJobPayload
+): Promise<ReportJobResponse> => {
+  const response = await api2.post('/menu/report', payload);
+  return response.data;
+};
+
+export const generateMenuExportFn = async (
+  payload: ExportJobPayload
+): Promise<ReportJobResponse> => {
+  const response = await api2.post('/menu/export', payload);
+  return response.data;
+};
+
+/** Cetak laporan Supplier di background — lihat generateGroupbiayaextraReportFn. */
+export const generateSupplierReportFn = async (
+  payload: ReportJobPayload
+): Promise<ReportJobResponse> => {
+  const response = await api2.post('/supplier/report', payload);
+  return response.data;
+};
+
+/** Export Excel Supplier di background — lihat generateAlatbayarExportFn. */
+export const generateSupplierExportFn = async (
+  payload: ExportJobPayload
+): Promise<ReportJobResponse> => {
+  const response = await api2.post('/supplier/export', payload);
   return response.data;
 };
 

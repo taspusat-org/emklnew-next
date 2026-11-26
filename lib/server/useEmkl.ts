@@ -14,14 +14,13 @@ export const useGetEmkl = (
   filters: {
     filters?: {
       statusrelasi_text?: string;
-      relasi_text?: string;
-      relasi_id?: string;
+      relasi_id_text?: string;
       nama?: string;
       contactperson?: string;
       alamat?: string;
-      coagiro?: string;
-      coapiutang?: string;
-      coahutang?: string;
+      coagiro_text?: string;
+      coapiutang_text?: string;
+      coahutang_text?: string;
       kota?: string;
       kodepos?: string;
       notelp?: string;

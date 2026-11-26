@@ -66,7 +66,7 @@ const FormUser = ({
   ];
   const lookUpPropsKaryawan = [
     {
-      columns: [{ key: 'namakaryawan', name: 'NAMA KARYAWAN' }],
+      columns: [{ key: 'nama', name: 'NAMA KARYAWAN' }],
       selectedRequired: false,
       endpoint: 'karyawan',
       labelLookup: 'KARYAWAN LOOKUP',
@@ -75,7 +75,7 @@ const FormUser = ({
       pageSize: 20,
       showOnButton: true,
       dataToPost: 'id',
-      postData: 'namakaryawan'
+      postData: 'nama'
     }
   ];
 
@@ -274,7 +274,7 @@ const FormUser = ({
                           lookupValue={(id) =>
                             forms.setValue('karyawan_id', String(id ?? ''))
                           }
-                          lookupNama={forms.getValues('namakaryawan')}
+                          lookupNama={forms.getValues('namakaryawan') ?? ''}
                           disabled={isReadOnly}
                         />
                       ))}

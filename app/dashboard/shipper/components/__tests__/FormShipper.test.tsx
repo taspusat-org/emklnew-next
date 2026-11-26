@@ -34,7 +34,8 @@ jest.mock('@/components/custom-ui/LookUp', () => {
                 uuid: 'uuid-1',
                 id: '1',
                 text: 'NILAI 1',
-                nama: 'NILAI 1'
+                nama: 'NILAI 1',
+                keterangancoa: 'NILAI 1'
               });
           }}
           disabled={disabled}
@@ -173,9 +174,9 @@ const validData: Partial<ShipperInput> = {
   keterangan: 'CONTOH KETERANGAN',
   contactperson: 'CONTOH CONTACTPERSON',
   alamat: 'CONTOH ALAMAT',
-  coa: 'CONTOH COA',
-  coapiutang: 'CONTOH COAPIUTANG',
-  coahutang: 'CONTOH COAHUTANG',
+  coa: '1',
+  coapiutang: '1',
+  coahutang: '1',
   kota: 'CONTOH KOTA',
   kodepos: 'CONTOH KOD',
   telp: 'CONTOH TELP',
@@ -186,7 +187,7 @@ const validData: Partial<ShipperInput> = {
   creditterm: '1',
   credittermplus: '1',
   npwp: 'CONTOH NPWP',
-  coagiro: 'CONTOH COAGIRO',
+  coagiro: '1',
   ppn: '1000',
   titipke: 'CONTOH TITIPKE',
   ppnbatalmuat: '1000',
@@ -256,9 +257,9 @@ describe('FormShipper Component', () => {
         screen.getByLabelText(/^CONTACTPERSON\s*\*?$/i)
       ).toBeInTheDocument();
       expect(screen.getByLabelText(/^ALAMAT\s*\*?$/i)).toBeInTheDocument();
-      expect(screen.getByLabelText(/^COA\s*\*?$/i)).toBeInTheDocument();
-      expect(screen.getByLabelText(/^COAPIUTANG\s*\*?$/i)).toBeInTheDocument();
-      expect(screen.getByLabelText(/^COAHUTANG\s*\*?$/i)).toBeInTheDocument();
+      expect(screen.getByTestId('lookup-COA')).toBeInTheDocument();
+      expect(screen.getByTestId('lookup-COAPIUTANG')).toBeInTheDocument();
+      expect(screen.getByTestId('lookup-COAHUTANG')).toBeInTheDocument();
       expect(screen.getByLabelText(/^KOTA\s*\*?$/i)).toBeInTheDocument();
       expect(screen.getByLabelText(/^KODEPOS\s*\*?$/i)).toBeInTheDocument();
       expect(screen.getByLabelText(/^TELP\s*\*?$/i)).toBeInTheDocument();
@@ -266,7 +267,7 @@ describe('FormShipper Component', () => {
       expect(screen.getByLabelText(/^FAX\s*\*?$/i)).toBeInTheDocument();
       expect(screen.getByLabelText(/^WEB\s*\*?$/i)).toBeInTheDocument();
       expect(screen.getByLabelText(/^NPWP\s*\*?$/i)).toBeInTheDocument();
-      expect(screen.getByLabelText(/^COAGIRO\s*\*?$/i)).toBeInTheDocument();
+      expect(screen.getByTestId('lookup-COAGIRO')).toBeInTheDocument();
       expect(screen.getByLabelText(/^TITIPKE\s*\*?$/i)).toBeInTheDocument();
       expect(screen.getByLabelText(/^GRUP\s*\*?$/i)).toBeInTheDocument();
       expect(screen.getByLabelText(/^COMODITY\s*\*?$/i)).toBeInTheDocument();
@@ -306,8 +307,6 @@ describe('FormShipper Component', () => {
       expect(screen.getByLabelText(/^NPWPNIK\s*\*?$/i)).toBeInTheDocument();
       expect(screen.getByLabelText(/^NITKU\s*\*?$/i)).toBeInTheDocument();
       expect(screen.getByLabelText(/^KODEPAJAK\s*\*?$/i)).toBeInTheDocument();
-      expect(screen.getByTestId('lookup-STATUSRELASI')).toBeInTheDocument();
-      expect(screen.getByTestId('lookup-RELASI')).toBeInTheDocument();
       expect(screen.getByTestId('lookup-MARKETING')).toBeInTheDocument();
       expect(screen.getByTestId('lookup-IDSHIPPERASAL')).toBeInTheDocument();
       expect(screen.getByTestId('lookup-PARENTSHIPPER')).toBeInTheDocument();
@@ -392,31 +391,6 @@ describe('FormShipper Component', () => {
       expect(input.value).toBe('Contoh Isi');
     });
 
-    test('should allow typing in COA field', async () => {
-      render(<FormShipperWrapper />);
-      const input = screen.getByLabelText(/^COA\s*\*?$/i) as HTMLInputElement;
-      await userEvent.type(input, 'Contoh Isi');
-      expect(input.value).toBe('Contoh Isi');
-    });
-
-    test('should allow typing in COAPIUTANG field', async () => {
-      render(<FormShipperWrapper />);
-      const input = screen.getByLabelText(
-        /^COAPIUTANG\s*\*?$/i
-      ) as HTMLInputElement;
-      await userEvent.type(input, 'Contoh Isi');
-      expect(input.value).toBe('Contoh Isi');
-    });
-
-    test('should allow typing in COAHUTANG field', async () => {
-      render(<FormShipperWrapper />);
-      const input = screen.getByLabelText(
-        /^COAHUTANG\s*\*?$/i
-      ) as HTMLInputElement;
-      await userEvent.type(input, 'Contoh Isi');
-      expect(input.value).toBe('Contoh Isi');
-    });
-
     test('should allow typing in KOTA field', async () => {
       render(<FormShipperWrapper />);
       const input = screen.getByLabelText(/^KOTA\s*\*?$/i) as HTMLInputElement;
@@ -464,15 +438,6 @@ describe('FormShipper Component', () => {
     test('should allow typing in NPWP field', async () => {
       render(<FormShipperWrapper />);
       const input = screen.getByLabelText(/^NPWP\s*\*?$/i) as HTMLInputElement;
-      await userEvent.type(input, 'Contoh Isi');
-      expect(input.value).toBe('Contoh Isi');
-    });
-
-    test('should allow typing in COAGIRO field', async () => {
-      render(<FormShipperWrapper />);
-      const input = screen.getByLabelText(
-        /^COAGIRO\s*\*?$/i
-      ) as HTMLInputElement;
       await userEvent.type(input, 'Contoh Isi');
       expect(input.value).toBe('Contoh Isi');
     });
@@ -733,15 +698,6 @@ describe('FormShipper Component', () => {
       expect(screen.getByLabelText(/^ALAMAT\s*\*?$/i)).not.toHaveAttribute(
         'readonly'
       );
-      expect(screen.getByLabelText(/^COA\s*\*?$/i)).not.toHaveAttribute(
-        'readonly'
-      );
-      expect(screen.getByLabelText(/^COAPIUTANG\s*\*?$/i)).not.toHaveAttribute(
-        'readonly'
-      );
-      expect(screen.getByLabelText(/^COAHUTANG\s*\*?$/i)).not.toHaveAttribute(
-        'readonly'
-      );
       expect(screen.getByLabelText(/^KOTA\s*\*?$/i)).not.toHaveAttribute(
         'readonly'
       );
@@ -761,9 +717,6 @@ describe('FormShipper Component', () => {
         'readonly'
       );
       expect(screen.getByLabelText(/^NPWP\s*\*?$/i)).not.toHaveAttribute(
-        'readonly'
-      );
-      expect(screen.getByLabelText(/^COAGIRO\s*\*?$/i)).not.toHaveAttribute(
         'readonly'
       );
       expect(screen.getByLabelText(/^TITIPKE\s*\*?$/i)).not.toHaveAttribute(
@@ -870,13 +823,6 @@ describe('FormShipper Component', () => {
       expect(screen.getByLabelText(/^ALAMAT\s*\*?$/i)).toHaveAttribute(
         'readonly'
       );
-      expect(screen.getByLabelText(/^COA\s*\*?$/i)).toHaveAttribute('readonly');
-      expect(screen.getByLabelText(/^COAPIUTANG\s*\*?$/i)).toHaveAttribute(
-        'readonly'
-      );
-      expect(screen.getByLabelText(/^COAHUTANG\s*\*?$/i)).toHaveAttribute(
-        'readonly'
-      );
       expect(screen.getByLabelText(/^KOTA\s*\*?$/i)).toHaveAttribute(
         'readonly'
       );
@@ -892,9 +838,6 @@ describe('FormShipper Component', () => {
       expect(screen.getByLabelText(/^FAX\s*\*?$/i)).toHaveAttribute('readonly');
       expect(screen.getByLabelText(/^WEB\s*\*?$/i)).toHaveAttribute('readonly');
       expect(screen.getByLabelText(/^NPWP\s*\*?$/i)).toHaveAttribute(
-        'readonly'
-      );
-      expect(screen.getByLabelText(/^COAGIRO\s*\*?$/i)).toHaveAttribute(
         'readonly'
       );
       expect(screen.getByLabelText(/^TITIPKE\s*\*?$/i)).toHaveAttribute(
@@ -988,8 +931,10 @@ describe('FormShipper Component', () => {
 
     test('should disable lookups in view mode', () => {
       render(<FormShipperWrapper mode="view" />);
-      expect(screen.getByTestId('lookup-button-STATUSRELASI')).toBeDisabled();
-      expect(screen.getByTestId('lookup-button-RELASI')).toBeDisabled();
+      expect(screen.getByTestId('lookup-button-COA')).toBeDisabled();
+      expect(screen.getByTestId('lookup-button-COAPIUTANG')).toBeDisabled();
+      expect(screen.getByTestId('lookup-button-COAHUTANG')).toBeDisabled();
+      expect(screen.getByTestId('lookup-button-COAGIRO')).toBeDisabled();
       expect(screen.getByTestId('lookup-button-MARKETING')).toBeDisabled();
       expect(screen.getByTestId('lookup-button-IDSHIPPERASAL')).toBeDisabled();
       expect(screen.getByTestId('lookup-button-PARENTSHIPPER')).toBeDisabled();

@@ -87,7 +87,7 @@ interface BaseActionProps {
   allowHotkeysInInput?: boolean;
 
   module?: string;
-  checkedRows?: Set<number>;
+  checkedRows?: Set<string | number>;
   disableAdd?: boolean;
   disableEdit?: boolean;
   isApproval?: boolean;

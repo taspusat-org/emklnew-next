@@ -13,7 +13,6 @@ export interface IMenu {
   acos_nama: string | null;
   parent_nama: string | null;
   parentId: string;
-  isActive: boolean | number | null;
   statusaktif: string;
   modifiedby: string;
   order: number;

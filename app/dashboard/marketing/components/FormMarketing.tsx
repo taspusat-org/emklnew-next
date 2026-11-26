@@ -461,23 +461,95 @@ const FormMarketing = ({
   };
 
   const deleteRowMarketingOrderan = (index: number) => {
-    // if (tabFormValues === 'formMarketingOrderan') {
-    setRowsMarketingOrderan(rowsMarketingOrderan.filter((_, i) => i !== index));
-    // }
+    setRowsMarketingOrderan((prevRows) => {
+      const remaining = prevRows.filter((_, i) => i !== index);
+      if (remaining.some((row) => row.id !== 'add_row')) return remaining;
+
+      // detail tidak boleh kosong, sisakan 1 baris default
+      return [
+        {
+          id: 0,
+          marketing_id: 0,
+          marketing_nama: '',
+          nama: '',
+          keterangan: '',
+          singkatan: '',
+          statusaktif: 0,
+          statusaktifOrderan_nama: '',
+          isNew: true
+        },
+        ...remaining
+      ];
+    });
   };
 
   const deleteRowMarketingBiaya = (index: number) => {
-    setRowsMarketingBiaya(rowsMarketingBiaya.filter((_, i) => i !== index));
+    setRowsMarketingBiaya((prevRows) => {
+      const remaining = prevRows.filter((_, i) => i !== index);
+      if (remaining.some((row) => row.id !== 'add_row')) return remaining;
+
+      // detail tidak boleh kosong, sisakan 1 baris default
+      return [
+        {
+          id: 0,
+          marketing_id: 0,
+          marketing_nama: '',
+          jenisbiayamarketing_id: 0,
+          jenisbiayamarketing_nama: '',
+          nominal: '',
+          statusaktif: 0,
+          statusaktifBiaya_nama: '',
+          isNew: true
+        },
+        ...remaining
+      ];
+    });
   };
 
   const deleteRowMarketingManager = (index: number) => {
-    setRowsMarketingManager(rowsMarketingManager.filter((_, i) => i !== index));
+    setRowsMarketingManager((prevRows) => {
+      const remaining = prevRows.filter((_, i) => i !== index);
+      if (remaining.some((row) => row.id !== 'add_row')) return remaining;
+
+      // detail tidak boleh kosong, sisakan 1 baris default
+      return [
+        {
+          id: 0,
+          marketing_id: 0,
+          marketing_nama: '',
+          managermarketing_id: 0,
+          managermarketing_nama: '',
+          statusaktif: 0,
+          statusaktifManager_nama: '',
+          isNew: true
+        },
+        ...remaining
+      ];
+    });
   };
 
   const deleteRowMarketingProsesFee = (index: number) => {
-    setRowsMarketingProsesFee(
-      rowsMarketingProsesFee.filter((_, i) => i !== index)
-    );
+    setRowsMarketingProsesFee((prevRows) => {
+      const remaining = prevRows.filter((_, i) => i !== index);
+      if (remaining.some((row) => row.id !== 'add_row')) return remaining;
+
+      // detail tidak boleh kosong, sisakan 1 baris default
+      return [
+        {
+          id: 0,
+          marketing_id: 0,
+          marketing_nama: '',
+          jenisprosesfee_id: 0,
+          jenisprosesfee_nama: '',
+          statuspotongbiayakantor: 0,
+          statuspotongbiayakantor_nama: '',
+          statusaktif: 0,
+          statusaktif_nama: '',
+          isNew: true
+        },
+        ...remaining
+      ];
+    });
   };
 
   const inputStopPropagation = (e: React.KeyboardEvent) => {
@@ -609,9 +681,8 @@ const FormMarketing = ({
           }
 
           // Otherwise, render the delete button for rows with data
-          const rowIndex = rowsMarketingOrderan.findIndex(
-            (row) => row.id === props.row.id
-          );
+          // baris baru semua ber-id 0, jadi cari lewat referensi objek
+          const rowIndex = rowsMarketingOrderan.indexOf(props.row);
           return (
             <div className="m-0 flex h-full w-full cursor-pointer items-center justify-center p-0 text-xs">
               <button
@@ -851,9 +922,8 @@ const FormMarketing = ({
           }
 
           // Otherwise, render the delete button for rows with data
-          const rowIndex = rowsMarketingBiaya.findIndex(
-            (row) => row.id === props.row.id
-          );
+          // baris baru semua ber-id 0, jadi cari lewat referensi objek
+          const rowIndex = rowsMarketingBiaya.indexOf(props.row);
           return (
             <div className="m-0 flex h-full w-full cursor-pointer items-center justify-center p-0 text-xs">
               <button
@@ -1070,9 +1140,8 @@ const FormMarketing = ({
           }
 
           // Otherwise, render the delete button for rows with data
-          const rowIndex = rowsMarketingManager.findIndex(
-            (row) => row.id === props.row.id
-          );
+          // baris baru semua ber-id 0, jadi cari lewat referensi objek
+          const rowIndex = rowsMarketingManager.indexOf(props.row);
           return (
             <div className="m-0 flex h-full w-full cursor-pointer items-center justify-center p-0 text-xs">
               <button
@@ -1250,9 +1319,8 @@ const FormMarketing = ({
             }
 
             // Otherwise, render the delete button for rows with data
-            const rowIndex = rowsMarketingProsesFee.findIndex(
-              (row) => row.id === props.row.id
-            );
+            // baris baru semua ber-id 0, jadi cari lewat referensi objek
+            const rowIndex = rowsMarketingProsesFee.indexOf(props.row);
             return (
               <div className="m-0 flex h-full w-full cursor-pointer items-center justify-center p-0 text-xs">
                 <button

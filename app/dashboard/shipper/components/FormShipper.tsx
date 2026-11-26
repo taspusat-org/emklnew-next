@@ -83,77 +83,6 @@ const FormShipper = ({
                 className="flex h-full flex-col gap-6"
               >
                 <div className="flex h-[100%] flex-col gap-2 lg:gap-3">
-                  <div className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
-                    <div className="w-full lg:w-[15%]">
-                      <FormLabel
-                        required={false}
-                        className="text-sm font-semibold"
-                      >
-                        Statusrelasi
-                      </FormLabel>
-                    </div>
-                    <div className="w-full lg:w-[85%]">
-                      <LookUp
-                        columns={[{ key: 'text', name: 'text' }]}
-                        labelLookup="STATUSRELASI LOOKUP"
-                        required={false}
-                        filterby={{ grp: 'STATUS RELASI' }}
-                        // filterBy={{ grp: 'STATUS AKTIF', subgrp: 'STATUS AKTIF' }}
-
-                        selectedRequired={false}
-                        endpoint="parameter"
-                        label="STATUSRELASI"
-                        singleColumn={true}
-                        pageSize={20}
-                        showOnButton={true}
-                        postData="text"
-                        dataToPost="id"
-                        lookupValue={(id) => {
-                          forms.setValue('statusrelasi', String(id ?? ''));
-                        }}
-                        onSelectRow={(val) =>
-                          forms.setValue('statusrelasi_text', val?.nama)
-                        }
-                        lookupNama={forms.getValues('statusrelasi_text')}
-                        disabled={mode === 'view' || mode === 'delete'}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
-                    <div className="w-full lg:w-[15%]">
-                      <FormLabel
-                        required={false}
-                        className="text-sm font-semibold"
-                      >
-                        Relasi
-                      </FormLabel>
-                    </div>
-                    <div className="w-full lg:w-[85%]">
-                      <LookUp
-                        columns={[{ key: 'nama', name: 'NAMA' }]}
-                        labelLookup="RELASI LOOKUP"
-                        required={false}
-                        selectedRequired={false}
-                        endpoint="relasi"
-                        label="RELASI"
-                        singleColumn={true}
-                        pageSize={20}
-                        showOnButton={true}
-                        postData="nama"
-                        dataToPost="id"
-                        lookupValue={(id) => {
-                          forms.setValue('relasi_id', String(id ?? ''));
-                        }}
-                        onSelectRow={(val) =>
-                          forms.setValue('relasi_id_text', val?.nama)
-                        }
-                        lookupNama={forms.getValues('relasi_id_text')}
-                        disabled={mode === 'view' || mode === 'delete'}
-                      />
-                    </div>
-                  </div>
-
                   <FormField
                     name="nama"
                     control={forms.control}
@@ -258,83 +187,109 @@ const FormShipper = ({
                     )}
                   />
 
-                  <FormField
-                    name="coa"
-                    control={forms.control}
-                    render={({ field }) => (
-                      <FormItem className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
-                        <FormLabel
-                          required={false}
-                          className="font-semibold lg:w-[15%]"
-                        >
-                          COA
-                        </FormLabel>
-                        <div className="flex flex-col lg:w-[85%]">
-                          <FormControl>
-                            <Input
-                              {...field}
-                              value={field.value ?? ''}
-                              type="text"
-                              readOnly={mode === 'view' || mode === 'delete'}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </div>
-                      </FormItem>
-                    )}
-                  />
+                  <div className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
+                    <div className="w-full lg:w-[15%]">
+                      <FormLabel
+                        required={false}
+                        className="text-sm font-semibold"
+                      >
+                        COA
+                      </FormLabel>
+                    </div>
+                    <div className="w-full lg:w-[85%]">
+                      <LookUp
+                        columns={[{ key: 'keterangancoa', name: 'COA' }]}
+                        labelLookup="COA LOOKUP"
+                        required={false}
+                        selectedRequired={false}
+                        endpoint="akunpusat"
+                        label="COA"
+                        singleColumn={true}
+                        pageSize={20}
+                        showOnButton={true}
+                        postData="keterangancoa"
+                        dataToPost="coa"
+                        lookupValue={(id) => {
+                          forms.setValue('coa', String(id ?? ''));
+                        }}
+                        onSelectRow={(val) =>
+                          forms.setValue('coa_text', val?.keterangancoa)
+                        }
+                        lookupNama={forms.getValues('coa_text')}
+                        disabled={mode === 'view' || mode === 'delete'}
+                      />
+                    </div>
+                  </div>
 
-                  <FormField
-                    name="coapiutang"
-                    control={forms.control}
-                    render={({ field }) => (
-                      <FormItem className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
-                        <FormLabel
-                          required={false}
-                          className="font-semibold lg:w-[15%]"
-                        >
-                          COAPIUTANG
-                        </FormLabel>
-                        <div className="flex flex-col lg:w-[85%]">
-                          <FormControl>
-                            <Input
-                              {...field}
-                              value={field.value ?? ''}
-                              type="text"
-                              readOnly={mode === 'view' || mode === 'delete'}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </div>
-                      </FormItem>
-                    )}
-                  />
+                  <div className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
+                    <div className="w-full lg:w-[15%]">
+                      <FormLabel
+                        required={false}
+                        className="text-sm font-semibold"
+                      >
+                        Coapiutang
+                      </FormLabel>
+                    </div>
+                    <div className="w-full lg:w-[85%]">
+                      <LookUp
+                        columns={[
+                          { key: 'keterangancoa', name: 'COA PIUTANG' }
+                        ]}
+                        labelLookup="COAPIUTANG LOOKUP"
+                        required={false}
+                        selectedRequired={false}
+                        endpoint="akunpusat"
+                        label="COAPIUTANG"
+                        singleColumn={true}
+                        pageSize={20}
+                        showOnButton={true}
+                        postData="keterangancoa"
+                        dataToPost="coa"
+                        lookupValue={(id) => {
+                          forms.setValue('coapiutang', String(id ?? ''));
+                        }}
+                        onSelectRow={(val) =>
+                          forms.setValue('coapiutang_text', val?.keterangancoa)
+                        }
+                        lookupNama={forms.getValues('coapiutang_text')}
+                        disabled={mode === 'view' || mode === 'delete'}
+                      />
+                    </div>
+                  </div>
 
-                  <FormField
-                    name="coahutang"
-                    control={forms.control}
-                    render={({ field }) => (
-                      <FormItem className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
-                        <FormLabel
-                          required={false}
-                          className="font-semibold lg:w-[15%]"
-                        >
-                          COAHUTANG
-                        </FormLabel>
-                        <div className="flex flex-col lg:w-[85%]">
-                          <FormControl>
-                            <Input
-                              {...field}
-                              value={field.value ?? ''}
-                              type="text"
-                              readOnly={mode === 'view' || mode === 'delete'}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </div>
-                      </FormItem>
-                    )}
-                  />
+                  <div className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
+                    <div className="w-full lg:w-[15%]">
+                      <FormLabel
+                        required={false}
+                        className="text-sm font-semibold"
+                      >
+                        Coahutang
+                      </FormLabel>
+                    </div>
+                    <div className="w-full lg:w-[85%]">
+                      <LookUp
+                        columns={[{ key: 'keterangancoa', name: 'COA HUTANG' }]}
+                        labelLookup="COAHUTANG LOOKUP"
+                        required={false}
+                        selectedRequired={false}
+                        endpoint="akunpusat"
+                        label="COAHUTANG"
+                        singleColumn={true}
+                        pageSize={20}
+                        showOnButton={true}
+                        postData="keterangancoa"
+                        dataToPost="coa"
+                        lookupValue={(id) => {
+                          forms.setValue('coahutang', String(id ?? ''));
+                        }}
+                        onSelectRow={(val) =>
+                          forms.setValue('coahutang_text', val?.keterangancoa)
+                        }
+                        lookupNama={forms.getValues('coahutang_text')}
+                        disabled={mode === 'view' || mode === 'delete'}
+                      />
+                    </div>
+                  </div>
 
                   <FormField
                     name="kota"
@@ -597,31 +552,39 @@ const FormShipper = ({
                     )}
                   />
 
-                  <FormField
-                    name="coagiro"
-                    control={forms.control}
-                    render={({ field }) => (
-                      <FormItem className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
-                        <FormLabel
-                          required={false}
-                          className="font-semibold lg:w-[15%]"
-                        >
-                          COAGIRO
-                        </FormLabel>
-                        <div className="flex flex-col lg:w-[85%]">
-                          <FormControl>
-                            <Input
-                              {...field}
-                              value={field.value ?? ''}
-                              type="text"
-                              readOnly={mode === 'view' || mode === 'delete'}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </div>
-                      </FormItem>
-                    )}
-                  />
+                  <div className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
+                    <div className="w-full lg:w-[15%]">
+                      <FormLabel
+                        required={false}
+                        className="text-sm font-semibold"
+                      >
+                        Coagiro
+                      </FormLabel>
+                    </div>
+                    <div className="w-full lg:w-[85%]">
+                      <LookUp
+                        columns={[{ key: 'keterangancoa', name: 'COA GIRO' }]}
+                        labelLookup="COAGIRO LOOKUP"
+                        required={false}
+                        selectedRequired={false}
+                        endpoint="akunpusat"
+                        label="COAGIRO"
+                        singleColumn={true}
+                        pageSize={20}
+                        showOnButton={true}
+                        postData="keterangancoa"
+                        dataToPost="coa"
+                        lookupValue={(id) => {
+                          forms.setValue('coagiro', String(id ?? ''));
+                        }}
+                        onSelectRow={(val) =>
+                          forms.setValue('coagiro_text', val?.keterangancoa)
+                        }
+                        lookupNama={forms.getValues('coagiro_text')}
+                        disabled={mode === 'view' || mode === 'delete'}
+                      />
+                    </div>
+                  </div>
 
                   <FormField
                     name="ppn"

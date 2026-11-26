@@ -320,11 +320,53 @@ const FormEstimasiBiayaHeader = ({
   };
 
   const deleteRow = (index: number) => {
-    setRows(rows.filter((_, i) => i !== index));
+    setRows((prevRows) => {
+      const remaining = prevRows.filter((_, i) => i !== index);
+      if (remaining.some((row) => row.id !== 'add_row')) return remaining;
+
+      // detail tidak boleh kosong, sisakan 1 baris default
+      return [
+        {
+          id: '0',
+          nobukti: '',
+          estimasibiaya_id: '',
+          link_id: '',
+          link_nama: '',
+          biayaemkl_id: '',
+          biayaemkl_nama: '',
+          nominal: '',
+          nilaiasuransi: '',
+          nominaldisc: '',
+          nominalsebelumdisc: '',
+          nominaltradoluar: '',
+          isNew: true
+        },
+        ...remaining
+      ];
+    });
   };
 
   const deleteRowDetailInvoice = (index: number) => {
-    setRowsDetailInvoice(rowsDetailInvoice.filter((_, i) => i !== index));
+    setRowsDetailInvoice((prevRows) => {
+      const remaining = prevRows.filter((_, i) => i !== index);
+      if (remaining.some((row) => row.id !== 'add_row')) return remaining;
+
+      // detail tidak boleh kosong, sisakan 1 baris default
+      return [
+        {
+          id: '0',
+          nobukti: '',
+          estimasibiaya_id: '',
+          link_id: '',
+          linkdetailinvoice_nama: '',
+          biayaemkl_id: '',
+          biayaemkldetailinvoice_nama: '',
+          nominal: '',
+          isNew: true
+        },
+        ...remaining
+      ];
+    });
   };
 
   const inputStopPropagation = (e: React.KeyboardEvent) => {

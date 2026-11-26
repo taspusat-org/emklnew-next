@@ -205,7 +205,13 @@ const FormBiayaExtraHeader = ({
   };
 
   const deleteRow = (index: number) => {
-    setRows(rows.filter((_, i) => i !== index));
+    setRows((prevRows) => {
+      const remaining = prevRows.filter((_, i) => i !== index);
+      if (remaining.some((row) => row.id !== 'add_row')) return remaining;
+
+      // detail tidak boleh kosong, sisakan 1 baris default
+      return [emptyDetailRow(), ...remaining];
+    });
   };
 
   const inputStopPropagation = (e: React.KeyboardEvent) => {

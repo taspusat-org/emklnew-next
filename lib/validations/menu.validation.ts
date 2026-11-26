@@ -13,7 +13,6 @@ export const menuSchema = (mode: 'add' | 'edit' | 'delete') => {
     title: z.string().nonempty({ message: dynamicRequiredMessage('JUDUL') }),
     aco_id: z.string().nonempty({ message: dynamicRequiredMessage('ACOS') }),
     icon: z.string().nullable().optional(),
-    isActive: z.number().default(1),
     parentId: z
       .string()
       .nonempty({ message: dynamicRequiredMessage('MENU PARENT') }),

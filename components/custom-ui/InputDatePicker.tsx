@@ -136,7 +136,7 @@ const InputDatePicker: React.FC<DateInputProps> = ({
             mask={dateMask}
             {...rest}
             ref={maskRef as any}
-            className={`h-9 w-full rounded-sm px-3 text-sm focus:bg-background-input-focus focus:outline-none focus:ring-0
+            className={`h-9 w-full rounded-sm bg-background-input px-3 text-sm focus:bg-background-input-focus focus:outline-none focus:ring-0
               ${
                 disabled
                   ? 'cursor-not-allowed bg-background-input-disabled text-input-text-disabled'

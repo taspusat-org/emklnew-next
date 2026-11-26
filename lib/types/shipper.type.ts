@@ -12,9 +12,12 @@ export interface IShipper {
   keterangan: string; // Keterangan (varchar(8000))
   contactperson: string; // Contactperson (varchar(100))
   alamat: string; // Alamat (varchar(250))
-  coa: string; // Coa (varchar(100))
-  coapiutang: string; // Coapiutang (varchar(100))
-  coahutang: string; // Coahutang (varchar(100))
+  coa: string; // akunpusat.coa
+  coa_text?: string;
+  coapiutang: string; // akunpusat.coa
+  coapiutang_text?: string;
+  coahutang: string; // akunpusat.coa
+  coahutang_text?: string;
   kota: string; // Kota (varchar(50))
   kodepos: string; // Kodepos (varchar(10))
   telp: string; // Telp (varchar(30))
@@ -25,7 +28,8 @@ export interface IShipper {
   creditterm: string; // Creditterm (integer)
   credittermplus: string; // Credittermplus (integer)
   npwp: string; // Npwp (varchar(30))
-  coagiro: string; // Coagiro (varchar(100))
+  coagiro: string; // akunpusat.coa
+  coagiro_text?: string;
   ppn: string; // Ppn (numeric(19,2))
   titipke: string; // Titipke (varchar(30))
   ppnbatalmuat: string; // Ppnbatalmuat (numeric(19,2))

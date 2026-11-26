@@ -185,7 +185,29 @@ const FormHutang = ({
     });
   };
   const deleteRow = (index: number) => {
-    setRows(rows.filter((_, i) => i !== index));
+    setRows((prevRows) => {
+      const remaining = prevRows.filter((_, i) => i !== index);
+      const hasDetail = remaining.some((row) => row.id !== 'add_row');
+      if (hasDetail) return remaining;
+
+      // detail tidak boleh kosong, sisakan 1 baris default
+      return [
+        {
+          id: 0,
+          coa: '',
+          coa_text: '',
+          keterangan: '',
+          nominal: '0',
+          dpp: '0',
+          noinvoiceemkl: '',
+          tglinvoiceemkl: '',
+          nofakturpajakemkl: '',
+          perioderefund: '',
+          isNew: true
+        },
+        ...remaining
+      ];
+    });
   };
   const inputStopPropagation = (e: React.KeyboardEvent) => {
     e.stopPropagation();
@@ -385,13 +407,12 @@ const FormHutang = ({
           }
 
           // Otherwise, render the delete button for rows with data
-          const rowIndex = rows.findIndex((row) => row.id === props.row.id);
+          // baris baru semua ber-id 0, jadi cari lewat referensi objek
+          const rowIndex = rows.indexOf(props.row);
           return (
             <div className="m-0 flex h-full w-full cursor-pointer items-center justify-center p-0 text-xs">
               <button
-                disabled={
-                  mode === 'view' || mode === 'delete' || rows.length <= 2
-                }
+                disabled={mode === 'view' || mode === 'delete'}
                 type="button"
                 className="rounded bg-transparent text-xs text-red-500"
                 onClick={() => deleteRow(rowIndex)}
@@ -447,6 +468,9 @@ const FormHutang = ({
         name: 'coa',
         renderCell: (props: any) => {
           const rowIdx = props.rowIdx;
+          // dari state rows, bukan forms.getValues: form baru di-sync lewat effect
+          // setelah render, jadi nilainya basi saat baris diganti/dihapus
+          const coaText = props.row.coa_text ?? '';
           return (
             <div className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
               <div className="w-full lg:w-[100%]">
@@ -458,7 +482,7 @@ const FormHutang = ({
                     lookupValue={(value: any) =>
                       handleInputChange(rowIdx, 'coa', value)
                     }
-                    lookupNama={forms.getValues(`details[${rowIdx}].coa_text`)}
+                    lookupNama={coaText}
                     onSelectRow={(value) => {
                       handleInputChange(
                         rowIdx,

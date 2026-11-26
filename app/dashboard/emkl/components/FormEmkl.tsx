@@ -44,66 +44,6 @@ const FormEmkl = ({
   const formRef = useRef<HTMLFormElement | null>(null);
   const openName = useSelector((state: RootState) => state.lookup.openName);
   const dispatch = useDispatch();
-  const lookUpPropsCoaGiro = [
-    {
-      columns: [
-        { key: 'coa', name: 'COA' },
-        { key: 'keterangancoa', name: 'KETERANGAN' }
-      ],
-      // filterby: { class: 'system', method: 'get' },
-      labelLookup: 'COA GIRO LOOKUP',
-      required: false,
-      selectedRequired: false,
-      endpoint: 'akunpusat',
-      label: 'COA GIRO',
-      singleColumn: false,
-      pageSize: 20,
-      showOnButton: true,
-      disabled: mode === 'view' || mode === 'delete' ? true : false,
-      postData: 'keterangancoa',
-      dataToPost: 'coa' //untuk pilih kolom yg mau diambil valuenya, bisa selain id
-    }
-  ];
-  const lookUpPropsCoaPiutang = [
-    {
-      columns: [
-        { key: 'coa', name: 'COA' },
-        { key: 'keterangancoa', name: 'KETERANGAN' }
-      ],
-      // filterby: { class: 'system', method: 'get' },
-      labelLookup: 'COA PIUTANG LOOKUP',
-      required: false,
-      selectedRequired: false,
-      endpoint: 'akunpusat',
-      label: 'COA PIUTANG',
-      singleColumn: false,
-      pageSize: 20,
-      showOnButton: true,
-      disabled: mode === 'view' || mode === 'delete' ? true : false,
-      postData: 'keterangancoa',
-      dataToPost: 'coa' //untuk pilih kolom yg mau diambil valuenya, bisa selain id
-    }
-  ];
-  const lookUpPropsCoaHutang = [
-    {
-      columns: [
-        { key: 'coa', name: 'COA' },
-        { key: 'keterangancoa', name: 'KETERANGAN' }
-      ],
-      // filterby: { class: 'system', method: 'get' },
-      labelLookup: 'COA HUTANG LOOKUP',
-      required: false,
-      selectedRequired: false,
-      endpoint: 'akunpusat',
-      label: 'COA HUTANG',
-      singleColumn: false,
-      pageSize: 20,
-      showOnButton: true,
-      disabled: mode === 'view' || mode === 'delete' ? true : false,
-      postData: 'keterangancoa',
-      dataToPost: 'coa' //untuk pilih kolom yg mau diambil valuenya, bisa selain id
-    }
-  ];
   return (
     <Dialog open={popOver} onOpenChange={setPopOver}>
       <DialogTitle hidden={true}>Title</DialogTitle>
@@ -152,12 +92,9 @@ const FormEmkl = ({
                     </div>
                     <div className="w-full lg:w-[85%]">
                       <LookUp
-                        columns={[{ key: 'text', name: 'NAMA' }]}
+                        columns={[{ key: 'text', name: 'TEXT' }]}
                         labelLookup="STATUSRELASI LOOKUP"
-                        filterby={{
-                          grp: 'STATUS RELASI',
-                          subgrp: 'STATUS RELASI'
-                        }}
+                        filterby={{ grp: 'status relasi' }}
                         required={false}
                         selectedRequired={false}
                         endpoint="parameter"
@@ -171,7 +108,7 @@ const FormEmkl = ({
                           forms.setValue('statusrelasi', String(id ?? ''));
                         }}
                         onSelectRow={(val) =>
-                          forms.setValue('statusrelasi_text', val?.nama)
+                          forms.setValue('statusrelasi_text', val?.text)
                         }
                         lookupNama={forms.getValues('statusrelasi_text')}
                         disabled={mode === 'view' || mode === 'delete'}
@@ -205,9 +142,9 @@ const FormEmkl = ({
                           forms.setValue('relasi_id', String(id ?? ''));
                         }}
                         onSelectRow={(val) =>
-                          forms.setValue('relasi_text', val?.nama)
+                          forms.setValue('relasi_id_text', val?.nama)
                         }
-                        lookupNama={forms.getValues('relasi_text')}
+                        lookupNama={forms.getValues('relasi_id_text')}
                         disabled={mode === 'view' || mode === 'delete'}
                       />
                     </div>
@@ -293,61 +230,105 @@ const FormEmkl = ({
 
                   <div className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
                     <div className="w-full lg:w-[15%]">
-                      <FormLabel className="text-sm font-semibold">
-                        COA GIRO
+                      <FormLabel
+                        required={false}
+                        className="text-sm font-semibold"
+                      >
+                        Coagiro
                       </FormLabel>
                     </div>
                     <div className="w-full lg:w-[85%]">
-                      {lookUpPropsCoaGiro.map((props, index) => (
-                        <LookUp
-                          key={index}
-                          {...props}
-                          lookupValue={(coa) => forms.setValue('coagiro', coa)}
-                          inputLookupValue={forms.getValues('coagiro')}
-                          lookupNama={forms.getValues('coagiro_ket')}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                  <div className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
-                    <div className="w-full lg:w-[15%]">
-                      <FormLabel className="text-sm font-semibold">
-                        COA PIUTANG
-                      </FormLabel>
-                    </div>
-                    <div className="w-full lg:w-[85%]">
-                      {lookUpPropsCoaPiutang.map((props, index) => (
-                        <LookUp
-                          key={index}
-                          {...props}
-                          lookupValue={(coa) =>
-                            forms.setValue('coapiutang', coa)
-                          }
-                          inputLookupValue={forms.getValues('coapiutang')}
-                          lookupNama={forms.getValues('coapiutang_ket')}
-                        />
-                      ))}
+                      <LookUp
+                        columns={[{ key: 'keterangancoa', name: 'COA GIRO' }]}
+                        labelLookup="COAGIRO LOOKUP"
+                        required={false}
+                        selectedRequired={false}
+                        endpoint="akunpusat"
+                        label="COAGIRO"
+                        singleColumn={true}
+                        pageSize={20}
+                        showOnButton={true}
+                        postData="keterangancoa"
+                        dataToPost="coa"
+                        lookupValue={(id) => {
+                          forms.setValue('coagiro', String(id ?? ''));
+                        }}
+                        onSelectRow={(val) =>
+                          forms.setValue('coagiro_text', val?.keterangancoa)
+                        }
+                        lookupNama={forms.getValues('coagiro_text')}
+                        disabled={mode === 'view' || mode === 'delete'}
+                      />
                     </div>
                   </div>
 
                   <div className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
                     <div className="w-full lg:w-[15%]">
-                      <FormLabel className="text-sm font-semibold">
-                        COA HUTANG
+                      <FormLabel
+                        required={false}
+                        className="text-sm font-semibold"
+                      >
+                        Coapiutang
                       </FormLabel>
                     </div>
                     <div className="w-full lg:w-[85%]">
-                      {lookUpPropsCoaHutang.map((props, index) => (
-                        <LookUp
-                          key={index}
-                          {...props}
-                          lookupValue={(coa) =>
-                            forms.setValue('coahutang', coa)
-                          }
-                          inputLookupValue={forms.getValues('coahutang')}
-                          lookupNama={forms.getValues('coahutang_ket')}
-                        />
-                      ))}
+                      <LookUp
+                        columns={[
+                          { key: 'keterangancoa', name: 'COA PIUTANG' }
+                        ]}
+                        labelLookup="COAPIUTANG LOOKUP"
+                        required={false}
+                        selectedRequired={false}
+                        endpoint="akunpusat"
+                        label="COAPIUTANG"
+                        singleColumn={true}
+                        pageSize={20}
+                        showOnButton={true}
+                        postData="keterangancoa"
+                        dataToPost="coa"
+                        lookupValue={(id) => {
+                          forms.setValue('coapiutang', String(id ?? ''));
+                        }}
+                        onSelectRow={(val) =>
+                          forms.setValue('coapiutang_text', val?.keterangancoa)
+                        }
+                        lookupNama={forms.getValues('coapiutang_text')}
+                        disabled={mode === 'view' || mode === 'delete'}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex w-full flex-col justify-between lg:flex-row lg:items-center">
+                    <div className="w-full lg:w-[15%]">
+                      <FormLabel
+                        required={false}
+                        className="text-sm font-semibold"
+                      >
+                        Coahutang
+                      </FormLabel>
+                    </div>
+                    <div className="w-full lg:w-[85%]">
+                      <LookUp
+                        columns={[{ key: 'keterangancoa', name: 'COA HUTANG' }]}
+                        labelLookup="COAHUTANG LOOKUP"
+                        required={false}
+                        selectedRequired={false}
+                        endpoint="akunpusat"
+                        label="COAHUTANG"
+                        singleColumn={true}
+                        pageSize={20}
+                        showOnButton={true}
+                        postData="keterangancoa"
+                        dataToPost="coa"
+                        lookupValue={(id) => {
+                          forms.setValue('coahutang', String(id ?? ''));
+                        }}
+                        onSelectRow={(val) =>
+                          forms.setValue('coahutang_text', val?.keterangancoa)
+                        }
+                        lookupNama={forms.getValues('coahutang_text')}
+                        disabled={mode === 'view' || mode === 'delete'}
+                      />
                     </div>
                   </div>
 

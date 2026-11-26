@@ -11,7 +11,7 @@ import {
   FormLabel,
   FormMessage
 } from '@/components/ui/form';
-import { FaUser, FaEye, FaEyeSlash, FaSave } from 'react-icons/fa';
+import { FaUser, FaEye, FaEyeSlash } from 'react-icons/fa';
 import {
   setProcessed,
   setProcessing
@@ -37,6 +37,57 @@ import { useQueryClient } from 'react-query';
 import { Textarea } from '../ui/textarea';
 import { getPermissionFn } from '@/lib/apis/menu.api';
 import InputDatePicker from './InputDatePicker';
+
+interface ApprovalModalProps {
+  title?: string;
+  onClose: () => void;
+  onOverlayClick?: () => void;
+  footer?: React.ReactNode;
+  children: React.ReactNode;
+}
+
+const ApprovalModal = ({
+  title,
+  onClose,
+  onOverlayClick,
+  footer,
+  children
+}: ApprovalModalProps) => (
+  <div
+    className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4"
+    onClick={(e) => {
+      if (e.target === e.currentTarget) onOverlayClick?.();
+    }}
+  >
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={title}
+      className="flex max-h-[min(500px,100%)] w-full max-w-[400px] flex-col overflow-hidden rounded border border-border bg-background-card text-foreground shadow-lg"
+      onClick={(e) => e.stopPropagation()}
+    >
+      <div className="flex h-[38px] shrink-0 items-center justify-between gap-2 border-b border-border bg-background-form-header px-2">
+        <p className="truncate text-sm font-semibold">{title}</p>
+        <button
+          type="button"
+          aria-label="Close"
+          className="shrink-0 cursor-pointer rounded-md border border-zinc-200 bg-red-500 p-0 hover:bg-red-400"
+          onClick={onClose}
+        >
+          <IoMdClose className="h-5 w-5 font-bold text-white" />
+        </button>
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto bg-background-card p-4">
+        {children}
+      </div>
+      {footer ? (
+        <div className="flex shrink-0 flex-wrap justify-end gap-2 border-t border-border bg-background-form-footer px-4 py-3">
+          {footer}
+        </div>
+      ) : null}
+    </div>
+  </div>
+);
 
 const DialogApproval: React.FC = ({}) => {
   const [showErrorKeterangan, setShowErrorKeterangan] = useState(false);
@@ -154,6 +205,18 @@ const DialogApproval: React.FC = ({}) => {
     setKeterangan('');
     setSelectedItem(null);
   };
+  const closeKeteranganDialog = () => {
+    setShowKeteranganDialog(false);
+    setSelectedItem(null);
+    setKeterangan('');
+    setShowErrorKeterangan(false);
+  };
+  const closeTanggalDialog = () => {
+    setShowTanggalDialog(false);
+    setSelectedItem(null);
+    setTanggal('');
+    setShowErrorKeterangan(false);
+  };
   const handleTanggalSubmit = () => {
     if (!tanggal.trim()) {
       setShowErrorKeterangan(true);
@@ -188,7 +251,9 @@ const DialogApproval: React.FC = ({}) => {
           });
           closeDialog();
         } else {
-          // queryClient.invalidateQueries({ queryKey: ['jurnalumum'] });
+          queryClient.invalidateQueries({
+            predicate: () => true
+          });
           useApprovalDialog.setState({ successApproved: true });
           closeDialog();
         }
@@ -270,6 +335,9 @@ const DialogApproval: React.FC = ({}) => {
           });
           closeDialog();
         } else {
+          queryClient.invalidateQueries({
+            predicate: () => true
+          });
           useApprovalDialog.setState({ successApproved: true });
           closeDialog();
         }
@@ -380,7 +448,7 @@ const DialogApproval: React.FC = ({}) => {
       fetchData();
     }
   }, [formattedModule, mode, id]);
-  useDisableBodyScroll(open || showKeteranganDialog);
+  useDisableBodyScroll(open || showKeteranganDialog || showTanggalDialog);
   useEffect(() => {
     if (keterangan) {
       setShowErrorKeterangan(false);
@@ -409,224 +477,128 @@ const DialogApproval: React.FC = ({}) => {
   return (
     <>
       {open && (
-        <div
-          onClick={(e) => {
-            if (e.target === e.currentTarget && !showKeteranganDialog) {
-              closeDialog();
-            }
+        <ApprovalModal
+          title={mode}
+          onClose={closeDialog}
+          onOverlayClick={() => {
+            if (!showKeteranganDialog) closeDialog();
           }}
-          className="fixed inset-0 z-50 flex items-center justify-center border-border bg-gray-500 bg-opacity-50 p-4"
         >
-          <div
-            className="max-h-[500px] min-h-[100px] w-full max-w-[400px] rounded bg-background-grid-header shadow-lg"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex h-[38px] w-full flex-row items-center justify-between rounded-t-sm border-b border-border px-2">
-              <p className="text-sm font-semibold">{mode}</p>
-              <div
-                className="cursor-pointer rounded-md border border-border bg-red-500 p-0 hover:bg-red-400"
-                onClick={closeDialog}
+          <div className="flex flex-col gap-1">
+            {dataParameter.map((item: any, index: any) => (
+              <Button
+                key={index}
+                className="w-full gap-1 py-2"
+                onClick={() => handleButtonClick(item)}
+                style={{
+                  backgroundColor: item.warna
+                }}
               >
-                <IoMdClose className="h-5 w-5 font-bold text-white" />
-              </div>
-            </div>
-            <div className="flex h-fit max-h-[500px] w-full overflow-hidden bg-background px-5 py-5">
-              <div className="flex h-fit max-h-[450px] w-full flex-col gap-1 overflow-y-auto bg-background">
-                {dataParameter.map((item: any, index: any) => (
-                  <Button
-                    key={index}
-                    className="w-full gap-1 py-2"
-                    onClick={() => handleButtonClick(item)}
-                    style={{
-                      backgroundColor: item.warna
-                    }}
-                  >
-                    <Icons name={item.icon} />
-                    <p
-                      className="text-sm font-semibold"
-                      style={{ color: item.warna_tulisan }}
-                    >
-                      {item.memo_nama}
-                    </p>
-                  </Button>
-                ))}
-              </div>
-            </div>
+                <Icons name={item.icon} />
+                <p
+                  className="text-sm font-semibold"
+                  style={{ color: item.warna_tulisan }}
+                >
+                  {item.memo_nama}
+                </p>
+              </Button>
+            ))}
           </div>
-        </div>
+        </ApprovalModal>
       )}
 
       {showKeteranganDialog && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center border-blue-500 bg-gray-500 bg-opacity-50 p-4"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) {
-              setShowKeteranganDialog(false);
-              setSelectedItem(null);
-              setShowErrorKeterangan(false);
-              setKeterangan('');
-            }
-          }}
-        >
-          <div
-            className="max-h-[500px] min-h-[100px] w-full max-w-[400px] rounded bg-white shadow-lg"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div
-              className="flex h-[38px] w-full flex-row items-center justify-between rounded-t-sm border-b border-blue-500 px-2"
-              style={{
-                background:
-                  'linear-gradient(to bottom, #eff5ff 0%, #e0ecff 100%)'
-              }}
-            >
-              <p className="text-sm font-semibold text-zinc-800">{mode}</p>
-              <div
-                className="cursor-pointer rounded-md border border-zinc-200 bg-red-500 p-0 hover:bg-red-400"
-                onClick={() => {
-                  setShowKeteranganDialog(false);
-                  setSelectedItem(null);
-                  setKeterangan('');
-                  setShowErrorKeterangan(false);
-                }}
-              >
-                <IoMdClose className="h-5 w-5 font-bold text-white" />
-              </div>
-            </div>
-            <div className="mb-4 p-4">
-              <label className="mb-2 block text-sm font-medium text-gray-700">
-                Keterangan <span className="text-red-500">*</span>
-              </label>
-              <Textarea
-                value={keterangan}
-                onChange={(e) => setKeterangan(e.target.value)}
-                className="h-24 w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                placeholder="Masukkan keterangan..."
-                autoFocus
-              />
-              {showErrorKeterangan ? (
-                <p className="text-[0.8rem] text-destructive">
-                  KETERANGAN WAJIB DIISI
-                </p>
-              ) : null}
-            </div>
-
-            <div className="flex justify-end gap-2 p-4">
+        <ApprovalModal
+          title={mode}
+          onClose={closeKeteranganDialog}
+          onOverlayClick={closeKeteranganDialog}
+          footer={
+            <>
               <Button
-                variant="outline"
-                className="flex w-fit items-center gap-1 bg-zinc-500 text-sm text-white hover:bg-zinc-400"
-                onClick={() => {
-                  setShowKeteranganDialog(false);
-                  setSelectedItem(null);
-                  setKeterangan('');
-                  setShowErrorKeterangan(false);
-                }}
+                type="button"
+                variant="cancel"
+                className="flex w-fit items-center gap-1 text-sm"
+                onClick={closeKeteranganDialog}
               >
-                <IoMdClose /> <p className="text-center text-white">Cancel</p>
+                <p className="text-center text-sm">Cancel</p>
               </Button>
               <Button
                 type="submit"
+                variant="save"
                 onClick={handleKeteranganSubmit}
                 className="flex w-fit items-center gap-1 text-sm"
               >
-                <FaSave />
-                <p className="text-center">SUBMIT</p>
+                <p className="text-center text-sm">SUBMIT</p>
               </Button>
-            </div>
-          </div>
-        </div>
+            </>
+          }
+        >
+          <label
+            htmlFor="approval-keterangan"
+            className="mb-2 block text-sm font-semibold"
+          >
+            Keterangan <span className="text-red-500">*</span>
+          </label>
+          <Textarea
+            id="approval-keterangan"
+            value={keterangan}
+            onChange={(e) => setKeterangan(e.target.value)}
+            className="h-24 w-full resize-y"
+            placeholder="Masukkan keterangan..."
+            autoFocus
+          />
+          {showErrorKeterangan ? (
+            <p className="mt-1 text-[0.8rem] font-medium text-destructive">
+              KETERANGAN WAJIB DIISI
+            </p>
+          ) : null}
+        </ApprovalModal>
       )}
 
       {showTanggalDialog && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center border-border bg-gray-500 bg-opacity-50 p-4"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) {
-              setShowTanggalDialog(false);
-              setSelectedItem(null);
-              setShowErrorKeterangan(false);
-              setTanggal('');
-            }
-          }}
-        >
-          <div
-            className="max-h-[500px] min-h-[100px] w-full max-w-[400px] rounded bg-background-grid-header shadow-lg"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div
-              className="flex h-[38px] w-full flex-row items-center justify-between rounded-t-sm border-b border-border px-2"
-              // style={{
-              //   background:
-              //     'linear-gradient(to bottom, #eff5ff 0%, #e0ecff 100%)'
-              // }}
-            >
-              <p className="text-sm font-semibold">{mode}</p>
-              <div
-                className="cursor-pointer rounded-md border border-border bg-red-500 p-0 hover:bg-red-400"
-                onClick={() => {
-                  setShowTanggalDialog(false);
-                  setSelectedItem(null);
-                  setTanggal('');
-                  setShowErrorKeterangan(false);
-                }}
-              >
-                <IoMdClose className="h-5 w-5 font-bold text-white" />
-              </div>
-            </div>
-            <div className="bg-background p-4">
-              <label className="mb-2 block text-sm font-medium">
-                Tanggal Approval <span className="text-red-500">*</span>
-              </label>
-              {/* <Textarea
-                value={keterangan}
-                onChange={(e) => setTanggal(e.target.value)}
-                className="h-24 w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                placeholder="Masukkan keterangan..."
-                autoFocus
-              /> */}
-              <InputDatePicker
-                // Sisa dari <Textarea> keterangan yang dikomentari di atas:
-                // value-nya masih menunjuk ke state `keterangan`, padahal
-                // yang diisi onSelect/onChange adalah `tanggal`. InputDatePicker
-                // controlled penuh, jadi tanggal yang dipilih tersimpan di
-                // state tapi input tetap tampil kosong.
-                value={tanggal}
-                onChange={(e) => setTanggal(e.target.value)}
-                showCalendar={true}
-                onSelect={(date) => {
-                  setTanggal(String(date));
-                  setShowErrorKeterangan(false);
-                }}
-              />
-              {showErrorKeterangan ? (
-                <p className="bg-background text-[0.8rem] text-destructive">
-                  TANGGAL WAJIB DIISI
-                </p>
-              ) : null}
-            </div>
-
-            <div className="flex justify-end gap-2 bg-background p-4">
+        <ApprovalModal
+          title={mode}
+          onClose={closeTanggalDialog}
+          onOverlayClick={closeTanggalDialog}
+          footer={
+            <>
               <Button
+                type="button"
                 variant="cancel"
-                onClick={() => {
-                  setShowTanggalDialog(false);
-                  setSelectedItem(null);
-                  setTanggal('');
-                  setShowErrorKeterangan(false);
-                }}
+                className="flex w-fit items-center gap-1 text-sm"
+                onClick={closeTanggalDialog}
               >
-                <p className="text-center">Cancel</p>
+                <p className="text-center text-sm">Cancel</p>
               </Button>
               <Button
                 type="submit"
+                variant="save"
                 onClick={handleTanggalSubmit}
                 className="flex w-fit items-center gap-1 text-sm"
               >
-                <FaSave />
-                <p className="text-center">SUBMIT</p>
+                <p className="text-center text-sm">SUBMIT</p>
               </Button>
-            </div>
-          </div>
-        </div>
+            </>
+          }
+        >
+          <label className="mb-2 block text-sm font-semibold">
+            Tanggal Approval <span className="text-red-500">*</span>
+          </label>
+          <InputDatePicker
+            value={tanggal}
+            onChange={(e) => setTanggal(e.target.value)}
+            showCalendar={true}
+            onSelect={(date) => {
+              setTanggal(String(date));
+              setShowErrorKeterangan(false);
+            }}
+          />
+          {showErrorKeterangan ? (
+            <p className="mt-1 text-[0.8rem] font-medium text-destructive">
+              TANGGAL WAJIB DIISI
+            </p>
+          ) : null}
+        </ApprovalModal>
       )}
     </>
   );
